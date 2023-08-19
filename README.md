@@ -67,6 +67,39 @@
   - Additional Notes
     - Provide any additional context here you think might be useful for the TensorRT team to help debug this issue (such as experiments done, potential things to investigate).
 
-### 送分题答案（可选）
+### 送分题答案 | [操作步骤](SEND_POINT_README.md)
+1. 第一题。
+- 题目内容：
+```text
+请在报告中写出 /root/workspace/tensorrt_llm_july-release-v1/examples/gpt/README 里面 “Single node, single GPU” 部分如下命令的输出（10分）模型为gpt2-medium
+python3 run.py --max_output_len=8
+```
+- 输出结果
+```bash
+Input: Born in north-east France, Soyer trained as a
+Output:  chef and eventually became a chef at a
+```
 
-如果你做了送分题，请把答案写在这里。
+2. 第二题
+- 题目内容
+```text
+请在报告中写出 /root/workspace/tensorrt_llm_july-release-v1/examples/gpt/README 里面 “Summarization using the GPT model” 部分如下命令的rouge 分数（10分）模型为gpt2-medium
+python3 summarize.py --engine_dirtrt_engine/gpt2/fp16/1-gpu --test_hf --batch_size1 --test_trt_llm --hf_model_location=gpt2 --check_accuracy --tensorrt_llm_rouge1_threshold=14
+```
+
+- 输出结果
+```bash
+TensorRT-LLM (total latency: 3.0498504638671875 sec)
+TensorRT-LLM beam 0 result
+  rouge1 : 21.869322054781037
+  rouge2 : 6.258925475911645
+  rougeL : 16.755771650012953
+  rougeLsum : 18.68034777724496
+Hugging Face (total latency: 9.381023168563843 sec)
+HF beam 0 result
+  rouge1 : 22.08914935260929
+  rouge2 : 6.127009262128831
+  rougeL : 16.982143879321
+  rougeLsum : 19.04670077160925
+```
+

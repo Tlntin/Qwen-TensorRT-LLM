@@ -1,0 +1,6 @@
+# 运行下面命令将清华源设置为默认源
+# pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+# 用于跑summarize.py测评
+datasets
+nltk
+rouge_score
