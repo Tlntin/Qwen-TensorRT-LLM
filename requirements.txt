@@ -4,3 +4,4 @@
 datasets
 nltk
 rouge_score
+tiktoken

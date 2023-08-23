@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from transformers import LlamaTokenizer
+from qwen_7b_chat.tokenization_qwen import QWenTokenizer
 
 import tensorrt_llm
 from tensorrt_llm.runtime import ModelConfig, SamplingConfig
@@ -17,14 +17,21 @@ EOS_TOKEN = 2
 PAD_TOKEN = 2
 
 
+now_dir = os.path.dirname(os.path.abspath(__file__))
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max_output_len', type=int, required=True)
+    parser.add_argument('--max_output_len', type=int, default=50)
     parser.add_argument('--log_level', type=str, default='error')
-    parser.add_argument('--engine_dir', type=str, default='llama_outputs')
+    parser.add_argument(
+        '--engine_dir',
+        type=str,
+        default=os.path.join(now_dir, 'trt_engines', 'fp16', '1-gpu')
+    )
     parser.add_argument('--tokenizer_dir',
                         type=str,
-                        default=".",
+                        default=os.path.join(now_dir, 'qwen_7b_chat'),
                         help="Directory containing the tokenizer.model.")
     parser.add_argument('--input_text',
                         type=str,
@@ -83,7 +90,7 @@ def generate(
     runtime_mapping = tensorrt_llm.Mapping(world_size, runtime_rank)
     torch.cuda.set_device(runtime_rank % runtime_mapping.gpus_per_node)
 
-    tokenizer = LlamaTokenizer.from_pretrained(tokenizer_dir, legacy=False)
+    tokenizer = QWenTokenizer.from_pretrained(tokenizer_dir, legacy=False)
 
     model_config = ModelConfig(num_heads=num_heads,
                                hidden_size=hidden_size,
@@ -96,8 +103,9 @@ def generate(
                                      pad_id=PAD_TOKEN,
                                      num_beams=num_beams)
 
-    engine_name = get_engine_name('llama', dtype, world_size, runtime_rank)
+    engine_name = get_engine_name('qwen', dtype, world_size, runtime_rank)
     serialize_path = os.path.join(engine_dir, engine_name)
+    print(f'Loading engine from {serialize_path}')
     with open(serialize_path, 'rb') as f:
         engine_buffer = f.read()
     decoder = tensorrt_llm.runtime.GenerationSession(model_config,
