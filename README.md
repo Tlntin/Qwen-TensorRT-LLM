@@ -1,9 +1,15 @@
 ### 总述
 
+- 介绍本工作是 [NVIDIA TensorRT Hackathon 2023](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023) 的参赛题目，本项目将使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。
+
+- 原始模型：Qwen-7B-Chat
+- 原始模型URL：[Qwen-7B-Chat 🤗](https://huggingface.co/Qwen/Qwen-7B-Chat) [Qwen-7B-Chat Github](https://github.com/QwenLM/Qwen-7B)
+- 选题类型：2+4（注：2指的是TRT-LLM实现新模型。4指的是在新模型上启用了TRT-LLM现有feature）
+
+### 主要贡献
+
 请简练地概括项目的主要贡献，使读者可以快速理解并复现你的工作，包括：
 
-- 介绍本工作是 [NVIDIA TensorRT Hackathon 2023](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023) 的参赛题目（请给出上述链接），并介绍具体选题是什么（参见“选题得分”小节，应为如下之一：1，2，3，4，2+4，3+4）
-    - 如果是优化新模型，原始模型的名称及链接，并对该模型做个简要介绍
 - 优化效果（例如给出精度和加速比），简单给出关键的数字即可，在这里不必详细展开
 - 在Docker里面代码编译、运行步骤的完整说明
   - 请做到只要逐行运行你给的命令，就能把代码跑起来
@@ -13,7 +19,12 @@
 #### 开发工作的难点
 
 请在这一节里总结你的工作难点与亮点。
-- 如果使用 TensorRT 进行优化，请介绍一下在模型在导出时、或用polygraphy/trtexec解析时，或在使用TensorRT中，遇到了什么问题并解决了。换句话说，针对这个模型，我们为什么需要额外的工程手段。
+
+1. huggingface转llm-trt比较繁琐。
+2. 首次运行报错，经调试发现是显存不够。
+3. fp16下，输出结果与原版不一样。
+4. 没有现成的attention实现。
+
 - 如果使用 TensorRT-LLM 进行优化，描述以下方面可供选手参考：如果搭建了新模型， 请介绍模型结构有无特别之处，在模型的搭建过程中使用了什么算子，有没有通过plugin支持的新算子。如果支持新feature，请介绍这个feature具体需要修改哪些模块才能实现。如果优化已有模型，请介绍模型性能瓶颈以及解决方法。另外还可以包含工程实现以及debug过程中的难点。
 
 ### 开发与优化过程
