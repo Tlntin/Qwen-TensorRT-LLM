@@ -31,6 +31,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                        hf_qwen,
                        rank=0,
                        tensor_parallel=1,
+                       max_position_embeddings=8192,
                        dtype="float32",
                        multi_query_mode=False):
     tensorrt_llm.logger.info('Loading weights from HF QWen...')
@@ -70,6 +71,16 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
         model_params[prefix + 'qkv_proj.weight'] = qkv_weight
 
     torch_dtype = str_dtype_to_torch(dtype)
+    # set for rope embedding
+    inv_freq = 10**(-1 / 16 * np.arange(0, 64, 2, dtype=np.float32))
+    valueTable = np.matmul(
+        np.arange(max_position_embeddings, dtype=np.float32).reshape(-1, 1),
+        np.concatenate([inv_freq, inv_freq],axis=0).reshape(1, -1)
+    ).reshape(max_position_embeddings, len(inv_freq) * 2)
+    cos_weight = torch.Tensor(np.cos(valueTable)).to(torch_dtype)
+    sin_weight = torch.Tensor(np.sin(valueTable)).to(torch_dtype)
+    tensorrt_llm_qwen.position_embedding_cos.weight.value = torch_to_numpy(cos_weight)
+    tensorrt_llm_qwen.position_embedding_sin.weight.value = torch_to_numpy(sin_weight)
     for k, v in model_params.items():
         if isinstance(v, list):
             v = [torch_to_numpy(vv.to(torch_dtype).detach().cpu()) for vv in v]
