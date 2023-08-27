@@ -33,9 +33,12 @@ def parse_arguments():
                         type=str,
                         default=os.path.join(now_dir, 'qwen_7b_chat'),
                         help="Directory containing the tokenizer.model.")
+    default_text = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n你好，请问你叫什么？<|im_end|>\n<|im_start|>assistant\n"
     parser.add_argument('--input_text',
                         type=str,
-                        default='Born in north-east France, Soyer trained as a')
+                        # default='Born in north-east France, Soyer trained as a'
+                        default=default_text
+                        )
     parser.add_argument(
         '--input_tokens',
         dest='input_file',

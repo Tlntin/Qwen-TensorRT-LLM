@@ -142,7 +142,7 @@ def parse_arguments():
     parser.add_argument('--ffn_dim_multiplier', type=int, default=1)
     parser.add_argument('--inter_size', type=int, default=11008)
     parser.add_argument('--hidden_act', type=str, default='silu')
-    parser.add_argument('--max_batch_size', type=int, default=8)
+    parser.add_argument('--max_batch_size', type=int, default=2)
     parser.add_argument('--max_input_len', type=int, default=2048)
     parser.add_argument('--max_output_len', type=int, default=512)
     parser.add_argument('--max_beam_width', type=int, default=1)
@@ -168,7 +168,7 @@ def parse_arguments():
     parser.add_argument(
         '--output_dir',
         type=str,
-        default='trt_engines',
+        default=os.path.join('trt_engines', "fp16", "1-gpu"),
         help=
         'The path to save the serialized engine files, timing cache file and model configs'
     )

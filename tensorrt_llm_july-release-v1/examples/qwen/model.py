@@ -387,10 +387,10 @@ class QWenBlock(Module):
                                        dtype=dtype)
 
         self.attention = QWenAttention(
-            hidden_size,
-            seq_length,
-            num_attention_heads,
-            max_position_embeddings,
+            hidden_size=hidden_size,
+            num_attention_heads=num_attention_heads,
+            max_position_embeddings=max_position_embeddings,
+            seq_length=seq_length,
             dtype=dtype,
             attention_mask_type=AttentionMaskType.causal,
             bias=bias,
@@ -527,20 +527,20 @@ class QWenModel(Module):
         input_len = shape(input_ids.data, 1)
         position_embedding_cos = self.position_embedding_cos(position_ids)
         position_embedding_sin = self.position_embedding_sin(position_ids)
-        position_embedding_cos0, position_embedding_cos1 = position_embedding_cos.split(1, dim=1)
-        position_embedding_sin0, position_embedding_sin1 = position_embedding_sin.split(1, dim=1)
+        # position_embedding_cos0, position_embedding_cos1 = position_embedding_cos.split(1, dim=1)
+        # position_embedding_sin0, position_embedding_sin1 = position_embedding_sin.split(1, dim=1)
 
-        position_embedding_cos0 = position_embedding_cos0.view(
+        position_embedding_cos = position_embedding_cos.view(
             concat([batch_size, input_len, 1, self.half_head_size]))
-        position_embedding_cos1 = position_embedding_cos1.view(
+        # position_embedding_cos1 = position_embedding_cos1.view(
+        #     concat([batch_size, input_len, 1, self.half_head_size]))
+        position_embedding_sin = position_embedding_sin.view(
             concat([batch_size, input_len, 1, self.half_head_size]))
-        position_embedding_sin0 = position_embedding_sin0.view(
-            concat([batch_size, input_len, 1, self.half_head_size]))
-        position_embedding_sin1 = position_embedding_sin1.view(
-            concat([batch_size, input_len, 1, self.half_head_size]))
-        position_embedding = [
-            position_embedding_cos0, position_embedding_cos1,
-            position_embedding_sin0, position_embedding_sin1
+        # position_embedding_sin1 = position_embedding_sin1.view(
+        #     concat([batch_size, input_len, 1, self.half_head_size]))
+        rotary_pos_emb = [
+            position_embedding_cos, position_embedding_cos,
+            position_embedding_sin, position_embedding_sin
         ]
 
         if past_key_value is None:
@@ -560,13 +560,13 @@ class QWenModel(Module):
         for layer, past in zip(self.layers, past_key_value):
             hidden_states = layer(
                 hidden_states,
-                position_embedding=position_embedding,
+                rotary_pos_emb=rotary_pos_emb,
                 past_key_value=past,
                 sequence_length=sequence_length,
                 past_key_value_length=past_key_value_length,
                 masked_tokens=masked_tokens,
                 use_cache=use_cache,
-                attention_mask=attention_mask,
+                # attention_mask=attention_mask,
                 cache_indirection=cache_indirection
             )
             if use_cache:
