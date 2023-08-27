@@ -233,31 +233,25 @@ class QWenAttention(Module):
                 )
             )
         )
-        def rotate(x64):
-            x32_part0, x32_part1 = x64.split(32, dim=-1)
-
-            x32_part1_negtive = zero - x32_part1
-
-            y64 = concat([x32_part1_negtive, x32_part0], dim=3)
-            return y64
-
-        def rotate_embedding(x, position_embedding_value):
-            cos0, cos1, sin0, sin1 = position_embedding_value
-
-            x128 = x
+        def _rotate_half(x128):
             x64_part0, x64_part1 = x128.split(64, dim=-1)
 
-            x64_part0_rotate = rotate(x64_part0)
-            y64_part0 = x64_part0 * cos0 + x64_part0_rotate * sin0
+            x64_part1_negtive = zero - x64_part1
 
-            x64_part1_rotate = rotate(x64_part1)
-            y64_part1 = x64_part1 * cos1 + x64_part1_rotate * sin1
+            y64 = concat([x64_part1_negtive, x64_part0], dim=3)
+            return y64
 
-            y128 = concat([y64_part0, y64_part1], dim=3)
-            y128 = y128.view(shape(x))
+        def apply_rotary_pos_emb(t, freqs):
+            cos1, sin1 = freqs
+            t_ = t.cast(trt.float32)
+            t_rotate = _rotate_half(t_)
+            y128 = t_ * cos1 + t_rotate * sin1
+            # y128 = y128.view(shape(x))
+            y128 = y128.cast(t.dtype)
             return y128
-        query = rotate_embedding(query, rotary_pos_emb)
-        key = rotate_embedding(key, rotary_pos_emb)
+        q_pos_emb, k_pos_emb = rotary_pos_emb
+        query = apply_rotary_pos_emb(query, q_pos_emb)
+        key = apply_rotary_pos_emb(key, k_pos_emb)
 
         # this code will implement in trt
         # if layer_past is not None:
@@ -479,12 +473,12 @@ class QWenModel(Module):
         super().__init__()
         self.vocab_embedding = Embedding(vocab_size, hidden_size, dtype=dtype)
         # copy from chatglm
-        self.half_head_size = hidden_size // num_heads // 2
+        self.head_size = hidden_size // num_heads
         self.position_embedding_cos = Embedding(max_position_embeddings,
-                                                self.half_head_size,
+                                                self.head_size,
                                                 dtype=dtype)
         self.position_embedding_sin = Embedding(max_position_embeddings,
-                                                self.half_head_size,
+                                                self.head_size,
                                                 dtype=dtype)
 
         self.layers = ModuleList([
@@ -531,16 +525,16 @@ class QWenModel(Module):
         # position_embedding_sin0, position_embedding_sin1 = position_embedding_sin.split(1, dim=1)
 
         position_embedding_cos = position_embedding_cos.view(
-            concat([batch_size, input_len, 1, self.half_head_size]))
+            concat([batch_size, input_len, 1, self.head_size]))
         # position_embedding_cos1 = position_embedding_cos1.view(
-        #     concat([batch_size, input_len, 1, self.half_head_size]))
+        #     concat([batch_size, input_len, 1, self.head_size]))
         position_embedding_sin = position_embedding_sin.view(
-            concat([batch_size, input_len, 1, self.half_head_size]))
+            concat([batch_size, input_len, 1, self.head_size]))
         # position_embedding_sin1 = position_embedding_sin1.view(
-        #     concat([batch_size, input_len, 1, self.half_head_size]))
+        #     concat([batch_size, input_len, 1, self.head_size]))
         rotary_pos_emb = [
-            position_embedding_cos, position_embedding_cos,
-            position_embedding_sin, position_embedding_sin
+            (position_embedding_cos, position_embedding_sin), 
+            (position_embedding_cos, position_embedding_sin), 
         ]
 
         if past_key_value is None:

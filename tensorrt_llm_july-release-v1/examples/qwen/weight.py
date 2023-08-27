@@ -32,6 +32,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                        rank=0,
                        tensor_parallel=1,
                        max_position_embeddings=8192,
+                       kv_channels=128,
                        dtype="float32",
                        multi_query_mode=False):
     tensorrt_llm.logger.info('Loading weights from HF QWen...')
@@ -72,7 +73,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
 
     torch_dtype = str_dtype_to_torch(dtype)
     # set for rope embedding
-    inv_freq = 10**(-1 / 16 * np.arange(0, 64, 2, dtype=np.float32))
+    inv_freq = 10**(-1 / 16 * np.arange(0, kv_channels, 2, dtype=np.float32))
     valueTable = np.matmul(
         np.arange(max_position_embeddings, dtype=np.float32).reshape(-1, 1),
         np.concatenate([inv_freq, inv_freq],axis=0).reshape(1, -1)

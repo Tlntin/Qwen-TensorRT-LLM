@@ -168,7 +168,7 @@ def parse_arguments():
     parser.add_argument(
         '--output_dir',
         type=str,
-        default=os.path.join('trt_engines', "fp16", "1-gpu"),
+        default=os.path.join(now_dir, 'trt_engines', "fp16", "1-gpu"),
         help=
         'The path to save the serialized engine files, timing cache file and model configs'
     )
@@ -216,6 +216,7 @@ def parse_arguments():
         args.n_positions = hf_config.max_position_embeddings
         args.vocab_size = hf_config.vocab_size
         args.hidden_act = "silu"
+        args.kv_channels = hf_config.kv_channels
     assert args.use_gpt_attention_plugin is not None, "QWen must use gpt attention plugin"
     if args.n_kv_head is not None and args.n_kv_head != args.n_head:
         assert args.n_kv_head == args.world_size, \
@@ -281,6 +282,7 @@ def build_rank_engine(builder: Builder,
             rank,
             args.world_size,
             max_position_embeddings=args.n_positions,
+            kv_channels=args.kv_channels,
             dtype=args.dtype,
             multi_query_mode=multi_query_mode
         )
