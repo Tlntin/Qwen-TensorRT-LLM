@@ -217,6 +217,7 @@ def parse_arguments():
         args.vocab_size = hf_config.vocab_size
         args.hidden_act = "silu"
         args.kv_channels = hf_config.kv_channels
+        args.rotary_emb_base = hf_config.rotary_emb_base
     assert args.use_gpt_attention_plugin is not None, "QWen must use gpt attention plugin"
     if args.n_kv_head is not None and args.n_kv_head != args.n_head:
         assert args.n_kv_head == args.world_size, \
@@ -282,7 +283,9 @@ def build_rank_engine(builder: Builder,
             rank,
             args.world_size,
             max_position_embeddings=args.n_positions,
+            seq_length=args.max_input_len,
             kv_channels=args.kv_channels,
+            rotary_emb_base=args.rotary_emb_base,
             dtype=args.dtype,
             multi_query_mode=multi_query_mode
         )

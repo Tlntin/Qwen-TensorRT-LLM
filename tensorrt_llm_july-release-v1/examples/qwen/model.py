@@ -7,7 +7,7 @@ from tensorrt_llm._common import default_net
 from tensorrt_llm._utils import pad_vocab_size, str_dtype_to_trt
 from tensorrt_llm.functional import (
     RaggedTensor, Tensor, assertion, expand_mask, gather_last_token_logits,
-    shape, concat, constant, gpt_attention
+    shape, concat, constant, gpt_attention, slice, concat, expand_dims_like
 )
 from tensorrt_llm.parameter import Parameter
 from tensorrt_llm.layers import (Attention, AttentionMaskType, ColumnLinear, Embedding,
@@ -145,10 +145,12 @@ class QWenAttention(Module):
         #     for i in range(1, 32768)
         # ]
         # self.logn_tensor = torch.tensor(logn_list)[None, :, None, None]
-        # trt implementation
-        # self.logn_tensor = Tensor(
-        #     name='logn_tensor', dtype=dtype, shape=[1, 32767, 1, 1]
-        # )
+        # trt implementation move to QWenModel
+        self.logn_tensor = Parameter(
+            value=None,
+            dtype=self.dtype,
+            shape=[1, 32717, 1, 1],
+        ) 
         # self.attn_dropout = nn.Dropout(config.attn_dropout_prob)
 
     # def _split_heads(self, tensor, num_heads, attn_head_size):
@@ -283,9 +285,15 @@ class QWenAttention(Module):
         #     logn_tensor = self.logn_tensor[:, seq_start:seq_end, :, :]
         #     query = query * logn_tensor.expand_as(query)
         # implement in trt
-        # seq_start = key.size(1) - query.size(1)
-        # seq_end = key.size(1)
-        # logn_tensor = self.logn_tensor[:, seq_start:seq_end, :, :]
+        seq_start = slice(shape(key), [1], [1]) - slice(shape(query), [1], [1])
+        seq_end = slice(shape(key), [1], [1])
+        logn_shape = self.logn_tensor.value.shape
+        logn_tensor = slice(
+            input=self.logn_tensor.value,
+            starts=concat([0, seq_start, 0, 0]),
+            sizes=concat([logn_shape[0], seq_end - seq_start, logn_shape[2], logn_shape[3]]),
+        )
+        query = query * expand_dims_like(logn_tensor, query)
 
         # flash attention implementation 
         # if (
@@ -474,12 +482,16 @@ class QWenModel(Module):
         self.vocab_embedding = Embedding(vocab_size, hidden_size, dtype=dtype)
         # copy from chatglm
         self.head_size = hidden_size // num_heads
-        self.position_embedding_cos = Embedding(max_position_embeddings,
-                                                self.head_size,
-                                                dtype=dtype)
-        self.position_embedding_sin = Embedding(max_position_embeddings,
-                                                self.head_size,
-                                                dtype=dtype)
+        self.position_embedding_cos = Embedding(
+            max_position_embeddings,
+            self.head_size,
+            dtype=trt.float32
+        )
+        self.position_embedding_sin = Embedding(
+            max_position_embeddings,
+            self.head_size,
+            dtype=trt.float32
+        )
 
         self.layers = ModuleList([
             QWenBlock(
@@ -521,17 +533,10 @@ class QWenModel(Module):
         input_len = shape(input_ids.data, 1)
         position_embedding_cos = self.position_embedding_cos(position_ids)
         position_embedding_sin = self.position_embedding_sin(position_ids)
-        # position_embedding_cos0, position_embedding_cos1 = position_embedding_cos.split(1, dim=1)
-        # position_embedding_sin0, position_embedding_sin1 = position_embedding_sin.split(1, dim=1)
-
         position_embedding_cos = position_embedding_cos.view(
             concat([batch_size, input_len, 1, self.head_size]))
-        # position_embedding_cos1 = position_embedding_cos1.view(
-        #     concat([batch_size, input_len, 1, self.head_size]))
         position_embedding_sin = position_embedding_sin.view(
             concat([batch_size, input_len, 1, self.head_size]))
-        # position_embedding_sin1 = position_embedding_sin1.view(
-        #     concat([batch_size, input_len, 1, self.head_size]))
         rotary_pos_emb = [
             (position_embedding_cos, position_embedding_sin), 
             (position_embedding_cos, position_embedding_sin), 

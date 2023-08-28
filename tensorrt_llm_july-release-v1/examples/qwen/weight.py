@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-
+import math
 import tensorrt_llm
 from tensorrt_llm._utils import str_dtype_to_torch, torch_to_numpy
 from tensorrt_llm.quantization import QuantMode
@@ -31,7 +31,9 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                        hf_qwen,
                        rank=0,
                        tensor_parallel=1,
+                       seq_length=2048,
                        max_position_embeddings=8192,
+                       rotary_emb_base=10000,
                        kv_channels=128,
                        dtype="float32",
                        multi_query_mode=False):
@@ -73,15 +75,24 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
 
     torch_dtype = str_dtype_to_torch(dtype)
     # set for rope embedding
-    inv_freq = 10**(-1 / 16 * np.arange(0, kv_channels, 2, dtype=np.float32))
-    valueTable = np.matmul(
-        np.arange(max_position_embeddings, dtype=np.float32).reshape(-1, 1),
-        np.concatenate([inv_freq, inv_freq],axis=0).reshape(1, -1)
+    inv_freq = 1.0 / (rotary_emb_base ** (
+        torch.arange(0, kv_channels, 2).float() / kv_channels)
+    )
+    value_table = torch.matmul(
+        torch.arange(max_position_embeddings).float().reshape(-1, 1),
+        torch.concat([inv_freq, inv_freq], dim=0).reshape(1, -1)
     ).reshape(max_position_embeddings, len(inv_freq) * 2)
-    cos_weight = torch.Tensor(np.cos(valueTable)).to(torch_dtype)
-    sin_weight = torch.Tensor(np.sin(valueTable)).to(torch_dtype)
+    cos_weight = torch.cos(value_table).float()
+    sin_weight = torch.sin(value_table).float()
     tensorrt_llm_qwen.position_embedding_cos.weight.value = torch_to_numpy(cos_weight)
     tensorrt_llm_qwen.position_embedding_sin.weight.value = torch_to_numpy(sin_weight)
+    # computer logn
+    logn_list = [
+        math.log(i, seq_length) if i > seq_length else 1
+        for i in range(1, 32768)
+    ]
+    logn_tensor = torch.tensor(logn_list)[None, :, None, None]
+    logn_weight = torch_to_numpy(logn_tensor)
     for k, v in model_params.items():
         if isinstance(v, list):
             v = [torch_to_numpy(vv.to(torch_dtype).detach().cpu()) for vv in v]
@@ -104,7 +115,9 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
             if 'ln_1.weight' in k:
                 tensorrt_llm_qwen.layers[idx].ln_1.weight.value = v
             elif 'ln_2.weight' in k:
-                dst = tensorrt_llm_qwen.layers[idx].ln_2.weight.value = v
+                tensorrt_llm_qwen.layers[idx].ln_2.weight.value = v
+            elif "logn_tensor" in k:
+                tensorrt_llm_qwen.layers[idx].logn_tensor.weight.value = logn_weight
             elif 'attn.qkv_proj.weight' in k:
                 dst = tensorrt_llm_qwen.layers[idx].attention.qkv.weight
                 if multi_query_mode:
