@@ -48,30 +48,30 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
     use_weight_only = quant_mode.is_weight_only()
 
     model_params = dict(hf_qwen.named_parameters())
-    for layer in range(hf_qwen.config.num_hidden_layers):
-        # prefix = f'model.layers.{layer}.self_attn.'
-        prefix = f'transformer.h.{layer}.attn.'
-        key = f'transformer.h.{layer}.attn.c_attn.weight'
-        qkv_weight = model_params[key]
-        # prefix = f'transformer.h.{layer}.attn.c_proj.weight'
-        # q_weight = model_params[prefix + 'q_proj.weight']
-        # k_weight = model_params[prefix + 'k_proj.weight']
-        # v_weight = model_params[prefix + 'v_proj.weight']
-        if multi_query_mode:
-            hidden_size = tensorrt_llm_qwen.hidden_size
-            qkv_weight, q_weight, k_weight, v_weight = torch.split(
-                qkv_weight,
-                [hidden_size, hidden_size, hidden_size],
-                dim=0
-            )
-            head_size = tensorrt_llm_qwen.hidden_size // tensorrt_llm_qwen.num_heads
-            assert k_weight.shape[0] == tensor_parallel * head_size
-            assert v_weight.shape[0] == tensor_parallel * head_size
-            qkv_weight = [q_weight, k_weight, v_weight]
-        # else:
-        #     qkv_weight = torch.cat([q_weight, k_weight, v_weight], dim=0)
+    # for layer in range(hf_qwen.config.num_hidden_layers):
+    #     # prefix = f'model.layers.{layer}.self_attn.'
+    #     prefix = f'transformer.h.{layer}.attn.'
+    #     key = f'transformer.h.{layer}.attn.c_attn.weight'
+    #     qkv_weight = model_params[key]
+    #     # prefix = f'transformer.h.{layer}.attn.c_proj.weight'
+    #     # q_weight = model_params[prefix + 'q_proj.weight']
+    #     # k_weight = model_params[prefix + 'k_proj.weight']
+    #     # v_weight = model_params[prefix + 'v_proj.weight']
+    #     if multi_query_mode:
+    #         hidden_size = tensorrt_llm_qwen.hidden_size
+    #         qkv_weight, q_weight, k_weight, v_weight = torch.split(
+    #             qkv_weight,
+    #             [hidden_size, hidden_size, hidden_size],
+    #             dim=0
+    #         )
+    #         head_size = tensorrt_llm_qwen.hidden_size // tensorrt_llm_qwen.num_heads
+    #         assert k_weight.shape[0] == tensor_parallel * head_size
+    #         assert v_weight.shape[0] == tensor_parallel * head_size
+    #         qkv_weight = [q_weight, k_weight, v_weight]
+    #     # else:
+    #     #     qkv_weight = torch.cat([q_weight, k_weight, v_weight], dim=0)
 
-        model_params[prefix + 'qkv_proj.weight'] = qkv_weight
+    #     model_params[prefix + 'qkv_proj.weight'] = qkv_weight
 
     torch_dtype = str_dtype_to_torch(dtype)
     # set for rope embedding
@@ -118,7 +118,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                 tensorrt_llm_qwen.layers[idx].ln_2.weight.value = v
             elif "logn_tensor" in k:
                 tensorrt_llm_qwen.layers[idx].logn_tensor.weight.value = logn_weight
-            elif 'attn.qkv_proj.weight' in k:
+            elif 'attn.c_attn.weight' in k:
                 dst = tensorrt_llm_qwen.layers[idx].attention.qkv.weight
                 if multi_query_mode:
                     assert isinstance(v, list) and len(v) == 3
@@ -145,6 +145,20 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                     scales.value = torch_weight_scales.numpy()
                 else:
                     dst.value = np.ascontiguousarray(split_v)
+            elif 'attn.c_attn.bias' in k:
+                dst = tensorrt_llm_qwen.layers[idx].attention.qkv.bias
+                if multi_query_mode:
+                    assert isinstance(v, list) and len(v) == 3
+                    wq = split(v[0], tensor_parallel, rank)
+                    wk = split(v[1], tensor_parallel, rank)
+                    wv = split(v[2], tensor_parallel, rank)
+                    split_v = np.concatenate((wq, wk, wv))
+                else:
+                    q_emb = v.shape[0] // 3
+                    v = v.reshape(3, q_emb)
+                    split_v = split(v, tensor_parallel, rank, dim=1)
+                    split_v = split_v.reshape(3 * (q_emb // tensor_parallel))
+                dst.value = np.ascontiguousarray(split_v)
             elif 'attn.c_proj.weight' in k:
                 dst = tensorrt_llm_qwen.layers[idx].attention.dense.weight
                 split_v = split(v, tensor_parallel, rank, dim=1)
@@ -205,6 +219,8 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                     scales.value = torch_weight_scales.numpy()
                 else:
                     dst.value = np.ascontiguousarray(split_v)
+            else:
+                print("unknow key: ", k)
             
 
     tok = time.time()

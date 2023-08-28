@@ -108,21 +108,25 @@ class QWenAttention(Module):
         # self.c_proj = nn.Linear(
         #     config.hidden_size, self.projection_size, bias=not config.no_bias
         # )
-        self.qkv = ColumnLinear(hidden_size,
-                                hidden_size *
-                                3 if not multi_query_mode else hidden_size +
-                                2 * tp_size * self.attention_head_size,
-                                bias=bias,
-                                dtype=dtype,
-                                tp_group=tp_group,
-                                tp_size=tp_size,
-                                gather_output=False)
-        self.dense = RowLinear(hidden_size,
-                               hidden_size,
-                               bias=bias,
-                               dtype=dtype,
-                               tp_group=tp_group,
-                               tp_size=tp_size)
+        self.qkv = ColumnLinear(
+            hidden_size,
+            hidden_size *
+            3 if not multi_query_mode else hidden_size +
+            2 * tp_size * self.attention_head_size,
+            bias=True,
+            dtype=dtype,
+            tp_group=tp_group,
+            tp_size=tp_size,
+            gather_output=False
+        )
+        self.dense = RowLinear(
+            hidden_size,
+            hidden_size,
+            bias=bias,
+            dtype=dtype,
+            tp_group=tp_group,
+            tp_size=tp_size
+        )
 
         # self.is_fp32 = not (dtype or config.fp16)
         # if (
