@@ -21,9 +21,19 @@
 请在这一节里总结你的工作难点与亮点。
 
 1. huggingface转llm-trt比较繁琐。
-2. 首次运行报错，经调试发现是显存不够。
-3. fp16下，输出结果与原版不一样。
-4. 没有现成的attention实现。
+- 目前只能肉眼观察已有成功案例，例如参考chatglm/llama, 通过debug huggingface版和观察trt-llm版，了解整体思路。
+- 然后观察qwen和chatglm/llama的差异，拿这两个案例做魔改。整体代码魔改自llama, attention/rope参考了chatglm-6b。
+2. 首次运行报显存分配错误。
+- 在其附近插入可用显存和需要分配的显存代码，发现是显存不够, 将max_batch_size从默认的8改成2后解决。
+3. 没有现成的attention实现。
+- 通过对比代码，发现examples下面的chatglm-6b的rope embedding和qwen类似，所以chatglm-6b的rope embedding的trt实现可以作为参考项。
+- 移植时发现,rope提前算好了weights，然后分割成了两个cos_embedding和sin_embedding。为确保该方案可行，于是在huggingface版的qwen中实现了类似结构，对比rope_cos和rope_sim的输出结果，以及对应sum值，发现该操作可行，于是将其移植到了qwen trt-llm中。
+- 不过需要注意的是，qwen的dim和max_position_dim和chatglm-6b不一样，加上chatglm-6b trt-llm的rope的inv_freq做了一定约分，导致看起来比较奇怪，所以后续我们直接使用了的qwen原版的inv_freq计算，以及qwen原版的apply_rotary_pos_emb方法。
+4. fp16下，输出结果与原版不一样。
+- 通过阅读`docs/2023-05-19-how-to-debug.md`文档，基本掌握的debug能力，然后按照代码运行顺序，从外到内debug，找到误差所在层。
+- 首先我们对比了wte和rope输出，基本确定这两个layer没有问题。
+- 然后我们打印了rwen_block的每层输入，其中第一个layer的hidden_states正常，后续误差逐步增加，所以初步确定误差在QwenBlock这个类中。
+- 由于attention使用了rope相关计算+gpt attention_layer，这里出问题的可能性较大，于是我在QwenBlock中的attention计算里面加入调试操作，打印其输出结果，并和pytorch做数值对比（主要对比mean, sum数值）。
 
 - 如果使用 TensorRT-LLM 进行优化，描述以下方面可供选手参考：如果搭建了新模型， 请介绍模型结构有无特别之处，在模型的搭建过程中使用了什么算子，有没有通过plugin支持的新算子。如果支持新feature，请介绍这个feature具体需要修改哪些模块才能实现。如果优化已有模型，请介绍模型性能瓶颈以及解决方法。另外还可以包含工程实现以及debug过程中的难点。
 
