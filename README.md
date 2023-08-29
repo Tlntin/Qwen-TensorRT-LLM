@@ -32,7 +32,7 @@
 4. fp16下，输出结果与原版不一样。
 - 通过阅读`docs/2023-05-19-how-to-debug.md`文档，基本掌握的debug能力，然后按照代码运行顺序，从外到内debug，找到误差所在层。
 - 首先我们对比了wte和rope输出，基本确定这两个layer没有问题。
-- 然后我们打印了rwen_block的每层输入，其中第一个layer的hidden_states正常，后续误差逐步增加，所以初步确定误差在QwenBlock这个类中。
+- 然后我们打印了qwen_block的每层输入，其中第一个layer的hidden_states正常，后续误差逐步增加，所以初步确定误差在QwenBlock这个类中。
 - 由于attention使用了rope相关计算+gpt attention_layer，这里出问题的可能性较大，于是我在QwenBlock中的attention计算里面加入调试操作，打印其输出结果，并和pytorch做数值对比（主要对比mean, sum数值）。
 
 - 如果使用 TensorRT-LLM 进行优化，描述以下方面可供选手参考：如果搭建了新模型， 请介绍模型结构有无特别之处，在模型的搭建过程中使用了什么算子，有没有通过plugin支持的新算子。如果支持新feature，请介绍这个feature具体需要修改哪些模块才能实现。如果优化已有模型，请介绍模型性能瓶颈以及解决方法。另外还可以包含工程实现以及debug过程中的难点。
