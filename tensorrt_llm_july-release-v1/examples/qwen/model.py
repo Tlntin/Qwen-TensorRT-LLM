@@ -7,7 +7,7 @@ from tensorrt_llm._common import default_net
 from tensorrt_llm._utils import pad_vocab_size, str_dtype_to_trt
 from tensorrt_llm.functional import (
     RaggedTensor, Tensor, assertion, expand_mask, gather_last_token_logits,
-    shape, concat, constant, gpt_attention, slice, concat, expand_dims_like
+    shape, concat, constant, gpt_attention, slice, concat, expand_dims_like, cast
 )
 from tensorrt_llm.parameter import Parameter
 from tensorrt_llm.layers import (Attention, AttentionMaskType, ColumnLinear, Embedding,
@@ -236,14 +236,14 @@ class QWenAttention(Module):
         #     query = apply_rotary_pos_emb(query, q_pos_emb)
         #     key = apply_rotary_pos_emb(key, k_pos_emb)
         # trt implementation
-        zero = constant(
+        zero = cast(constant(
             np.ascontiguousarray(
                 np.zeros(
                     [1, 1, 1, 1],
-                    dtype=np.float32
+                    dtype=np.float16 if self.dtype == trt.float16 else np.float32
                 )
             )
-        )
+        ), dtype=trt.float32)
         def _rotate_half(x128):
             x64_part0, x64_part1 = x128.split(64, dim=-1)
 
