@@ -240,8 +240,7 @@ class QWenAttention(Module):
             np.ascontiguousarray(
                 np.zeros(
                     [1, 1, 1, 1],
-                    dtype=np.float16
-                    if self.dtype == trt.float16 else np.float32
+                    dtype=np.float32
                 )
             )
         )
