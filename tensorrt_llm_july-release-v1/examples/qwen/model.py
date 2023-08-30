@@ -274,18 +274,6 @@ class QWenAttention(Module):
         kv_orig_quant_scale = self.kv_orig_quant_scale.value if self.use_int8_kv_cache else None
         kv_quant_orig_scale = self.kv_quant_orig_scale.value if self.use_int8_kv_cache else None
 
-        qkv = concat([query, key, value], dim=2)
-        qkv = qkv.view(
-            concat([shape(qkv, 0),
-                    shape(qkv, 1),
-                    self.hidden_size * 3])
-        )
-        # will implement in trt
-        # if use_cache:
-        #     present = (key, value)
-        # else:
-        #     present = None
-
         # implement in tensor
         # if self.use_logn_attn and not self.training:
         #     if self.logn_tensor.device != query.device or self.logn_tensor.dtype != query.dtype:
@@ -304,6 +292,19 @@ class QWenAttention(Module):
             sizes=concat([logn_shape[0], seq_end - seq_start, logn_shape[2], logn_shape[3]]),
         )
         query = query * expand_dims_like(logn_tensor, query)
+
+        qkv = concat([query, key, value], dim=2)
+        qkv = qkv.view(
+            concat([shape(qkv, 0),
+                    shape(qkv, 1),
+                    self.hidden_size * 3])
+        )
+        # will implement in trt
+        # if use_cache:
+        #     present = (key, value)
+        # else:
+        #     present = None
+
 
         # flash attention implementation 
         # if (
