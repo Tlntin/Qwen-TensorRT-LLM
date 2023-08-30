@@ -86,13 +86,6 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
     sin_weight = torch.sin(value_table).float()
     tensorrt_llm_qwen.position_embedding_cos.weight.value = torch_to_numpy(cos_weight)
     tensorrt_llm_qwen.position_embedding_sin.weight.value = torch_to_numpy(sin_weight)
-    # computer logn
-    logn_list = [
-        math.log(i, seq_length) if i > seq_length else 1
-        for i in range(1, 32768)
-    ]
-    logn_tensor = torch.tensor(logn_list)[None, :, None, None]
-    logn_weight = torch_to_numpy(logn_tensor)
     for k, v in model_params.items():
         if isinstance(v, list):
             v = [torch_to_numpy(vv.to(torch_dtype).detach().cpu()) for vv in v]
@@ -116,8 +109,6 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                 tensorrt_llm_qwen.layers[idx].ln_1.weight.value = v
             elif 'ln_2.weight' in k:
                 tensorrt_llm_qwen.layers[idx].ln_2.weight.value = v
-            elif "logn_tensor" in k:
-                tensorrt_llm_qwen.layers[idx].logn_tensor.weight.value = logn_weight
             elif 'attn.c_attn.weight' in k:
                 dst = tensorrt_llm_qwen.layers[idx].attention.qkv.weight
                 if multi_query_mode:

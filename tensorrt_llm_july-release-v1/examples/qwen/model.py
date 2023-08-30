@@ -150,11 +150,17 @@ class QWenAttention(Module):
         # ]
         # self.logn_tensor = torch.tensor(logn_list)[None, :, None, None]
         # trt implementation move to QWenModel
+        logn_array = np.array([
+            math.log(i, seq_length) if i > seq_length else 1
+            for i in range(1, 32768)
+            ],
+            dtype=np.float16
+        ).reshape(1, -1, 1, 1)
         self.logn_tensor = Parameter(
-            value=None,
+            value=logn_array,
             dtype=self.dtype,
             shape=[1, 32717, 1, 1],
-        ) 
+        )  
         # self.attn_dropout = nn.Dropout(config.attn_dropout_prob)
 
     # def _split_heads(self, tensor, num_heads, attn_head_size):
