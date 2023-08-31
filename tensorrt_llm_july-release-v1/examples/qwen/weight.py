@@ -166,7 +166,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                 else:
                     dst.value = np.ascontiguousarray(split_v)
             elif 'mlp.w1.weight' in k:
-                dst = tensorrt_llm_qwen.layers[idx].mlp.fc.weight
+                dst = tensorrt_llm_qwen.layers[idx].mlp.w1.weight
                 split_v = split(v, tensor_parallel, rank, dim=0)
                 if use_weight_only:
                     v = np.ascontiguousarray(split_v.transpose())
@@ -181,7 +181,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                 else:
                     dst.value = np.ascontiguousarray(split_v)
             elif 'mlp.w2.weight' in k:
-                dst = tensorrt_llm_qwen.layers[idx].mlp.gate.weight
+                dst = tensorrt_llm_qwen.layers[idx].mlp.w2.weight
                 split_v = split(v, tensor_parallel, rank, dim=0)
                 if use_weight_only:
                     v = np.ascontiguousarray(split_v.transpose())
@@ -196,7 +196,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                 else:
                     dst.value = np.ascontiguousarray(split_v)
             elif 'mlp.c_proj.weight' in k:
-                dst = tensorrt_llm_qwen.layers[idx].mlp.proj.weight
+                dst = tensorrt_llm_qwen.layers[idx].mlp.c_proj.weight
                 split_v = split(v, tensor_parallel, rank, dim=1)
                 if use_weight_only:
                     v = np.ascontiguousarray(split_v.transpose())

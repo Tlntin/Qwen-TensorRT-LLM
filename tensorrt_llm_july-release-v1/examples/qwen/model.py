@@ -6,7 +6,7 @@ import numpy as np
 from tensorrt_llm._common import default_net, default_trtnet
 from tensorrt_llm._utils import pad_vocab_size, str_dtype_to_trt
 from tensorrt_llm.functional import (
-    RaggedTensor, Tensor, assertion, expand_mask, gather_last_token_logits,
+    ACT2FN, RaggedTensor, Tensor, assertion, expand_mask, gather_last_token_logits,
     shape, concat, constant, gpt_attention, slice, expand_dims_like, cast,
     _create_tensor
 )
@@ -388,6 +388,59 @@ class QWenAttention(Module):
             return context
 
 
+class QWenMLP(Module):
+    def __init__(
+        self,
+        hidden_size,
+        ffn_hidden_size,
+        hidden_act,
+        bias=True,
+        dtype=None,
+        tp_group=None,
+        tp_size=1
+    ):
+        super().__init__()
+        if hidden_act not in ACT2FN:
+            raise ValueError(
+                'unsupported activation function: {}'.format(hidden_act))
+        self.w1 = ColumnLinear(
+            hidden_size,
+            ffn_hidden_size,
+            bias=bias,
+            dtype=dtype,
+            tp_group=tp_group,
+            tp_size=tp_size,
+            gather_output=False
+        )
+        self.w2 = ColumnLinear(
+            hidden_size,
+            ffn_hidden_size,
+            bias=bias,
+            dtype=dtype,
+            tp_group=tp_group,
+            tp_size=tp_size,
+            gather_output=False
+        )
+        self.c_proj = RowLinear(
+            ffn_hidden_size,
+            hidden_size,
+            bias=bias,
+            dtype=dtype,
+            tp_group=tp_group,
+            tp_size=tp_size
+        )
+        self.hidden_act = hidden_act
+        self.dtype = dtype
+
+    def forward(self, hidden_states):
+        a1 = self.w1(hidden_states)
+        a2 = self.w2(hidden_states)
+        # intermediate_parallel = a1 * F.silu(a2)
+        intermediate_parallel = a1 * ACT2FN[self.hidden_act](a2)
+        output = self.c_proj(intermediate_parallel)
+        return output
+
+
 class QWenBlock(Module):
 
     def __init__(self,
@@ -428,7 +481,7 @@ class QWenBlock(Module):
         )
         if not mlp_hidden_size:
             mlp_hidden_size = hidden_size * 4
-        self.mlp = GatedMLP(hidden_size=hidden_size,
+        self.mlp = QWenMLP(hidden_size=hidden_size,
                             ffn_hidden_size=mlp_hidden_size // 2,
                             hidden_act=hidden_act,
                             dtype=dtype,
