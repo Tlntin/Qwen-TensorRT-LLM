@@ -369,7 +369,7 @@ class QWenAttention(Module):
             self.num_attention_heads,
             self.attention_head_size,
             self.q_scaling,
-            self.rotary_embedding_dim,
+            0, # self.rotary_embedding_dim,
             self.neox_rotary_style,
             self.multi_block_mode,
             self.multi_query_mode,
