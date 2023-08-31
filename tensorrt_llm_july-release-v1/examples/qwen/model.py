@@ -3,18 +3,31 @@ import math
 # import torch
 import tensorrt as trt
 import numpy as np
-from tensorrt_llm._common import default_net
+from tensorrt_llm._common import default_net, default_trtnet
 from tensorrt_llm._utils import pad_vocab_size, str_dtype_to_trt
 from tensorrt_llm.functional import (
     RaggedTensor, Tensor, assertion, expand_mask, gather_last_token_logits,
-    shape, concat, constant, gpt_attention, slice, concat, expand_dims_like, cast
+    shape, concat, constant, gpt_attention, slice, expand_dims_like, cast,
+    _create_tensor
 )
 from tensorrt_llm.parameter import Parameter
 from tensorrt_llm.layers import (Attention, AttentionMaskType, ColumnLinear, Embedding,
                        GatedMLP, PositionEmbeddingType, RmsNorm, RowLinear)
 from tensorrt_llm.module import Module, ModuleList
 from tensorrt_llm.quantization import QuantMode
+from tensorrt_llm.plugin import  _TRT_LLM_PLUGIN_NAMESPACE as TRT_LLM_PLUGIN_NAMESPACE
 
+
+def identity_op(tensor: Tensor) -> Tensor:
+    input_tensor = tensor.trt_tensor
+    # Create a plugin instance.
+    plugin_creator = trt.get_plugin_registry().get_plugin_creator(
+        'Identity', '1', TRT_LLM_PLUGIN_NAMESPACE)
+    assert plugin_creator is not None
+    pfc = trt.PluginFieldCollection([])
+    plugin = plugin_creator.create_plugin("identity", pfc)
+    layer = default_trtnet().add_plugin_v2([input_tensor], plugin)
+    return _create_tensor(layer.get_output(0), layer)
 
 
 class QWenAttention(Module):
