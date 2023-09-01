@@ -117,7 +117,9 @@ Output: "您好，我是来自达摩院的大规模语言模型，我叫通义�
 
 ### Bug报告（可选）
 
-提交bug是对TensorRT/TensorRT-LLM的另一种贡献。发现的TensorRT/TensorRT-LLM或cookbook、或文档和教程相关bug，请提交到[github issues](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues)，并请在这里给出链接。  
+提交bug是对TensorRT/TensorRT-LLM的另一种贡献。发现的TensorRT/TensorRT-LLM或cookbook、或文档和教程相关bug，请提交到[github issues](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues)，并请在这里给出链接。
+
+提交的针对TensorRT的bug链接：https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/86
 
 对于每个bug，请标记上hackathon2023标签，并写好正文：
 
