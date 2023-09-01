@@ -3,6 +3,8 @@ ftModel/
 llm/
 pyTorchModel/
 trtModel/
+chatglm_6b
+chatglm-6b
 
 *.engine
 *.engine.config
