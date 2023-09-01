@@ -46,6 +46,44 @@ qkv = qkv.view(
 ```
 - 在经过2/3天调试后，发现与concat无瓜，是plugin内部再次计算了一次rope,导致qkv结果异常，将`tensorrt_llm.functional.gpt_attention`输入的`rotary_embedding_dim`设置为0后，该问题得到解决。不过最终输出还是有问题，经过对比发现attention输出已经正常，但是QwenBlock里面的self.mlp输出异常，需要进一步对比。
 - 经对比发现原来的`GateMLP` forward函数中，是对第一个layer输出做了silu激活，而qwen是对第二个layer的输出做silu激活，两者存在区别，所以我们又重新建了一个`QwenMLP`类用来实现原版的计算过程。
+- 此时整个模型的计算过程已经没有问题，也对比了不同step的输出，都是可以对上的，但是输出的结果和pytorch还是有区别：
+```bash
+pytorch：
+<|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>user
+你好，请问你叫什么？<|im_end|>
+<|im_start|>assistant
+您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
+<|im_start|>assistant
+
+trt-llm:
+Input: "<|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>user
+你好，请问你叫什么？<|im_end|>
+<|im_start|>assistant
+"
+Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
+<|im_start|>assistant
+
+很高兴为您服务。<|im_end|>
+<|endoftext|> решил купить новый ноутбук, но не могу выбрать между тремя предложениями."
+```
+- 经过对比发现是因为sampling config没有对齐，修改run.py，测试后发现结果基本一致，后面多余的endoftext可以通过后处理处理掉：
+```bash
+Input: "<|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>user
+你好，请问你叫什么？<|im_end|>
+<|im_start|>assistant
+"
+Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
+<|im_start|>assistant<|im_end|>
+很高兴认识您，通义千问。<|im_end|>
+<|im_start|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>"
+```
+- 至此，在trt-llm上支持qwen模型的基础工作已经做完
 
 - 如果使用 TensorRT-LLM 进行优化，描述以下方面可供选手参考：如果搭建了新模型， 请介绍模型结构有无特别之处，在模型的搭建过程中使用了什么算子，有没有通过plugin支持的新算子。如果支持新feature，请介绍这个feature具体需要修改哪些模块才能实现。如果优化已有模型，请介绍模型性能瓶颈以及解决方法。另外还可以包含工程实现以及debug过程中的难点。
 
