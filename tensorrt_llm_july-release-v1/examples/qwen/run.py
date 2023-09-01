@@ -13,8 +13,8 @@ from tensorrt_llm.runtime import ModelConfig, SamplingConfig
 
 from build import get_engine_name  # isort:skip
 
-EOS_TOKEN = 2
-PAD_TOKEN = 2
+EOS_TOKEN = 151643
+PAD_TOKEN = 151643
 
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
@@ -104,7 +104,9 @@ def generate(
                                remove_input_padding=remove_input_padding)
     sampling_config = SamplingConfig(end_id=EOS_TOKEN,
                                      pad_id=PAD_TOKEN,
-                                     num_beams=num_beams)
+                                     num_beams=num_beams,
+                                     top_k = 0,
+                                     top_p = 0.5,)
 
     engine_name = get_engine_name('qwen', dtype, world_size, runtime_rank)
     serialize_path = os.path.join(engine_dir, engine_name)
