@@ -1,18 +1,20 @@
 from collections import OrderedDict
 import math
 # import torch
+from typing import Union, Optional, Tuple
 import tensorrt as trt
 import numpy as np
-from tensorrt_llm._common import default_net, default_trtnet
+from tensorrt_llm._common import default_net, default_trtnet, precision
 from tensorrt_llm._utils import pad_vocab_size, str_dtype_to_trt
 from tensorrt_llm.functional import (
     ACT2FN, RaggedTensor, Tensor, assertion, expand_mask, gather_last_token_logits,
-    shape, concat, constant, gpt_attention, slice, expand_dims_like, cast,
+    shape, concat, constant, gpt_attention, slice, expand_dims_like, cast, pow,
     _create_tensor
 )
 from tensorrt_llm.parameter import Parameter
-from tensorrt_llm.layers import (Attention, AttentionMaskType, ColumnLinear, Embedding,
-                       GatedMLP, PositionEmbeddingType, RmsNorm, RowLinear)
+from tensorrt_llm.layers import (
+    AttentionMaskType, ColumnLinear, Embedding, PositionEmbeddingType, RowLinear
+)
 from tensorrt_llm.module import Module, ModuleList
 from tensorrt_llm.quantization import QuantMode
 from tensorrt_llm.plugin import  _TRT_LLM_PLUGIN_NAMESPACE as TRT_LLM_PLUGIN_NAMESPACE
@@ -28,6 +30,60 @@ def identity_op(tensor: Tensor) -> Tensor:
     plugin = plugin_creator.create_plugin("identity", pfc)
     layer = default_trtnet().add_plugin_v2([input_tensor], plugin)
     return _create_tensor(layer.get_output(0), layer)
+
+
+def rms_norm(input: Tensor,
+             normalized_shape: Union[int, Tuple[int]],
+             weight: Optional[Tensor] = None,
+             eps: float = 1e-06) -> Tensor:
+    '''
+    Add a RMS norm operation on a tensor.
+    Copy from tensorrt_llm.functional, for reduce some warning;
+
+    TODO: Document!
+    '''
+    normalized_shape = [normalized_shape] if isinstance(
+        normalized_shape, int) else normalized_shape
+
+    dim = tuple([-i - 1 for i in range(len(normalized_shape))])
+
+    with precision("float32"): 
+        varx = pow(input.cast(trt.float32), 2.0)
+        varx = varx.mean(dim, keepdim=True)
+        denom = varx + eps
+        denom = denom.sqrt()
+        y = input.cast(trt.float32) / denom
+        y = y.cast(input.dtype)
+    if weight is not None:
+        y = y * weight
+
+    return y
+
+
+class RmsNorm(Module):
+    """
+    Copy from tensorrt_llm.functional, for reduce some warning;
+    """
+    def __init__(self,
+                 normalized_shape,
+                 eps=1e-06,
+                 elementwise_affine=True,
+                 dtype=None):
+        super().__init__()
+        if isinstance(normalized_shape, int):
+            normalized_shape = (normalized_shape, )
+        self.normalized_shape = tuple(normalized_shape)
+        self.elementwise_affine = elementwise_affine
+        if self.elementwise_affine:
+            self.weight = Parameter(shape=self.normalized_shape, dtype=dtype)
+        else:
+            self.register_parameter('weight', None)
+
+        self.eps = eps
+
+    def forward(self, x):
+        weight = None if self.weight is None else self.weight.value
+        return rms_norm(x, self.normalized_shape, weight, self.eps)
 
 
 class QWenAttention(Module):
