@@ -4,4 +4,5 @@ Qwen*
 c-model
 ccdv
 trt_engines
+hg_test.py
 

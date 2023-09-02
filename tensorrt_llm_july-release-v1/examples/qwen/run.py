@@ -383,7 +383,7 @@ class QWenForCausalLMGenerationSession(GenerationSession):
                         sequence_lengths, self.output_ids, self.parent_ids,
                         self.end_ids, input_lengths, batch_size, scfg.num_beams,
                         max_input_length, self.max_seq_length)
-                    return final_output_ids
+                    return final_output_ids, step + 1
 
             if self.paged_kv_cache and step < self.max_new_tokens - 1:
                 # Iterate to the next step in KV cache manager.
@@ -405,7 +405,7 @@ class QWenForCausalLMGenerationSession(GenerationSession):
                                             scfg.num_beams, max_input_length,
                                             self.max_seq_length)
 
-        return final_output_ids
+        return final_output_ids, self.max_new_tokens
 
 
 def parse_arguments():
@@ -544,7 +544,7 @@ def generate(
     max_input_length = torch.max(input_lengths).item()
     decoder.setup(input_lengths.size(0), max_input_length, max_output_len)
 
-    output_ids = decoder.decode(input_ids, input_lengths, sampling_config)
+    output_ids, end_step = decoder.decode(input_ids, input_lengths, sampling_config)
     torch.cuda.synchronize()
 
     if runtime_rank == 0:
@@ -555,22 +555,23 @@ def generate(
                 print(f'Input: \"{input_text}\"')
                 if num_beams <= 1:
                     output_begin = max_input_length
-                    # outputs = output_ids[b][0][output_begin:].tolist()
-                    # output_text = tokenizer.decode(outputs)
-                    outputs = output_ids[b][0].tolist()
-                    output_text = _decode_chatml(
-                        outputs,
-                        stop_words=[],
-                        eod_token_ids=[tokenizer.im_start_id, tokenizer.im_end_id],
-                        tokenizer=tokenizer,
-                        raw_text_len=len(input_text),
-                        context_length=len(inputs)
-                    )
+                    output_end = max_input_length + end_step
+                    outputs = output_ids[b][0][output_begin: output_end].tolist()
+                    output_text = tokenizer.decode(outputs)
+                    # outputs = output_ids[b][0].tolist()
+                    # output_text = _decode_chatml(
+                    #     outputs,
+                    #     stop_words=[],
+                    #     eod_token_ids=[tokenizer.im_start_id, tokenizer.im_end_id],
+                    #     tokenizer=tokenizer,
+                    #     raw_text_len=len(input_text),
+                    #     context_length=len(inputs)
+                    # )
                     print(f'Output: \"{output_text}\"')
                 else:
                     for beam in range(num_beams):
                         output_begin = input_lengths[b]
-                        output_end = input_lengths[b] + max_output_len
+                        output_end = input_lengths[b] + end_step
                         outputs = output_ids[b][beam][
                             output_begin:output_end].tolist()
                         output_text = tokenizer.decode(outputs)
