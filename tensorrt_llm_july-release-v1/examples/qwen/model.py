@@ -9,7 +9,7 @@ from tensorrt_llm._utils import pad_vocab_size, str_dtype_to_trt
 from tensorrt_llm.functional import (
     ACT2FN, RaggedTensor, Tensor, assertion, expand_mask, gather_last_token_logits,
     shape, concat, constant, gpt_attention, slice, expand_dims_like, cast, pow,
-    _create_tensor
+    _create_tensor, arange, outer, sin, cos, unary, partial, expand
 )
 from tensorrt_llm.parameter import Parameter
 from tensorrt_llm.layers import (
@@ -18,6 +18,10 @@ from tensorrt_llm.layers import (
 from tensorrt_llm.module import Module, ModuleList
 from tensorrt_llm.quantization import QuantMode
 from tensorrt_llm.plugin import  _TRT_LLM_PLUGIN_NAMESPACE as TRT_LLM_PLUGIN_NAMESPACE
+
+
+log = partial(unary, op=trt.UnaryOperation.LOG)
+ceil = partial(unary, op=trt.UnaryOperation.CEIL)
 
 
 def identity_op(tensor: Tensor) -> Tensor:
@@ -591,6 +595,83 @@ class QWenBlock(Module):
         return hidden_states
 
 
+class RotaryEmbedding(Module):
+    def __init__(self, per_head_dim=128, max_position_dim = 8192, seq_length=2048, base=10000.0) -> None:
+        self.per_head_dim = per_head_dim
+        self.max_position_dim = max_position_dim
+        self.seq_length = seq_length
+        self.base = base
+        super().__init__()
+        # self.normal_embedding = Embedding(
+        #     dim,
+        #     self.head_size,
+        #     dtype=trt.float32
+        # )
+        self.position_embedding_cos = Embedding(
+            max_position_dim,
+            per_head_dim,
+            dtype=trt.float32
+        )
+        self.position_embedding_sin = Embedding(
+            max_position_dim,
+            per_head_dim,
+            dtype=trt.float32
+        )
+
+    def forward(self, input_ids, position_ids):
+        # implement for old
+        batch_size = shape(input_ids.data, 0)
+        input_len = shape(input_ids.data, 1)
+        if input_len <= self.seq_length:
+            position_embedding_cos = self.position_embedding_cos(position_ids)
+            position_embedding_sin = self.position_embedding_sin(position_ids)
+            position_embedding_cos = position_embedding_cos.view(
+                concat([batch_size, input_len, 1, self.per_head_dim])
+            )
+            position_embedding_sin = position_embedding_sin.view(
+                concat([batch_size, input_len, 1, self.per_head_dim])
+            )
+        else:
+            context_value = log(input_len.cast(trt.float32) / float(self.seq_length)) / math.log(2) + 1.0
+            ntk_alpha = pow(constant(np.array(2, dtype=np.float32)), ceil(context_value)) - 1.0
+            # ntk_alpha = f_max(ntk_alpha, 1.0)
+            ntk_alpha = pow(ntk_alpha, (self.per_head_dim / (self.per_head_dim - 2)))
+            base = self.base * ntk_alpha
+            inv_freq = pow(base, 
+                constant(np.arange(0, self.per_head_dim, 2, dtype=np.float32) / (2 - self.per_head_dim))
+            )
+            # temp_length = f_max(2 * input_len, 16)
+            seq = arange(constant(np.array(0, dtype=np.int32)), input_len * 2, dtype="trt.int32")
+            freqs = outer(seq.cast(trt.float32), inv_freq)
+
+            emb = concat([freqs, freqs], dim=1)
+            # emb = rearrange(emb, "n d -> 1 n 1 d")
+            emb = emb.view(concat([1, input_len * 2, 1, self.per_head_dim]))
+            emb = expand(emb, concat([batch_size, input_len * 2, 1, self.per_head_dim]))
+            # cos, sin = emb.cos(), emb.sin()
+            cos_res = cos(emb)
+            sin_res = sin(emb)
+            # position_embedding_cos = cos[:, :input_len]
+            # position_embedding_sin = sin[:, :input_len]
+            position_embedding_cos = slice(
+                input=cos_res,
+                starts=concat([0, 0, 0, 0]),
+                sizes=concat([batch_size, input_len, 1, self.per_head_dim]),
+            )
+            position_embedding_sin = slice(
+                input=sin_res,
+                starts=concat([0, 0, 0, 0]),
+                sizes=concat([batch_size, input_len, 1, self.per_head_dim]),
+            )
+
+        # expand_dims(position_embedding_cos, [batch_size, 1, 1, 1])
+        rotary_pos_emb = [
+            (position_embedding_cos, position_embedding_sin), 
+            (position_embedding_cos, position_embedding_sin), 
+        ] 
+        return rotary_pos_emb
+
+
 class QWenModel(Module):
 
     def __init__(self,
@@ -613,16 +694,11 @@ class QWenModel(Module):
         super().__init__()
         self.vocab_embedding = Embedding(vocab_size, hidden_size, dtype=dtype)
         # copy from chatglm
-        self.head_size = hidden_size // num_heads
-        self.position_embedding_cos = Embedding(
-            max_position_embeddings,
-            self.head_size,
-            dtype=trt.float32
-        )
-        self.position_embedding_sin = Embedding(
-            max_position_embeddings,
-            self.head_size,
-            dtype=trt.float32
+        per_head_dim = hidden_size // num_heads
+        self.rope = RotaryEmbedding(
+            per_head_dim=per_head_dim, 
+            max_position_dim=max_position_embeddings,
+            seq_length=seq_length,
         )
 
         self.layers = ModuleList([
@@ -661,18 +737,7 @@ class QWenModel(Module):
         hidden_states = self.vocab_embedding(input_ids.data)
 
         # copy from chatglm6b
-        batch_size = shape(input_ids.data, 0)
-        input_len = shape(input_ids.data, 1)
-        position_embedding_cos = self.position_embedding_cos(position_ids)
-        position_embedding_sin = self.position_embedding_sin(position_ids)
-        position_embedding_cos = position_embedding_cos.view(
-            concat([batch_size, input_len, 1, self.head_size]))
-        position_embedding_sin = position_embedding_sin.view(
-            concat([batch_size, input_len, 1, self.head_size]))
-        rotary_pos_emb = [
-            (position_embedding_cos, position_embedding_sin), 
-            (position_embedding_cos, position_embedding_sin), 
-        ]
+        rotary_pos_emb = self.rope(input_ids,  position_ids) 
 
         if past_key_value is None:
             past_key_value = tuple([None] * len(self.layers))
