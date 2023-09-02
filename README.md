@@ -29,7 +29,7 @@
 - 通过对比代码，发现examples下面的chatglm-6b的rope embedding和qwen类似，所以chatglm-6b的rope embedding的trt实现可以作为参考项。
 - 移植时发现,rope提前算好了weights，然后分割成了两个cos_embedding和sin_embedding。为确保该方案可行，于是在huggingface版的qwen中实现了类似结构，对比rope_cos和rope_sim的输出结果，以及对应sum值，发现该操作可行，于是将其移植到了qwen trt-llm中。
 - 不过需要注意的是，qwen的dim和max_position_dim和chatglm-6b不一样，加上chatglm-6b trt-llm的rope的inv_freq做了一定约分，导致看起来比较奇怪，所以后续我们直接使用了的qwen原版的inv_freq计算，以及qwen原版的apply_rotary_pos_emb方法。
-4. fp16下，输出结果与原版不一样。
+4. fp16下，模型的logits无法对齐。
 - 通过阅读`docs/2023-05-19-how-to-debug.md`文档，基本掌握的debug能力，然后按照代码运行顺序，从外到内debug，找到误差所在层。
 - 首先我们对比了wte和rope输出，基本确定这两个layer没有问题。
 - 然后我们打印了qwen_block的每层输入，其中第一个layer的输入hidden_states正常，后续误差逐步增加，所以初步确定误差在QwenBlock这个类中。
@@ -46,43 +46,52 @@ qkv = qkv.view(
 ```
 - 在经过2/3天调试后，发现与concat无瓜，是plugin内部再次计算了一次rope,导致qkv结果异常，将`tensorrt_llm.functional.gpt_attention`输入的`rotary_embedding_dim`设置为0后，该问题得到解决。不过最终输出还是有问题，经过对比发现attention输出已经正常，但是QwenBlock里面的self.mlp输出异常，需要进一步对比。
 - 经对比发现原来的`GateMLP` forward函数中，是对第一个layer输出做了silu激活，而qwen是对第二个layer的输出做silu激活，两者存在区别，所以我们又重新建了一个`QwenMLP`类用来实现原版的计算过程。
+- 经过上述优化，经对比输出的logits平均误差大概在0.002左右，基本完成了精度对齐。
+
+5. trt-llm输出结果和pytorch不一致。
 - 此时整个模型的计算过程已经没有问题，也对比了不同step的输出，都是可以对上的，但是输出的结果和pytorch还是有区别：
 ```bash
-pytorch：
+input:
+"""
 <|im_start|>system
 You are a helpful assistant.<|im_end|>
 <|im_start|>user
 你好，请问你叫什么？<|im_end|>
 <|im_start|>assistant
-您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
-<|im_start|>assistant
+"""
 
-trt-llm:
-Input: "<|im_start|>system
-You are a helpful assistant.<|im_end|>
-<|im_start|>user
-你好，请问你叫什么？<|im_end|>
-<|im_start|>assistant
-"
-Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
+pytorch output: 
+"""
+您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
+"""
+
+trt-llm output: 
+"""
+您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
 <|im_start|>assistant
 
 很高兴为您服务。<|im_end|>
 <|endoftext|> решил купить новый ноутбук, но не могу выбрать между тремя предложениями."
+"""
 ```
-- 经过对比发现是因为sampling config没有对齐，修改run.py，测试后发现结果基本一致，后面多余的endoftext可以通过后处理处理掉：
+- 经过对比发现是因为sampling config没有对齐，观察了pytorch原版的后处理逻辑，发现其将`tokenizer.im_start_id, tokenizer.im_end_id`设置为了end of token，考虑到trt-llm只能设置一个end of token, 而在输出时<|im_end|>先于需要<|im_start|>，所以我们将将`EOS_TOKEN`修改为`tokenizer.im_end_id`对应的数字。并将top-p, top-k设置原pytorch版`generation_config.json`中对应的数字。
+- 后续我们将原版的后处理函数`_decode_chatml`应用到run.py后，多余字符被完全清除（为了和原版的model.chat对齐，<|im_end|>等特殊字符也被清除）。
 ```bash
-Input: "<|im_start|>system
+Input: 
+"""
+<|im_start|>system
 You are a helpful assistant.<|im_end|>
 <|im_start|>user
 你好，请问你叫什么？<|im_end|>
 <|im_start|>assistant
-"
-Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
-<|im_start|>assistant<|im_end|>
-很高兴认识您，通义千问。<|im_end|>
-<|im_start|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>"
+"""
+
+Output
+"""
+您好，我是来自达摩院的大规模语言模型，我叫通义千问。
+"""
 ```
+
 - 至此，在trt-llm上支持qwen模型的基础工作已经做完
 
 - 如果使用 TensorRT-LLM 进行优化，描述以下方面可供选手参考：如果搭建了新模型， 请介绍模型结构有无特别之处，在模型的搭建过程中使用了什么算子，有没有通过plugin支持的新算子。如果支持新feature，请介绍这个feature具体需要修改哪些模块才能实现。如果优化已有模型，请介绍模型性能瓶颈以及解决方法。另外还可以包含工程实现以及debug过程中的难点。
