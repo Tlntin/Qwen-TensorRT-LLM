@@ -122,26 +122,21 @@ Output
 1. 精度
 - 报告与原始模型进行精度对比测试的结果，验证精度达标（abs(rouge_diff) < 1）。
 - 注：`datasets.load_metric("rouge")`已提示废弃，将由`evaluate.load("rouge")`代替
-- 测试平台：NVIDIA A10
+- 测试平台：NVIDIA A10 | TensorRT 9.0.0.1
 - 测试结果（该结果由`tensorrt_llm_july-release-v1/examples/qwen/summarize.py`生成）：
 ```bash
-HuggingFace (dtype: bf16)
-rouge1 : 26.7871598777636
-rouge2 : 8.438971310718339
-rougeL : 18.661369428342624
-rougeLsum : 20.635389923688926
+Hugging Face (dtype: bf16 | total latency: 134.0561056137085 sec)
+rouge1 : 26.98400945199415
+rouge2 : 8.362191635355105
+rougeL : 18.64579951191403
+rougeLsum : 20.76437573207235
 
-TensorRT-LLM (dtype: fp16)
-rouge1 : 26.92339755124435
-rouge2 : 8.440512614643675
-rougeL : 18.5574815305354
-rougeLsum : 20.5188715262718
+TensorRT-LLM (dtype: fp16 | total latency: 68.62463283538818 sec)
+rouge1 : 26.98400945199415
+rouge2 : 8.362191635355105
+rougeL : 18.64579951191403
+rougeLsum : 20.76437573207235
 
-HuggingFace VS TensorRT-LLM (abs rouge diff)
-rouge1 : 0.13623767348074978
-rouge2 : 0.001541303925336024
-rougeL : 0.10388789780722263
-rougeLsum : 0.11651839741712777
 ```
 
 2. 性能（待写）
