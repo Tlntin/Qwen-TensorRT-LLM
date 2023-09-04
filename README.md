@@ -92,6 +92,10 @@ Output
 """
 ```
 - 此时输出结果和pytorch完全一致。
+6. 运行`summarize.py`无输出。
+- 由于我们选择qwen-chat-7b是一个chat模型，无法直接输入一段文本做总结，需要写一个专门的prompt（提示语）来让模型做这个总结的工作。
+- 于是我们将原版的`make_context`移植过来，并设置专门的`system_prompt`让模型根据用户输入直接做总结，这样将原始输入加工后再输出结果，使得模型有了总结能力。
+
 
 - 至此，在trt-llm上支持qwen模型的基础工作已经做完
 
@@ -110,15 +114,36 @@ Output
 ### 优化效果
 
 这一部分介绍你的工作在云主机上的运行效果。如果是优化模型，需要分两部分说明：
+1. 精度
+- 报告与原始模型进行精度对比测试的结果，验证精度达标（abs(rouge_diff) < 1）。
+- 注：`datasets.load_metric("rouge")`已提示废弃，将由`evaluate.load("rouge")`代替
+- 测试平台：NVIDIA A10
+- 测试结果（该结果由`tensorrt_llm_july-release-v1/examples/qwen/summarize.py`生成）：
+```bash
+HuggingFace (dtype: bf16)
+rouge1 : 26.7871598777636
+rouge2 : 8.438971310718339
+rougeL : 18.661369428342624
+rougeLsum : 20.635389923688926
 
-- 精度：报告与原始模型进行精度对比测试的结果，验证精度达标。
-  - 如果选用TensorRT-LLM，请跑summarize任务并使用 [Rouge](https://huggingface.co/spaces/evaluate-metric/rouge) 来对比模型优化前后的精度差距。如果精度良好，原始模型与优化模型的Rouge score的差异一般在1以内。例子见 TensorRT-LLM docker 中 /root/workspace/tensorrt_llm_july-release-v1/examples/gpt/summarize.py
-  - 如果选用TensorRT，这里的精度测试指的是针对“原始模型”和“TensorRT优化模型”分别输出的数据（tensor）进行数值比较。请给出绝对误差和相对误差的统计结果（至少包括最大值、平均值与中位数）。
-    - 使用训练好的权重和有意义的输入数据更有说服力。如果选手使用了随机权重和输入数据，请在这里注明。
-    - 在精度损失较大的情况下，鼓励选手用训练好的权重和测试数据集对模型优化前与优化后的准确度指标做全面比较，以增强说服力。
-- 性能：例如可以用图表展示不同batch size或sequence length下性能加速效果（考虑到可能模型可能比较大，可以只给batch size为1的数据）
-  - 一般用原始模型作为baseline
-  - 一般提供模型推理时间的加速比即可；若能提供压力测试下的吞吐提升则更好。
+TensorRT-LLM (dtype: fp16)
+rouge1 : 26.92339755124435
+rouge2 : 8.440512614643675
+rougeL : 18.5574815305354
+rougeLsum : 20.5188715262718
+
+HuggingFace VS TensorRT-LLM (abs rouge diff)
+rouge1 : 0.13623767348074978
+rouge2 : 0.001541303925336024
+rougeL : 0.10388789780722263
+rougeLsum : 0.11651839741712777
+```
+
+2. 性能（待写）
+- 例如可以用图表展示不同batch size或sequence length下性能加速效果（考虑到可能模型可能比较大，可以只给batch size为1的数据）
+- 一般用原始模型作为baseline
+- 一般提供模型推理时间的加速比即可；若能提供压力测试下的吞吐提升则更好。
+
 
 请注意：
 
