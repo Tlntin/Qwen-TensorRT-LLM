@@ -421,8 +421,8 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--test_hf',
-        # action='store_true',
-        default=True,
+        action='store_true',
+        # default=True,
     )
     parser.add_argument(
         '--test_trt_llm',
