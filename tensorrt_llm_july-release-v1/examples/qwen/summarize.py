@@ -105,6 +105,11 @@ def main(args):
             '3.0.0',
         )
 
+    gen_config_path = os.path.join(hf_model_location, 'generation_config.json')
+    with open(gen_config_path, 'r') as f:
+        gen_config = json.load(f)
+    chat_format = gen_config['chat_format']
+
     max_batch_size = args.batch_size
 
     # runtime parameters
@@ -228,6 +233,14 @@ def main(args):
             output_beams_list,
             output_ids[:, :, max_length: max_length + end_step].tolist()
         )
+    def get_stop_words_ids(chat_format, tokenizer):
+        if chat_format == "raw":
+            stop_words_ids = [tokenizer.encode("Human:"), [tokenizer.eod_id]]
+        elif chat_format == "chatml":
+            stop_words_ids = [[tokenizer.im_end_id], [tokenizer.im_start_id]]
+        else:
+            raise NotImplementedError(f"Unknown chat format {chat_format!r}")
+        return stop_words_ids
 
     def summarize_hf(datapoint):
         batch_size = len(datapoint['article'])
@@ -251,7 +264,8 @@ def main(args):
                     tokenizer=tokenizer,
                     query=line[i],
                     history=[],
-                    system=system_prompt
+                    system=system_prompt,
+                    chat_format=chat_format
                 )
                 new_line_list.append(raw_text)
             line_encoded = tokenizer(
@@ -269,7 +283,8 @@ def main(args):
                 tokenizer=tokenizer,
                 query=line[0],
                 history=[],
-                system=system_prompt
+                system=system_prompt,
+                chat_format=chat_format
             )
             line_encoded = torch.from_numpy(
                 np.array(input_id_list, dtype=np.int32)
@@ -278,14 +293,20 @@ def main(args):
         line_encoded = line_encoded[:, -test_token_num:]
         line_encoded = line_encoded.cuda()
 
+        stop_words_ids=[]
+        stop_words_ids.extend(get_stop_words_ids(
+            chat_format, tokenizer
+        ))
+
         with torch.no_grad():
             output = model.generate(
                 line_encoded,
                 max_new_tokens=len(line_encoded[0]) + output_len,
                 top_k=top_k,
                 temperature=temperature,
-                eos_token_id=tokenizer.im_end_id,
-                pad_token_id=tokenizer.im_end_id,
+                # eos_token_id=tokenizer.im_end_id,
+                # pad_token_id=tokenizer.im_end_id,
+                stop_words_ids=stop_words_ids,
                 num_beams=num_beams,
                 num_return_sequences=num_beams,
                 early_stopping=True
