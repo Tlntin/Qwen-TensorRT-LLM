@@ -431,6 +431,15 @@ def generate(
     config_path = os.path.join(engine_dir, 'config.json')
     with open(config_path, 'r') as f:
         config = json.load(f)
+    gen_config_path = os.path.join(tokenizer_dir, 'generation_config.json')
+    with open(gen_config_path, 'r') as f:
+        gen_config = json.load(f)
+    top_k = gen_config['top_k']
+    top_p = gen_config['top_p']
+    chat_format = gen_config['chat_format']
+    end_id = gen_config['eos_token_id']
+    pad_id = gen_config['pad_token_id']
+
     use_gpt_attention_plugin = config['plugin_config']['gpt_attention_plugin']
     remove_input_padding = config['plugin_config']['remove_input_padding']
     dtype = config['builder_config']['precision']
@@ -456,11 +465,11 @@ def generate(
                                gpt_attention_plugin=use_gpt_attention_plugin,
                                multi_query_mode=multi_query_mode,
                                remove_input_padding=remove_input_padding)
-    sampling_config = SamplingConfig(end_id=EOS_TOKEN,
-                                     pad_id=PAD_TOKEN,
+    sampling_config = SamplingConfig(end_id=end_id,
+                                     pad_id=pad_id,
                                      num_beams=num_beams,
-                                     top_k = 0,
-                                     top_p = 0.5,)
+                                     top_k = top_k,
+                                     top_p = top_p,)
 
     engine_name = get_engine_name('qwen', dtype, world_size, runtime_rank)
     serialize_path = os.path.join(engine_dir, engine_name)
