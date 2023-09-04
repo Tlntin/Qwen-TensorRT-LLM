@@ -22,14 +22,16 @@
 
 1. huggingface转llm-trt比较繁琐。
 - 目前只能肉眼观察已有成功案例，例如参考chatglm/llama, 通过debug huggingface版和观察trt-llm版，了解整体思路。
-- 然后观察qwen和chatglm/llama的差异，拿这两个案例做魔改。整体代码魔改自llama, attention/rope参考了chatglm-6b。
-2. 首次运行报显存分配错误。
-- 在其附近插入可用显存和需要分配的显存代码，发现是显存不够, 将max_batch_size从默认的8改成2后解决。
-3. 没有现成的attention实现。
+- 然后观察qwen和chatglm/llama的差异，拿这两个案例做魔改。
 - 通过对比代码，发现examples下面的chatglm-6b的rope embedding和qwen类似，所以chatglm-6b的rope embedding的trt实现可以作为参考项。
 - 移植时发现,rope提前算好了weights，然后分割成了两个cos_embedding和sin_embedding。为确保该方案可行，于是在huggingface版的qwen中实现了类似结构，对比rope_cos和rope_sim的输出结果，以及对应sum值，发现该操作可行，于是将其移植到了qwen trt-llm中。
 - 不过需要注意的是，qwen的dim和max_position_dim和chatglm-6b不一样，加上chatglm-6b trt-llm的rope的inv_freq做了一定约分，导致看起来比较奇怪，所以后续我们直接使用了的qwen原版的inv_freq计算，以及qwen原版的apply_rotary_pos_emb方法。
-4. fp16下，模型的logits无法对齐。
+- 整体代码魔改自llama, attention/rope参考了chatglm-6b。
+
+2. 首次运行报显存分配错误。
+- 在其附近插入可用显存和需要分配的显存代码，发现是显存不够, 将max_batch_size从默认的8改成2后解决。
+
+3. fp16下，模型的logits无法对齐。
 - 通过阅读`docs/2023-05-19-how-to-debug.md`文档，基本掌握的debug能力，然后按照代码运行顺序，从外到内debug，找到误差所在层。
 - 首先我们对比了wte和rope输出，基本确定这两个layer没有问题。
 - 然后我们打印了qwen_block的每层输入，其中第一个layer的输入hidden_states正常，后续误差逐步增加，所以初步确定误差在QwenBlock这个类中。
@@ -48,7 +50,7 @@ qkv = qkv.view(
 - 经对比发现原来的`GateMLP` forward函数中，是对第一个layer输出做了silu激活，而qwen是对第二个layer的输出做silu激活，两者存在区别，所以我们又重新建了一个`QwenMLP`类用来实现原版的计算过程。
 - 经过上述优化，经对比输出的logits平均误差大概在0.002左右，基本完成了精度对齐。
 
-5. trt-llm输出结果和pytorch不一致。
+4. trt-llm输出结果和pytorch不一致。
 - 此时整个模型的计算过程已经没有问题，也对比了不同step的输出，都是可以对上的，但是输出的结果和pytorch还是有区别：
 ```bash
 input:
@@ -92,7 +94,7 @@ Output
 """
 ```
 - 此时输出结果和pytorch完全一致。
-6. 运行`summarize.py`无输出。
+5. 运行`summarize.py`无输出。
 - 由于我们选择qwen-chat-7b是一个chat模型，无法直接输入一段文本做总结，需要写一个专门的prompt（提示语）来让模型做这个总结的工作。
 - 于是我们将原版的`make_context`移植过来，并设置专门的`system_prompt`让模型根据用户输入直接做总结，这样将原始输入加工后再输出结果，使得模型有了总结能力。
 
@@ -152,28 +154,9 @@ rougeLsum : 0.11651839741712777
 
 ### Bug报告（可选）
 
-提交bug是对TensorRT/TensorRT-LLM的另一种贡献。发现的TensorRT/TensorRT-LLM或cookbook、或文档和教程相关bug，请提交到[github issues](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues)，并请在这里给出链接。
+- 提交bug是对TensorRT/TensorRT-LLM的另一种贡献。发现的TensorRT/TensorRT-LLM或cookbook、或文档和教程相关bug，请提交到[github issues](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues)，并请在这里给出链接。
 
-提交的针对TensorRT的bug链接：https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/86
-
-对于每个bug，请标记上hackathon2023标签，并写好正文：
-
-- 对于cookbook或文档和教程相关bug，说清楚问题即可，不必很详细。
-- 对于TensorRT bug，首先确认在云主机上使用NGC docker + TensorRT 9.0.0.1可复现。
-- 然后填写如下模板，并请导师复核确认（前面“评分标准”已经提到，确认有效可得附加分）：
-  - Environment
-    - TensorRT 9.0.0.1
-    - Versions of CUDA, CUBLAS, CuDNN used
-    - Container used
-    - NVIDIA driver version
-  - Reproduction Steps
-    - Provide detailed reproduction steps for the issue here, including any commands run on the command line.
-  - Expected Behavior
-    - Provide a brief summary of the expected behavior of the software. Provide output files or examples if possible.
-  - Actual Behavior
-    - Describe the actual behavior of the software and how it deviates from the expected behavior. Provide output files or examples if possible.
-  - Additional Notes
-    - Provide any additional context here you think might be useful for the TensorRT team to help debug this issue (such as experiments done, potential things to investigate).
+ - 目前已提交的针对TensorRT的bug链接（已由导师复核确定）：https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/86
 
 ### 送分题答案 | [操作步骤](SEND_POINT_README.md)
 1. 第一题。
