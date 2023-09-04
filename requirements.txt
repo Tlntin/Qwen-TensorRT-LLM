@@ -5,3 +5,5 @@ datasets
 nltk
 rouge_score
 tiktoken
+transformers_stream_generator
+evaluate
