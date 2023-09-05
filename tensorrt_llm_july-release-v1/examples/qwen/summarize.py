@@ -94,18 +94,10 @@ def main(args):
         f'Load tokenizer takes: {profiler.elapsed_time_in_sec("load tokenizer")} sec'
     )
     tokenizer.pad_token = tokenizer.eos_token
-    # load dataset from local or huggingface
-    if os.path.exists(args.dataset_path):
-        dataset_cnn = load_dataset(
-            args.dataset_path,
-            '3.0.0'
-        )
-    else:
-        dataset_cnn = load_dataset(
-            "ccdv/cnn_dailymail",
-            '3.0.0',
-        )
-
+    dataset_cnn = load_dataset(
+        "ccdv/cnn_dailymail",
+        '3.0.0'
+    )
     gen_config_path = os.path.join(hf_model_location, 'generation_config.json')
     with open(gen_config_path, 'r') as f:
         gen_config = json.load(f)
@@ -458,7 +450,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--dataset_path',
         type=str,
-        default=os.path.join(now_dir, "ccdv___cnn_dailymail")
+        default=""
     )
     parser.add_argument('--log_level', type=str, default='info')
     parser.add_argument(

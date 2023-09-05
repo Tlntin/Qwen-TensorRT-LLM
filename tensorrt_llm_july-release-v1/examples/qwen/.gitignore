@@ -5,8 +5,7 @@ c-model
 ccdv
 trt_engines
 hg_test.py
-evaluate_rouge.zip
+rouge.tar.xz
 rouge
 ccdv___cnn_dailymail.tar.xz
 ccdv___cnn_dailymail
-
