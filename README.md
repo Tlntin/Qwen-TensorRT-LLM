@@ -105,6 +105,7 @@ Output
 1. 完整支持原版的logn和ntk（这俩参数是用于增强模型长输出效果，这里的长输出指的是大于2048小于8192）。
 2. 支持`RotaryEmbedding`，并且在input_len > 2048时开启ntk相关计算。
 3. 支持`gpt_attention_plugin`与`gemm_plugin`两个plugin。
+4. 同时支持qwen base和chat模型
 
 ### 开发与优化过程
 
