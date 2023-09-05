@@ -143,6 +143,12 @@ TensorRT-LLM (dtype: int8 (weight only) | total latency: 42.23632740974426 sec)
   rougeL : 18.630452012787206
   rougeLsum : 20.853083825182235
 
+TensorRT-LLM (dtype: int4 (weight only) | total latency: 30.873292207717896 sec)
+  rouge1 : 27.135561784680327
+  rouge2 : 8.197235527997046
+  rougeL : 18.354150794754233
+  rougeLsum : 22.227719502315363
+
 ```
 
 2. 性能（待写）
