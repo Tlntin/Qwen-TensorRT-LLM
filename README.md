@@ -126,16 +126,22 @@ Output
 - 测试结果（该结果由`tensorrt_llm_july-release-v1/examples/qwen/summarize.py`生成）：
 ```bash
 Hugging Face (dtype: bf16 | total latency: 134.0561056137085 sec)
-rouge1 : 26.98400945199415
-rouge2 : 8.362191635355105
-rougeL : 18.64579951191403
-rougeLsum : 20.76437573207235
+  rouge1 : 26.98400945199415
+  rouge2 : 8.362191635355105
+  rougeL : 18.64579951191403
+  rougeLsum : 20.76437573207235
 
 TensorRT-LLM (dtype: fp16 | total latency: 68.62463283538818 sec)
-rouge1 : 26.98400945199415
-rouge2 : 8.362191635355105
-rougeL : 18.64579951191403
-rougeLsum : 20.76437573207235
+  rouge1 : 26.98400945199415
+  rouge2 : 8.362191635355105
+  rougeL : 18.64579951191403
+  rougeLsum : 20.76437573207235
+
+TensorRT-LLM (dtype: int8 (weight only) | total latency: 42.23632740974426 sec)
+  rouge1 : 26.98263929036846
+  rouge2 : 8.327280257593927
+  rougeL : 18.630452012787206
+  rougeLsum : 20.853083825182235
 
 ```
 

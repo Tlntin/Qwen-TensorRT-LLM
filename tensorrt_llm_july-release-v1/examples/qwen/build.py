@@ -1,22 +1,16 @@
 import argparse
-import json
 import os
 import time
-from pathlib import Path
 
 import tensorrt as trt
 import torch
 import torch.multiprocessing as mp
-# from transformers import LlamaConfig, LlamaForCausalLM
+
 # for release runing
-# from transformers import (
-#     AutoConfig as QWenConfig,
-#     AutoModelForCausalLM as QWenForCausalLM_HF,
-#     AutoTokenizer as QWenTokenizer,
-# )
+from transformers import AutoConfig, AutoModelForCausalLM
 # for debug runing
-from qwen_7b_chat.configuration_qwen import QWenConfig
-from qwen_7b_chat.modeling_qwen import QWenLMHeadModel as QWenForCausalLM_HF
+# from qwen_7b_chat.configuration_qwen import QWenConfig as AutoConfig
+# from qwen_7b_chat.modeling_qwen import QWenLMHeadModel as AutoModelForCausalLM
 
 from model import QWenForCausalLM as QWenForCausalLM_TRT
 
@@ -206,7 +200,10 @@ def parse_arguments():
     # force use the plugin for now with the correct data type.
     args.use_gpt_attention_plugin = args.dtype
     if args.model_dir is not None:
-        hf_config = QWenConfig.from_pretrained(args.model_dir)
+        hf_config = AutoConfig.from_pretrained(
+            args.model_dir,
+            trust_remote_code=True,
+        )
         args.inter_size = hf_config.intermediate_size  # override the inter_size for QWen
         args.n_embd = hf_config.hidden_size
         args.n_head = hf_config.num_attention_heads
@@ -266,13 +263,14 @@ def build_rank_engine(builder: Builder,
     if args.model_dir is not None:
         logger.info(f'Loading HF QWen ... from {args.model_dir}')
         tik = time.time()
-        hf_qwen = QWenForCausalLM_HF.from_pretrained(
+        hf_qwen = AutoModelForCausalLM.from_pretrained(
             args.model_dir,
             device_map={
                 "transformer": "cpu",
                 "lm_head": "cpu"
             },  # Load to CPU memory
-            torch_dtype="auto"
+            torch_dtype="auto",
+            trust_remote_code=True,
         )
         tok = time.time()
         t = time.strftime('%H:%M:%S', time.gmtime(tok - tik))
