@@ -106,6 +106,7 @@ Output
 2. 支持`RotaryEmbedding`，并且在input_len > 2048时开启ntk相关计算。
 3. 支持`gpt_attention_plugin`与`gemm_plugin`两个plugin。
 4. 同时支持qwen base和chat模型
+5. 支持fp16 / int8 (weight only) / int4 (weight only), 理论上最低只需要8G消费级显卡就能运行。
 
 ### 开发与优化过程
 
@@ -144,11 +145,11 @@ TensorRT-LLM (dtype: int8 (weight only) | total latency: 42.23632740974426 sec)
   rougeL : 18.630452012787206
   rougeLsum : 20.853083825182235
 
-TensorRT-LLM (dtype: int4 (weight only) | total latency: 30.873292207717896 sec)
-  rouge1 : 27.135561784680327
-  rouge2 : 8.197235527997046
-  rougeL : 18.354150794754233
-  rougeLsum : 22.227719502315363
+TensorRT-LLM (dtype: int4 (weight only) | total latency: 31.1434268951416 sec)
+rouge1 : 26.65239213023417
+rouge2 : 8.148988533684609
+rougeL : 18.180307238649856
+rougeLsum : 21.995243873709555
 
 ```
 
