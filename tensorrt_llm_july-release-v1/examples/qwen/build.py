@@ -178,7 +178,7 @@ def parse_arguments():
 
     parser.add_argument(
         '--use_weight_only',
-        default=False,
+        default=True,
         action="store_true",
         help='Quantize weights for the various GEMMs to INT4/INT8.'
         'See --weight_only_precision to set the precision')
@@ -263,7 +263,7 @@ def build_rank_engine(builder: Builder,
             tensorrt_llm_qwen,
             QuantMode.use_weight_only(use_int4_weights=True)
         )
-    elif args.model_dir is not None:
+    if args.model_dir is not None:
         logger.info(f'Loading HF QWen ... from {args.model_dir}')
         tik = time.time()
         hf_qwen = QWenForCausalLM_HF.from_pretrained(

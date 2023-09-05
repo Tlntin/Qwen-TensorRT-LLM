@@ -48,7 +48,8 @@ def TRT_QWen(args, config):
         hidden_size=hidden_size,
         gpt_attention_plugin=use_gpt_attention_plugin,
         multi_query_mode=multi_query_mode,
-        remove_input_padding=remove_input_padding)
+        remove_input_padding=remove_input_padding
+    )
 
     runtime_rank = tensorrt_llm.mpi_rank()
     runtime_mapping = tensorrt_llm.Mapping(world_size, runtime_rank)
@@ -447,7 +448,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--test_trt_llm',
-        action='store_true'
+        action='store_true',
         # default=True,
     )
     parser.add_argument('--data_type',

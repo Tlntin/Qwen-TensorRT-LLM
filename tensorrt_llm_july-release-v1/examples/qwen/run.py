@@ -6,7 +6,10 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from qwen_7b_chat.tokenization_qwen import QWenTokenizer
+# for debug
+# from qwen_7b_chat.tokenization_qwen import QWenTokenizer as AutoTokenizer
+# for realease
+from transformers import AutoTokenizer
 
 import tensorrt_llm
 from typing import List
@@ -18,12 +21,7 @@ from tensorrt_llm.runtime.generation import _tile_beam_width
 from build import get_engine_name  # isort:skip
 
 
-EOS_TOKEN = 151645 # copy from tokenizer.im_end_id
-PAD_TOKEN = 151645 # reuse tokenizer.im_end_id
-
-
 now_dir = os.path.dirname(os.path.abspath(__file__))
-
 
 
 # copy from tensorrt_llm/runtime/generation.py to debug
@@ -427,7 +425,11 @@ def generate(
     num_beams: int = 1,
 ):
     tensorrt_llm.logger.set_level(log_level)
-
+    tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_dir,
+        legacy=False,
+        trust_remote_code=True,
+    )
     config_path = os.path.join(engine_dir, 'config.json')
     with open(config_path, 'r') as f:
         config = json.load(f)
@@ -437,8 +439,13 @@ def generate(
     top_k = gen_config['top_k']
     top_p = gen_config['top_p']
     chat_format = gen_config['chat_format']
-    end_id = gen_config['eos_token_id']
-    pad_id = gen_config['pad_token_id']
+    if chat_format == "raw":
+        eos_token_id = gen_config['eos_token_id']
+        pad_token_id = gen_config['pad_token_id']
+    elif chat_format == "chatml":
+        pad_token_id = eos_token_id = tokenizer.im_end_id
+    else:
+        raise Exception("unkown chat format ", chat_format)
 
     use_gpt_attention_plugin = config['plugin_config']['gpt_attention_plugin']
     remove_input_padding = config['plugin_config']['remove_input_padding']
@@ -456,8 +463,6 @@ def generate(
     runtime_mapping = tensorrt_llm.Mapping(world_size, runtime_rank)
     torch.cuda.set_device(runtime_rank % runtime_mapping.gpus_per_node)
 
-    tokenizer = QWenTokenizer.from_pretrained(tokenizer_dir, legacy=False)
-
     model_config = ModelConfig(num_heads=num_heads,
                                hidden_size=hidden_size,
                                vocab_size=vocab_size,
@@ -465,8 +470,8 @@ def generate(
                                gpt_attention_plugin=use_gpt_attention_plugin,
                                multi_query_mode=multi_query_mode,
                                remove_input_padding=remove_input_padding)
-    sampling_config = SamplingConfig(end_id=end_id,
-                                     pad_id=pad_id,
+    sampling_config = SamplingConfig(end_id=eos_token_id,
+                                     pad_id=pad_token_id,
                                      num_beams=num_beams,
                                      top_k = top_k,
                                      top_p = top_p,)
@@ -495,7 +500,7 @@ def generate(
         elif input_file.endswith('.npy'):
             inputs = np.load(input_file)
             for row in inputs:
-                row = row[row != EOS_TOKEN]
+                row = row[row != eos_token_id]
                 input_tokens.append(row)
         else:
             print('Input file format not supported.')
@@ -514,7 +519,7 @@ def generate(
         else:
             input_ids = torch.nested.to_padded_tensor(
                 torch.nested.nested_tensor(input_tokens, dtype=torch.int32),
-                EOS_TOKEN).cuda()
+                eos_token_id).cuda()
 
     max_input_length = torch.max(input_lengths).item()
     decoder.setup(input_lengths.size(0), max_input_length, max_output_len)

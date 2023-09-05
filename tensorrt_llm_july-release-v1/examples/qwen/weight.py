@@ -176,7 +176,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                     dst.value = processed_torch_weights.view(
                         dtype=torch.float32).numpy()
                     scales = tensorrt_llm_qwen.layers[
-                        idx].mlp.fc.per_channel_scale
+                        idx].mlp.w1.per_channel_scale
                     scales.value = torch_weight_scales.numpy()
                 else:
                     dst.value = np.ascontiguousarray(split_v)
@@ -191,7 +191,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                     dst.value = processed_torch_weights.view(
                         dtype=torch.float32).numpy()
                     scales = tensorrt_llm_qwen.layers[
-                        idx].mlp.gate.per_channel_scale
+                        idx].mlp.w2.per_channel_scale
                     scales.value = torch_weight_scales.numpy()
                 else:
                     dst.value = np.ascontiguousarray(split_v)
@@ -206,7 +206,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                     dst.value = processed_torch_weights.view(
                         dtype=torch.float32).numpy()
                     scales = tensorrt_llm_qwen.layers[
-                        idx].mlp.proj.per_channel_scale
+                        idx].mlp.c_proj.per_channel_scale
                     scales.value = torch_weight_scales.numpy()
                 else:
                     dst.value = np.ascontiguousarray(split_v)
