@@ -64,6 +64,15 @@ python build.py --model_dir ./qwen_7b_chat \
                 --use_weight_only \
                 --output_dir ./trt_engines/weight_only/1-gpu/
 
+# Build the QWen 7B model using a single GPU and apply INT4 weight-only quantization.
+python build.py --model_dir ./qwen_7b_chat \
+                --dtype float16 \
+                --use_gpt_attention_plugin float16 \
+                --use_gemm_plugin float16 \
+                --use_weight_only \
+                --weight_only_precision int4
+                --output_dir ./trt_engines/weight_only/1-gpu/
+
 # Build QWen 7B using 2-way tensor parallelism.
 python build.py --model_dir ./qwen_7b_chat \
                 --dtype float16 \
