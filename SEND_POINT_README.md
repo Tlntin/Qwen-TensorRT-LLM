@@ -13,6 +13,8 @@ pip install rouge_score
 ```
 2. 从huggingface下载模型到服务器，然后将其移动到examples/gpt目录下，并且重命名为gpt2
 ```bash
+git lfs install
+git clone https://huggingface.co/gpt2-medium
 mv gpt2-medium tensorrt_llm_july-release-v1/examples/gpt/gpt2
 ```
 
