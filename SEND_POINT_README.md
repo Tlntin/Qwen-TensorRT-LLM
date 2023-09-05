@@ -1,29 +1,23 @@
 ### 送分题操作步骤
-##### 准备工作(可选，针对网络不好的用户可以这样干)
-1. 准备一个文件夹models,将模型和数据都放里面
-2. 从huggingface下载模型到服务器，然后将其复制到examples/gpt目录下，并且重命名为gpt2
-```bash
-cp -r models/gpt2-medium tensorrt_llm_july-release-v1/examples/gpt/gpt2
-```
-
-3. 从huggingface下载数据集并缓存到本地，然后将缓存复制到examples/gpt目录下。
-```bash
-python3 -c "from datasets import load_dataset;dataset = load_dataset('ccdv/cnn_dailymail', '3.0.0',cache_dir='models/cnn_dailymail')"
-mkdir tensorrt_llm_july-release-v1/examples/gpt/ccdv
-cp -r models/cnn_dailymail tensorrt_llm_july-release-v1/examples/gpt/ccdv
-```
-
-4. 进入examples/gpt目录
+##### 准备工作
+1. 进入examples/gpt目录
 ```bash
 cd tensorrt_llm_july-release-v1/examples/gpt
 ```
 
-5. 安装3个基本py模块，否则会报错。
+2. 安装3个基本py模块，否则会报错。
 ```bash
 pip install datasets
 pip install nltk
 pip install rouge_score
 ```
+2. 从huggingface下载模型到服务器，然后将其移动到examples/gpt目录下，并且重命名为gpt2
+```bash
+mv gpt2-medium tensorrt_llm_july-release-v1/examples/gpt/gpt2
+```
+
+3. 针对`网络不好`的用户，可以通过百度网盘下载对应数据集，然后根据里面的使用说明将其解压到huggingface的cache路径。
+- 百度网盘链接:https://pan.baidu.com/s/1aJrE3c6aMi7Qsc5zXk_amw?pwd=apfd 提取码:apfd
 
 
 ##### 送分题1执行步骤
@@ -61,7 +55,7 @@ python3 build.py --model_dir=./c-model/gpt2/fp16/1-gpu \
                  --output_dir trt_engine/gpt2/fp16/1-gpu/ \
                  --hidden_act gelu
 ```
-3. 执行最后一个命令, 计算pytorch版和TRT版的`rouge_score`(这一步需要能`和谐上网`，否则无法执行)
+3. 执行最后一个命令, 计算pytorch版和TRT版的`rouge_score`
 ```bash
 python3 summarize.py --engine_dir trt_engine/gpt2/fp16/1-gpu \
                      --test_hf \
