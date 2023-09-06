@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import math
 import tensorrt_llm
 from tensorrt_llm._utils import str_dtype_to_torch, str_dtype_to_np, pad_vocab_size, torch_to_numpy
 from tensorrt_llm.quantization import QuantMode
@@ -40,39 +39,65 @@ def parse_ft_config(ini_file):
     qwen_config.read(ini_file)
 
     vocab_size = qwen_config.getint('qwen', 'vocab_size')
-    rotary_pct = qwen_config.getfloat('qwen', 'rotary_pct', fallback=0.0)
+    hidden_size = qwen_config.getint('qwen', 'hidden_size')
     inter_size = qwen_config.getint('qwen', 'intermediate_size', fallback=None)
-    dtype = qwen_config.get('qwen', 'storage_dtype', fallback='float32')
+    num_attention_heads = qwen_config.getint(
+        "qwen",
+        "num_attention_heads",
+        fallback=32,
+    )
+    max_position_embeddings = qwen_config.getint(
+        "qwen", "max_position_embeddings", fallback=8192)
+    kv_channels = qwen_config.getint('qwen', 'kv_channels', fallback=128)
+    rotary_pct = qwen_config.getfloat('qwen', 'rotary_pct', fallback=0.0)
+    rotary_emb_base = qwen_config.getint(
+        'qwen', 'rotary_emb_base', fallback=10000
+    )
+    multi_query_mode = qwen_config.getboolean(
+        'qwen',
+        'multi_query_mode',
+        fallback=False
+    )
+                            
 
-    multi_query_mode = qwen_config.getboolean('qwen',
-                                             'multi_query_mode',
-                                             fallback=False)
-
-    return vocab_size, rotary_pct, inter_size, multi_query_mode
+    return (
+        vocab_size,
+        hidden_size,
+        inter_size,
+        num_attention_heads,
+        kv_channels,
+        rotary_pct,
+        rotary_emb_base,
+        multi_query_mode,
+        max_position_embeddings
+    )
 
 def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                  dir_path,
                  rank=0,
                  tensor_parallel=1,
-                 n_embd=4096,
-                 n_layer=128,
-                 seq_length=2048,
-                 max_position_embeddings=8192,
-                 rotary_emb_base=10000,
-                 kv_channels=128,
                  dtype='float16',
                  share_embedding_table=False,
                  parallel_embedding_table=False,
                  multi_query_mode=False):
     tensorrt_llm.logger.info('Loading weights from FT...')
     tik = time.time()
-
     quant_mode = getattr(tensorrt_llm_qwen, 'quant_mode', QuantMode(0))
     if quant_mode.is_int8_weight_only():
         plugin_weight_only_quant_type = torch.int8
     elif quant_mode.is_int4_weight_only():
         plugin_weight_only_quant_type = torch.quint4x2
-    vocab_size, rotary_pct, inter_size, multi_query_mode = parse_ft_config(
+    (
+        vocab_size,
+        hidden_size,
+        inter_size,
+        num_attention_heads,
+        kv_channels,
+        rotary_pct,
+        rotary_emb_base,
+        multi_query_mode,
+        max_position_embeddings
+    ) = parse_ft_config(
         Path(dir_path) / 'config.ini')
     np_dtype = str_dtype_to_np(dtype)
 
@@ -86,15 +111,17 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             return t
         return None
 
-    def set_smoothquant_scale_factors(module,
-                                      pre_scale_weight,
-                                      dir_path,
-                                      basename,
-                                      shape,
-                                      per_tok_dyn,
-                                      per_channel,
-                                      is_qkv=False,
-                                      rank=None):
+    def set_smoothquant_scale_factors(
+        module,
+        pre_scale_weight,
+        dir_path,
+        basename,
+        shape,
+        per_tok_dyn,
+        per_channel,
+        is_qkv=False,
+        rank=None,
+    ):
         suffix = "bin"
         if per_channel:
             if rank is not None:
@@ -161,35 +188,37 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
 
     # breakpoint()
     vocab_embedding_weight = fromfile(dir_path, 'vocab_embedding.weight.bin',
-                                      [vocab_size, n_embd])
+                                      [vocab_size, hidden_size])
     tensorrt_llm_qwen.vocab_embedding.weight.value = vocab_embedding_weight
 
 
     lm_head_weight = fromfile(dir_path, 'lm_head.weight.bin',
-                                  [vocab_size, n_embd])
+                                  [vocab_size, hidden_size])
     tensorrt_llm_qwen.lm_head.weight.value = np.ascontiguousarray(
             split(lm_head_weight, tensor_parallel, rank))
     
     tensorrt_llm_qwen.ln_f.weight.value = (fromfile(
             dir_path, 'ln_f.weight.bin'))
 
-    for i in range(n_layer):
-        c_attn_out_dim = (3 * n_embd //
+    for i in range(num_attention_heads):
+        c_attn_out_dim = (3 * hidden_size //
                           tensor_parallel) if not multi_query_mode else (
-                              n_embd // tensor_parallel +
-                              (n_embd // n_head) * 2)
+                              hidden_size // tensor_parallel +
+                              (hidden_size // num_attention_heads) * 2)
         
-        tensorrt_llm_qwen.layers[i].ln_1.weight.value = (fromfile(
-            dir_path, 'model.layers.' + str(i) + '.ln_1.weight.bin'))
+        tensorrt_llm_qwen.layers[i].ln_1.weight.value = fromfile(
+            dir_path, 'model.layers.' + str(i) + '.ln_1.weight.bin'
+        )
         
         dst = tensorrt_llm_qwen.layers[i].ln_2.weight
         dst.value = fromfile( 
             dir_path, 'model.layers.' + str(i) + '.ln_2.weight.bin')
 
         t = fromfile(
-            dir_path, 'model.layers.' + str(i) +
-            '.attention.qkv.weight.' + suffix,
-            [n_embd, c_attn_out_dim], w_type)
+            dir_path, 'model.layers.' + str(i) + '.attention.qkv.weight.' + suffix,
+            [c_attn_out_dim, hidden_size],
+            w_type
+        )
         if t is not None:
             dst = tensorrt_llm_qwen.layers[i].attention.qkv.weight
             if use_smooth_quant:
@@ -227,7 +256,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         t = fromfile(
             dir_path,
             'model.layers.' + str(i) + '.attention.dense.weight.' + suffix,
-            [n_embd // tensor_parallel, n_embd], w_type)
+            [hidden_size // tensor_parallel, hidden_size], w_type)
         if use_smooth_quant:
             dst.value = sq_trick(np.ascontiguousarray(np.transpose(t, [1, 0])))
             dense_scale = getattr(tensorrt_llm_qwen.layers[i].attention,
@@ -235,7 +264,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             set_smoothquant_scale_factors(
                 tensorrt_llm_qwen.layers[i].attention.dense, dense_scale,
                 dir_path, 'model.layers.' + str(i) + '.attention.dense.',
-                [1, n_embd], quant_per_token_dyn, quant_per_channel)
+                [1, hidden_size], quant_per_token_dyn, quant_per_channel)
         elif use_weight_only:
             processed_torch_weights, torch_weight_scales = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
                 torch.tensor(t), plugin_weight_only_quant_type)
@@ -251,7 +280,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         t = fromfile(
             dir_path,
             'model.layers.' + str(i) + '.mlp.w1.weight.' + suffix,
-            [n_embd, inter_size // tensor_parallel//2], w_type)
+            [hidden_size, inter_size // tensor_parallel//2], w_type)
         if use_smooth_quant:
             tensorrt_llm_qwen.layers[i].mlp.w1.weight.value = sq_trick(
                 np.ascontiguousarray(np.transpose(t, [1, 0])))
@@ -281,7 +310,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         t = fromfile(
             dir_path,
             'model.layers.' + str(i) + '.mlp.w2.weight.' + suffix,
-            [inter_size // tensor_parallel//2, n_embd], w_type)
+            [inter_size // tensor_parallel//2, hidden_size], w_type)
         if use_smooth_quant:
             tensorrt_llm_qwen.layers[i].mlp.w2.weight.value = sq_trick(
                 np.ascontiguousarray(np.transpose(t, [1, 0])))
@@ -289,7 +318,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                                  "quantization_scaling_factor", None)
             set_smoothquant_scale_factors(
                 tensorrt_llm_qwen.layers[i].mlp.w2, proj_scale, dir_path,
-                'model.layers.' + str(i) + '.mlp.w2.', [1, n_embd],
+                'model.layers.' + str(i) + '.mlp.w2.', [1, hidden_size],
                 quant_per_token_dyn, quant_per_channel)
         elif use_weight_only:
             dst = tensorrt_llm_qwen.layers[i].mlp.w2.weight
@@ -307,7 +336,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         t = fromfile(
             dir_path, 'model.layers.' + str(i) +
             '.mlp.c_proj.weight.' + str(rank) + '.bin',
-            [n_embd, inter_size // tensor_parallel//2])
+            [hidden_size, inter_size // tensor_parallel//2])
         if use_smooth_quant:
             tensorrt_llm_qwen.layers[i].mlp.c_proj.weight.value = sq_trick(
                 np.ascontiguousarray(np.transpose(t, [1, 0])))
@@ -315,7 +344,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                                  "quantization_scaling_factor", None)
             set_smoothquant_scale_factors(
                 tensorrt_llm_qwen.layers[i].mlp.c_proj, proj_scale, dir_path,
-                'model.layers.' + str(i) + '.mlp.c_proj.', [1, n_embd],
+                'model.layers.' + str(i) + '.mlp.c_proj.', [1, hidden_size],
                 quant_per_token_dyn, quant_per_channel)
         elif use_weight_only:
             dst = tensorrt_llm_qwen.layers[i].mlp.c_proj.weight

@@ -1,5 +1,5 @@
 '''
-Convert huggingface QWen-7B-Chat model to Huggingface.
+Convert huggingface QWen-7B-Chat model to numpy file.
 Use https://huggingface.co/Qwen/Qwen-7B-Chat as demo.
 '''
 import argparse
