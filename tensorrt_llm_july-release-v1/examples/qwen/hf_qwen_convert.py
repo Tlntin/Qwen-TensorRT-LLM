@@ -149,11 +149,11 @@ def transpose_weights(hf_name, param):
 def qwen_to_ft_name(orig_name):
     global_weights = {
         # 
-        "transformer.wte.weight": "model.vocab_embedding.weight",
+        "transformer.wte.weight": "vocab_embedding.weight",
         # "transformer.wpe.weight": "model.wpe",
         # "transformer.ln_f.bias": "model.final_layernorm.bias",
-        "transformer.ln_f.weight": "model.ln_f.weight",
-        "lm_head.weight": "model.lm_head.weight"
+        "transformer.ln_f.weight": "ln_f.weight",
+        "lm_head.weight": "lm_head.weight"
     }
 
     if orig_name in global_weights:
@@ -231,9 +231,9 @@ def hf_qwen_converter(args: ProgArgs):
     #     "model.lm_head.weight"
     # ]
     global_ft_weights = [
-        "model.vocab_embedding.weight",
-        "model.ln_f.weight",
-        "model.lm_head.weight"
+        "vocab_embedding.weight",
+        "ln_f.weight",
+        "lm_head.weight"
     ]
 
     int8_outputs = None
