@@ -178,7 +178,15 @@ def parse_arguments():
     parser.add_argument('--remove_input_padding',
                         default=False,
                         action='store_true')
-
+    # Arguments related to the quantization of the model.
+    parser.add_argument(
+        '--use_smooth_quant',
+        default=False,
+        action="store_true",
+        help=
+        'Use the SmoothQuant method to quantize activations and weights for the various GEMMs.'
+        'See --per_channel and --per_token for finer-grained quantization options.'
+    )
     parser.add_argument(
         '--use_weight_only',
         default=False,
@@ -197,14 +205,41 @@ def parse_arguments():
         'Define the precision for the weights when using weight-only quantization.'
         'You must also use --use_weight_only for that argument to have an impact.'
     )
-
+    parser.add_argument(
+        '--per_channel',
+        default=False,
+        action="store_true",
+        help=
+        'By default, we use a single static scaling factor for the GEMM\'s result. '
+        'per_channel instead uses a different static scaling factor for each channel. '
+        'The latter is usually more accurate, but a little slower.')
+    parser.add_argument(
+        '--per_token',
+        default=False,
+        action="store_true",
+        help=
+        'By default, we use a single static scaling factor to scale activations in the int8 range. '
+        'per_token chooses at run time, and for each token, a custom scaling factor. '
+        'The latter is usually more accurate, but a little slower.')
+    parser.add_argument(
+        '--int8_kv_cache',
+        default=False,
+        action="store_true",
+        help=
+        'By default, we use dtype for KV cache. int8_kv_cache chooses int8 quantization for KV'
+    )
     args = parser.parse_args()
-
-    if args.use_weight_only:
+    if args.use_smooth_quant:
+        args.quant_mode = QuantMode.use_smooth_quant(args.per_token,
+                                                     args.per_channel)
+    elif args.use_weight_only:
         args.quant_mode = QuantMode.use_weight_only(
             args.weight_only_precision == 'int4')
     else:
         args.quant_mode = QuantMode(0)
+    
+    if args.int8_kv_cache:
+        args.quant_mode = args.quant_mode.set_int8_kv_cache()
     # Since gpt_attenttion_plugin is the only way to apply RoPE now,
     # force use the plugin for now with the correct data type.
     args.use_gpt_attention_plugin = args.dtype
