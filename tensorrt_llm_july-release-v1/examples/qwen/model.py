@@ -509,7 +509,10 @@ class QWenBlock(Module):
                  seq_length,
                  num_attention_heads,
                  max_position_embeddings,
+                 num_layers,
                  dtype=None,
+                 attention_mask_type=AttentionMaskType.causal,
+                 apply_query_key_layer_scaling=False,
                  hidden_act='silu',
                  position_embedding_type=PositionEmbeddingType.rope,
                  quant_mode=QuantMode(0),
@@ -521,44 +524,65 @@ class QWenBlock(Module):
                  tp_size=1):
         super().__init__()
         self._layer_id = layer_id  # useful for debugging
-        self.ln_1 = RmsNorm(normalized_shape=hidden_size,
-                                       dtype=dtype)
+        self.hidden_size = hidden_size
+        self.seq_length = seq_length
+        self.mlp_hidden_size = mlp_hidden_size
+        self.hidden_act = hidden_act
+        self.dtype = dtype
+        self.attention_mask_type = attention_mask_type
+        self.apply_query_key_layer_scaling = apply_query_key_layer_scaling
+        self.tp_group = tp_group
+        self.tp_size = tp_size
+        self.num_attention_heads = num_attention_heads
+        self.max_position_embeddings = max_position_embeddings
+        self.num_layers = num_layers
+        self.position_embedding_type = position_embedding_type
+
+        self.ln_1 = RmsNorm(
+            normalized_shape=hidden_size,
+            dtype=dtype
+        )
 
         self.attention = QWenAttention(
-            hidden_size=hidden_size,
-            num_attention_heads=num_attention_heads,
-            max_position_embeddings=max_position_embeddings,
-            seq_length=seq_length,
-            dtype=dtype,
-            attention_mask_type=AttentionMaskType.causal,
+            hidden_size=self.hidden_size,
+            num_attention_heads=self.num_attention_heads,
+            max_position_embeddings=self.max_position_embeddings,
+            num_layers=self.num_layers,
+            seq_length=self.seq_length,
+            dtype=self.dtype,
+            attention_mask_type=self.attention_mask_type,
             bias=bias,
-            position_embedding_type=position_embedding_type,
+            position_embedding_type=self.position_embedding_type,
             neox_rotary_style=neox_rotary_style,
             multi_query_mode=multi_query_mode,
-            tp_group=tp_group,
-            tp_size=tp_size,
+            tp_group=self.tp_group,
+            tp_size=self.tp_size,
             use_int8_kv_cache=quant_mode.has_int8_kv_cache()
         )
         if not mlp_hidden_size:
             mlp_hidden_size = hidden_size * 4
-        self.mlp = QWenMLP(hidden_size=hidden_size,
-                            ffn_hidden_size=mlp_hidden_size // 2,
-                            hidden_act=hidden_act,
-                            dtype=dtype,
-                            bias=False,
-                            tp_group=tp_group,
-                            tp_size=tp_size)
+        
+        self.mlp = QWenMLP(
+            hidden_size=hidden_size,
+            ffn_hidden_size=mlp_hidden_size // 2,
+            hidden_act=hidden_act,
+            dtype=dtype,
+            bias=False,
+            tp_group=tp_group,
+            tp_size=tp_size
+        )
         self.ln_2 = RmsNorm(normalized_shape=hidden_size, dtype=dtype)
 
     def forward(self,
-                hidden_states: RaggedTensor,
-                rotary_pos_emb,
-                past_key_value=None,
-                sequence_length=None,
-                past_key_value_length=None,
-                masked_tokens=None,
-                use_cache=False,
-                cache_indirection=None):
+        hidden_states: RaggedTensor,
+        rotary_pos_emb,
+        past_key_value=None,
+        sequence_length=None,
+        past_key_value_length=None,
+        masked_tokens=None,
+        use_cache=False,
+        cache_indirection=None
+    ):
         residual = hidden_states.data
         input_lengths = hidden_states.row_lengths
         max_input_length = hidden_states.max_row_length
@@ -707,6 +731,7 @@ class QWenModel(Module):
                 hidden_size=hidden_size,
                 seq_length=seq_length,
                 num_attention_heads=num_heads,
+                num_layers=num_layers,
                 max_position_embeddings=max_position_embeddings,
                 dtype=dtype,
                 hidden_act=hidden_act,

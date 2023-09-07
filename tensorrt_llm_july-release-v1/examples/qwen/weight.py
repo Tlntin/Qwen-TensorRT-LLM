@@ -334,9 +334,10 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             tensorrt_llm_qwen.layers[i].mlp.w2.weight.value = np.ascontiguousarray(t)
             
         t = fromfile(
-            dir_path, 'model.layers.' + str(i) +
-            '.mlp.c_proj.weight.' + str(rank) + '.bin',
-            [hidden_size, inter_size // tensor_parallel//2])
+            dir_path,
+            'model.layers.' + str(i) + '.mlp.c_proj.weight.' + str(rank) + '.bin',
+            [hidden_size, inter_size // tensor_parallel//2]
+        )
         if use_smooth_quant:
             tensorrt_llm_qwen.layers[i].mlp.c_proj.weight.value = sq_trick(
                 np.ascontiguousarray(np.transpose(t, [1, 0])))

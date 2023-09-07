@@ -81,7 +81,7 @@ class ProgArgs:
             "--smoothquant",
             "-sq",
             type=float,
-            default=0.5,
+            default=None,
             help="Set the α parameter (see https://arxiv.org/pdf/2211.10438.pdf)"
             " to Smoothquant the model, and output int8 weights."
             " A good first try is 0.5. Must be in [0, 1]")
@@ -139,8 +139,8 @@ def smooth_qwen_model(model, scales, alpha):
         )
         scales[mlp_w1_name]["x"] = scales[mlp_w1_name]["x"] / smoother2
         scales[mlp_w2_name]["x"] = scales[mlp_w2_name]["x"] / smoother2
-        scales[mlp_w1_name]["w"] = module.mlp.w1.weight.abs().max(dim=1)[0]
-        scales[mlp_w2_name]["w"] = module.mlp.w2.weight.abs().max(dim=1)[0]
+        scales[mlp_w1_name]["w"] = module.mlp.w1.weight.abs().max(dim=0)[0]
+        scales[mlp_w2_name]["w"] = module.mlp.w2.weight.abs().max(dim=0)[0]
 
         # mlp c_proj
         layer_name = name + ".mlp.c_proj"
@@ -150,7 +150,7 @@ def smooth_qwen_model(model, scales, alpha):
             alpha=alpha
         )
         scales[layer_name]["x"] = scales[layer_name]["x"] / smoother3
-        scales[layer_name]["w"] = module.mlp.c_proj.weight.abs().max(dim=1)[0]
+        scales[layer_name]["w"] = module.mlp.c_proj.weight.abs().max(dim=0)[0]
 
 
 # SantaCoder separates Q projection from KV projection

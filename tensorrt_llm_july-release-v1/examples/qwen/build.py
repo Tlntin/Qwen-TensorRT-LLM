@@ -23,6 +23,8 @@ from tensorrt_llm.network import net_guard
 from tensorrt_llm.quantization import QuantMode
 
 from weight import load_from_hf_qwen, load_from_ft
+from utils.quantization import smooth_quantize
+
 
 MODEL_NAME = "qwen"
 
@@ -109,10 +111,12 @@ def serialize_engine(engine, path):
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--world_size',
-                        type=int,
-                        default=1,
-                        help='world size, only support tensor parallelism now')
+    parser.add_argument(
+        '--world_size',
+        type=int,
+        default=1,
+        help='world size, only support tensor parallelism now'
+    )
     parser.add_argument(
         '--hf_model_dir',
         type=str,
@@ -149,18 +153,22 @@ def parse_arguments():
     parser.add_argument('--max_input_len', type=int, default=2048)
     parser.add_argument('--max_output_len', type=int, default=512)
     parser.add_argument('--max_beam_width', type=int, default=1)
-    parser.add_argument('--use_gpt_attention_plugin',
-                        nargs='?',
-                        const='float16',
-                        type=str,
-                        default="float16",
-                        choices=['float16', 'bfloat16', 'float32'])
-    parser.add_argument('--use_gemm_plugin',
-                        nargs='?',
-                        const='float16',
-                        type=str,
-                        default="float16",
-                        choices=['float16', 'bfloat16', 'float32'])
+    parser.add_argument(
+        '--use_gpt_attention_plugin',
+        nargs='?',
+        const='float16',
+        type=str,
+        default="float16",
+        choices=['float16', 'bfloat16', 'float32']
+    )
+    parser.add_argument(
+        '--use_gemm_plugin',
+        nargs='?',
+        const='float16',
+        type=str,
+        default="float16",
+        choices=['float16', 'bfloat16', 'float32']
+    )
     parser.add_argument('--parallel_build', default=False, action='store_true')
     parser.add_argument('--visualize', default=False, action='store_true')
     parser.add_argument('--enable_debug_output',
@@ -175,9 +183,11 @@ def parse_arguments():
         help=
         'The path to save the serialized engine files, timing cache file and model configs'
     )
-    parser.add_argument('--remove_input_padding',
-                        default=False,
-                        action='store_true')
+    parser.add_argument(
+        '--remove_input_padding',
+        default=False,
+        action='store_true'
+    )
     # Arguments related to the quantization of the model.
     parser.add_argument(
         '--use_smooth_quant',
@@ -294,7 +304,11 @@ def build_rank_engine(builder: Builder,
         multi_query_mode=multi_query_mode,
         tensor_parallel=args.world_size,  # TP only
         tensor_parallel_group=list(range(args.world_size)))
-    if args.use_weight_only and args.weight_only_precision == 'int8':
+    if args.use_smooth_quant:
+        tensorrt_llm_qwen = smooth_quantize(
+            tensorrt_llm_qwen, args.quant_mode
+        )
+    elif args.use_weight_only and args.weight_only_precision == 'int8':
         tensorrt_llm_qwen = weight_only_quantize(
             tensorrt_llm_qwen,
             QuantMode.use_weight_only()
