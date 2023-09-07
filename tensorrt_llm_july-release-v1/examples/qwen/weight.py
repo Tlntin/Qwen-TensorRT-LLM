@@ -329,7 +329,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             scales = tensorrt_llm_qwen.layers[i].mlp.w2.per_channel_scale
             scales.value = torch_weight_scales.numpy()
         else:
-            tensorrt_llm_qwen.layers[i].mlp.w2.weight.value = np.ascontiguousarray(np.transpose(t, [0, 1]))
+            tensorrt_llm_qwen.layers[i].mlp.w2.weight.value = np.ascontiguousarray(t)
             
         t = fromfile(
             dir_path, 'model.layers.' + str(i) +
@@ -354,8 +354,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             scales = tensorrt_llm_qwen.layers[i].mlp.c_proj.per_channel_scale
             scales.value = torch_weight_scales.numpy()
         else:
-            tensorrt_llm_qwen.layers[i].mlp.c_proj.weight.value = np.ascontiguousarray(
-                np.transpose(t, [0, 1]))
+            tensorrt_llm_qwen.layers[i].mlp.c_proj.weight.value = np.ascontiguousarray(t)
 
         if use_int8_kv_cache:
             t = fromfile(
