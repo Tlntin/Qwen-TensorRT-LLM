@@ -41,9 +41,9 @@ def parse_ft_config(ini_file):
     vocab_size = qwen_config.getint('qwen', 'vocab_size')
     hidden_size = qwen_config.getint('qwen', 'hidden_size')
     inter_size = qwen_config.getint('qwen', 'intermediate_size', fallback=None)
-    num_attention_heads = qwen_config.getint(
+    num_hidden_layers = qwen_config.getint(
         "qwen",
-        "num_attention_heads",
+        "num_hidden_layers",
         fallback=32,
     )
     max_position_embeddings = qwen_config.getint(
@@ -64,7 +64,7 @@ def parse_ft_config(ini_file):
         vocab_size,
         hidden_size,
         inter_size,
-        num_attention_heads,
+        num_hidden_layers,
         kv_channels,
         rotary_pct,
         rotary_emb_base,
@@ -91,7 +91,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         vocab_size,
         hidden_size,
         inter_size,
-        num_attention_heads,
+        num_hidden_layers,
         kv_channels,
         rotary_pct,
         rotary_emb_base,
@@ -197,14 +197,13 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
     tensorrt_llm_qwen.lm_head.weight.value = np.ascontiguousarray(
             split(lm_head_weight, tensor_parallel, rank))
     
-    tensorrt_llm_qwen.ln_f.weight.value = (fromfile(
-            dir_path, 'ln_f.weight.bin'))
+    tensorrt_llm_qwen.ln_f.weight.value = fromfile(dir_path, 'ln_f.weight.bin')
 
-    for i in range(num_attention_heads):
+    for i in range(num_hidden_layers):
         c_attn_out_dim = (3 * hidden_size //
                           tensor_parallel) if not multi_query_mode else (
                               hidden_size // tensor_parallel +
-                              (hidden_size // num_attention_heads) * 2)
+                              (hidden_size // num_hidden_layers) * 2)
         
         tensorrt_llm_qwen.layers[i].ln_1.weight.value = fromfile(
             dir_path, 'model.layers.' + str(i) + '.ln_1.weight.bin'
@@ -244,13 +243,13 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                     i].attention.qkv.per_channel_scale
                 scales.value = torch_weight_scales.numpy()
             else:
-                dst.value = np.ascontiguousarray(np.transpose(t, [1, 0]))
+                dst.value = np.ascontiguousarray(t)
 
         dst = tensorrt_llm_qwen.layers[i].attention.qkv.bias
         t = fromfile(
             dir_path, 'model.layers.' + str(i) +
             '.attention.qkv.bias.' + str(rank) + '.bin', [c_attn_out_dim], w_type)
-        dst.value = np.ascontiguousarray(np.transpose(t))
+        dst.value = np.ascontiguousarray(t)
 
         dst = tensorrt_llm_qwen.layers[i].attention.dense.weight
         t = fromfile(
@@ -275,12 +274,14 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                 i].attention.dense.per_channel_scale
             scales.value = torch_weight_scales.numpy()
         else:
-            dst.value = np.ascontiguousarray(np.transpose(t, [1, 0]))
+            dst.value = np.ascontiguousarray(t)
 
         t = fromfile(
             dir_path,
             'model.layers.' + str(i) + '.mlp.w1.weight.' + suffix,
-            [hidden_size, inter_size // tensor_parallel//2], w_type)
+            [inter_size // tensor_parallel // 2, hidden_size],
+            w_type
+        )
         if use_smooth_quant:
             tensorrt_llm_qwen.layers[i].mlp.w1.weight.value = sq_trick(
                 np.ascontiguousarray(np.transpose(t, [1, 0])))
@@ -303,9 +304,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             scales = tensorrt_llm_qwen.layers[i].mlp.w1.per_channel_scale
             scales.value = torch_weight_scales.numpy()
         else:
-            tensorrt_llm_qwen.layers[
-                i].mlp.w1.weight.value = np.ascontiguousarray(
-                    np.transpose(t, [1, 0]))
+            tensorrt_llm_qwen.layers[i].mlp.w1.weight.value = np.ascontiguousarray(t)
         
         t = fromfile(
             dir_path,
@@ -330,8 +329,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             scales = tensorrt_llm_qwen.layers[i].mlp.w2.per_channel_scale
             scales.value = torch_weight_scales.numpy()
         else:
-            tensorrt_llm_qwen.layers[i].mlp.w2.weight.value = (
-                np.ascontiguousarray(np.transpose(t, [0, 1])))
+            tensorrt_llm_qwen.layers[i].mlp.w2.weight.value = np.ascontiguousarray(np.transpose(t, [0, 1]))
             
         t = fromfile(
             dir_path, 'model.layers.' + str(i) +

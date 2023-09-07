@@ -190,9 +190,9 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
 
     elif "mlp.w1.weight" in key or "mlp.w2.weight" in key:
         if split_gated_activation:
-            splits = [np.split(val, 2, axis=-1) for val in vals]
+            splits = [np.split(val, 2, axis=0) for val in vals]
             vals, gates = list(zip(*splits))
-        cat_dim = -1
+        cat_dim = 0
         val = np.concatenate(vals, axis=cat_dim)
         split_vals = np.split(val, split_factor, axis=cat_dim)
         save_split(split_vals, saved_dir, key, tp_rank, split_factor)
