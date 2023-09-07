@@ -234,13 +234,13 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                     rank=rank,
                     is_qkv=True)
             elif use_weight_only:
+                t = np.ascontiguousarray(np.transpose(t, [1, 0]))
                 processed_torch_weights, torch_weight_scales = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
                     torch.tensor(t), plugin_weight_only_quant_type)
                 # workaround for trt not supporting int8 inputs in plugins currently
                 dst.value = processed_torch_weights.view(
                     dtype=torch.float32).numpy()
-                scales = tensorrt_llm_qwen.layers[
-                    i].attention.qkv.per_channel_scale
+                scales = tensorrt_llm_qwen.layers[i].attention.qkv.per_channel_scale
                 scales.value = torch_weight_scales.numpy()
             else:
                 dst.value = np.ascontiguousarray(t)
@@ -265,13 +265,13 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                 dir_path, 'model.layers.' + str(i) + '.attention.dense.',
                 [1, hidden_size], quant_per_token_dyn, quant_per_channel)
         elif use_weight_only:
+            t = np.ascontiguousarray(np.transpose(t, [1, 0]))
             processed_torch_weights, torch_weight_scales = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
                 torch.tensor(t), plugin_weight_only_quant_type)
             # workaround for trt not supporting int8 inputs in plugins currently
             dst.value = processed_torch_weights.view(
                 dtype=torch.float32).numpy()
-            scales = tensorrt_llm_qwen.layers[
-                i].attention.dense.per_channel_scale
+            scales = tensorrt_llm_qwen.layers[i].attention.dense.per_channel_scale
             scales.value = torch_weight_scales.numpy()
         else:
             dst.value = np.ascontiguousarray(t)
@@ -296,6 +296,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                 rank=rank)
         elif use_weight_only:
             dst = tensorrt_llm_qwen.layers[i].mlp.w1.weight
+            t = np.ascontiguousarray(np.transpose(t, [1, 0]))
             processed_torch_weights, torch_weight_scales = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
                 torch.tensor(t), plugin_weight_only_quant_type)
             # workaround for trt not supporting int8 inputs in plugins currently
@@ -321,6 +322,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                 quant_per_token_dyn, quant_per_channel)
         elif use_weight_only:
             dst = tensorrt_llm_qwen.layers[i].mlp.w2.weight
+            t = np.ascontiguousarray(np.transpose(t, [1, 0]))
             processed_torch_weights, torch_weight_scales = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
                 torch.tensor(t), plugin_weight_only_quant_type)
             # workaround for trt not supporting int8 inputs in plugins currently
@@ -346,6 +348,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                 quant_per_token_dyn, quant_per_channel)
         elif use_weight_only:
             dst = tensorrt_llm_qwen.layers[i].mlp.c_proj.weight
+            t = np.ascontiguousarray(np.transpose(t, [1, 0]))
             processed_torch_weights, torch_weight_scales = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
                 torch.tensor(t), plugin_weight_only_quant_type)
             # workaround for trt not supporting int8 inputs in plugins currently
