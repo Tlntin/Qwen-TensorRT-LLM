@@ -10,7 +10,7 @@ from pathlib import Path
 
 import torch
 import torch.multiprocessing as multiprocessing
-from smoothquant import capture_activation_range, smooth_gemm
+from smoothquant import capture_activation_range, smooth_gemm, smooth_gemm_mlp
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM  # transformers-4.10.0-py3
 from transformers import AutoTokenizer
@@ -81,7 +81,7 @@ class ProgArgs:
             "--smoothquant",
             "-sq",
             type=float,
-            default=None,
+            default=0.5,
             help="Set the α parameter (see https://arxiv.org/pdf/2211.10438.pdf)"
             " to Smoothquant the model, and output int8 weights."
             " A good first try is 0.5. Must be in [0, 1]")
@@ -111,24 +111,46 @@ class ProgArgs:
 def smooth_qwen_model(model, scales, alpha):
     # Smooth the activation and weights with smoother = $\diag{s}$
     for name, module in model.named_modules():
-        if not isinstance(module, QWenBlock):
+        # if not isinstance(module, QWenBlock):
+        if not str(type(module)).endswith("QWenBlock'>"):
             continue
 
         # qkv_proj
         layer_name = name + ".attn.c_attn"
-        smoother = smooth_gemm(module.attn.c_attn.weight.T,
-                               scales[layer_name]["x"], module.ln_1.weight,
-                               module.ln_1.bias, alpha)
+        smoother = smooth_gemm(
+            module.attn.c_attn.weight,
+            scales[layer_name]["x"],
+            module.ln_1.weight,
+            alpha=alpha
+        )
         scales[layer_name]["x"] = scales[layer_name]["x"] / smoother
-        scales[layer_name]["w"] = module.attn.c_attn.weight.abs().max(dim=0)[0]
+        scales[layer_name]["w"] = module.attn.c_attn.weight.abs().max(dim=1)[0]
 
-        # fc1
-        layer_name = name + ".mlp.c_fc"
-        smoother = smooth_gemm(module.mlp.c_fc.weight.T,
-                               scales[layer_name]["x"], module.ln_2.weight,
-                               module.ln_2.bias, alpha)
-        scales[layer_name]["x"] = scales[layer_name]["x"] / smoother
-        scales[layer_name]["w"] = module.mlp.c_fc.weight.abs().max(dim=0)[0]
+        # mlp w1 / w2, because then use some input hidden_states as input, so we need to smooth it with same scale
+        mlp_w1_name = name + ".mlp.w1"
+        mlp_w2_name = name + ".mlp.w2"
+        smoother2 = smooth_gemm_mlp(
+            module.mlp.w1.weight,
+            module.mlp.w2.weight,
+            scales[mlp_w1_name]["x"],
+            module.ln_2.weight,
+            None,
+            alpha=alpha
+        )
+        scales[mlp_w1_name]["x"] = scales[mlp_w1_name]["x"] / smoother2
+        scales[mlp_w2_name]["x"] = scales[mlp_w2_name]["x"] / smoother2
+        scales[mlp_w1_name]["w"] = module.mlp.w1.weight.abs().max(dim=1)[0]
+        scales[mlp_w2_name]["w"] = module.mlp.w2.weight.abs().max(dim=1)[0]
+
+        # mlp c_proj
+        layer_name = name + ".mlp.c_proj"
+        smoother3 = smooth_gemm(
+            module.mlp.c_proj.weight,
+            scales[layer_name]["x"],
+            alpha=alpha
+        )
+        scales[layer_name]["x"] = scales[layer_name]["x"] / smoother3
+        scales[layer_name]["w"] = module.mlp.c_proj.weight.abs().max(dim=1)[0]
 
 
 # SantaCoder separates Q projection from KV projection
@@ -194,9 +216,10 @@ def hf_qwen_converter(args: ProgArgs):
     # load position_embedding from rank 0
     model = AutoModelForCausalLM.from_pretrained(
         args.in_file,
-        device_map="auto",
-        trust_remote_code=True
-    )
+        device_map="auto",  # if you gpu memory is not enough, you can set device_map="cpu"
+        trust_remote_code=True,
+        torch_dtype=str_dtype_to_torch(args.storage_type),
+    ).half() # if you gpu memory is not enough, you can set .half() to .float()
     act_range = {}
     if args.smoothquant is not None or args.calibrate_kv_cache:
         os.environ["TOKENIZERS_PARALLELISM"] = os.environ.get(
@@ -206,7 +229,13 @@ def hf_qwen_converter(args: ProgArgs):
                                split="validation",
                                cache_dir=args.dataset_cache_dir)
         act_range = capture_activation_range(
-            model, AutoTokenizer.from_pretrained(args.in_file), dataset)
+            model, 
+            AutoTokenizer.from_pretrained(
+                args.in_file,
+                trust_remote_code=True,
+            ),
+            dataset
+        )
         if args.smoothquant is not None:
             smooth_qwen_model(model, act_range, args.smoothquant)
 

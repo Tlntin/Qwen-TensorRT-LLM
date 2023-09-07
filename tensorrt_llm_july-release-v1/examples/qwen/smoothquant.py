@@ -65,6 +65,47 @@ def smooth_gemm(gemm_weights,
 
 
 @torch.no_grad()
+def smooth_gemm_mlp(
+    w1_weights,
+    w2_weights,
+    act_scales,
+    layernorm_weights=None,
+    layernorm_bias=None,
+    alpha=0.5,
+    weight_scales=None
+):
+    gemm_weights = []
+    if not isinstance(w1_weights, list):
+        w1_weights = [w1_weights]
+    if not isinstance(w2_weights, list):
+        w2_weights = [w2_weights]
+
+    for i in range(len(w1_weights)):
+        gemm_weight = torch.cat([w1_weights[i], w2_weights[i]], dim=0)
+        gemm_weights.append(gemm_weight)
+
+    orig_dtype = gemm_weights[0].dtype
+
+    for gemm in gemm_weights:
+        # gemm_weights are expected to be transposed
+        assert gemm.shape[1] == act_scales.numel()
+
+    if weight_scales is None:
+        weight_scales = torch.cat(
+            [gemm.abs().max(dim=0, keepdim=True)[0] for gemm in gemm_weights],
+            dim=0)
+        weight_scales = weight_scales.max(dim=0)[0]
+    weight_scales.to(float).clamp(min=1e-5)
+    scales = (act_scales.to(gemm_weights[0].device).to(float).pow(alpha) /
+              weight_scales.pow(1 - alpha)).clamp(min=1e-5)
+
+    apply_smoothing(scales, w1_weights + w2_weights, layernorm_weights,
+                    layernorm_bias, orig_dtype)
+
+    return scales
+
+
+@torch.no_grad()
 def smooth_ln_fcs(ln, fcs, act_scales, alpha=0.5):
     if not isinstance(fcs, list):
         fcs = [fcs]
@@ -91,11 +132,13 @@ def smooth_ln_fcs(ln, fcs, act_scales, alpha=0.5):
 
 
 @torch.no_grad()
-def capture_activation_range(model,
-                             tokenizer,
-                             dataset,
-                             num_samples=512,
-                             seq_len=512):
+def capture_activation_range(
+    model,
+    tokenizer,
+    dataset,
+    num_samples=512,
+    seq_len=512
+):
     model.eval()
     device = next(model.parameters()).device
     act_scales = defaultdict(lambda: {"x": None, "y": None, "w": None})

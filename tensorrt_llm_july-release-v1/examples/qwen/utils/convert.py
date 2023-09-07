@@ -61,16 +61,15 @@ def generate_int8(weights, act_range, is_qkv=False, multi_query_mode=False):
     if is_qkv and not multi_query_mode:
         scale_w_orig_quant_t = 127. / act_range["w"].reshape(3, -1).max(
             dim=-1, keepdims=True)[0].cpu().numpy()
-        scale_w_orig_quant_c = 127. / act_range["w"].reshape(3,
-                                                             -1).cpu().numpy()
+        scale_w_orig_quant_c = 127. / act_range["w"].reshape(3,-1).cpu().numpy()
     elif is_qkv and multi_query_mode:
         raise ValueError(
             f"Multi-query w/ int8 quant has not been supported yet")
     else:
-        scale_w_orig_quant_t = 127. / act_range["w"].max().cpu().numpy()
-        scale_w_orig_quant_c = 127. / act_range["w"].cpu().numpy()
-    scale_w_quant_orig_t = 1.0 / scale_w_orig_quant_t
-    scale_w_quant_orig_c = 1.0 / scale_w_orig_quant_c
+        scale_w_orig_quant_t = 127. / act_range["w"].max().cpu().numpy().float()
+        scale_w_orig_quant_c = 127. / act_range["w"].cpu().numpy().float()
+    scale_w_quant_orig_t = 1.0 / scale_w_orig_quant_t.float()
+    scale_w_quant_orig_c = 1.0 / scale_w_orig_quant_c.float()
 
     # compute the rest of needed scaling factors
     scale_x_orig_quant_t = np.array(127. / act_range["x"].max().item())
