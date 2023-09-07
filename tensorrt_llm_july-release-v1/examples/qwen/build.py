@@ -22,7 +22,7 @@ from tensorrt_llm.models import weight_only_quantize
 from tensorrt_llm.network import net_guard
 from tensorrt_llm.quantization import QuantMode
 
-from weight import load_from_hf_qwen
+from weight import load_from_hf_qwen, load_from_ft
 
 MODEL_NAME = "qwen"
 
@@ -113,7 +113,16 @@ def parse_arguments():
                         type=int,
                         default=1,
                         help='world size, only support tensor parallelism now')
-    parser.add_argument('--model_dir', type=str, default=os.path.join(now_dir, "qwen_7b_chat"))
+    parser.add_argument(
+        '--hf_model_dir',
+        type=str,
+        default=os.path.join(now_dir, "qwen_7b_chat")
+    )
+    parser.add_argument(
+        '--ft_dir_path',
+        type=str,
+        default=os.path.join(now_dir, "c-model", "qwen_7b_chat", "1-gpu")
+    )
     parser.add_argument('--dtype',
                         type=str,
                         default='float16',
@@ -172,7 +181,7 @@ def parse_arguments():
 
     parser.add_argument(
         '--use_weight_only',
-        default=True,
+        default=False,
         action="store_true",
         help='Quantize weights for the various GEMMs to INT4/INT8.'
         'See --weight_only_precision to set the precision')
@@ -199,9 +208,9 @@ def parse_arguments():
     # Since gpt_attenttion_plugin is the only way to apply RoPE now,
     # force use the plugin for now with the correct data type.
     args.use_gpt_attention_plugin = args.dtype
-    if args.model_dir is not None:
+    if args.hf_model_dir is not None:
         hf_config = AutoConfig.from_pretrained(
-            args.model_dir,
+            args.hf_model_dir,
             trust_remote_code=True,
         )
         args.inter_size = hf_config.intermediate_size  # override the inter_size for QWen
@@ -260,11 +269,11 @@ def build_rank_engine(builder: Builder,
             tensorrt_llm_qwen,
             QuantMode.use_weight_only(use_int4_weights=True)
         )
-    if args.model_dir is not None:
-        logger.info(f'Loading HF QWen ... from {args.model_dir}')
+    if args.hf_model_dir is not None and args.ft_dir_path is None:
+        logger.info(f'Loading HF QWen ... from {args.hf_model_dir}')
         tik = time.time()
         hf_qwen = AutoModelForCausalLM.from_pretrained(
-            args.model_dir,
+            args.hf_model_dir,
             device_map={
                 "transformer": "cpu",
                 "lm_head": "cpu"
@@ -288,6 +297,19 @@ def build_rank_engine(builder: Builder,
             multi_query_mode=multi_query_mode
         )
         del hf_qwen
+    elif args.ft_dir_path is not None:
+        dir_path = args.ft_dir_path
+        load_from_ft(
+            tensorrt_llm_qwen,
+            dir_path,
+            rank,
+            args.world_size,
+            dtype=args.dtype,
+            multi_query_mode=multi_query_mode
+        )
+    else:
+        raise ValueError(
+            "You must specify either --hf_model_dir or --ft_dir_path")
 
     # Module -> Network
     network = builder.create_network()

@@ -17,7 +17,7 @@ import tensorrt_llm
 import tensorrt_llm.profiler as profiler
 from tensorrt_llm.logger import logger
 from run import QWenForCausalLMGenerationSession
-from utils import make_context
+from utils.utils import make_context
 
 from build import get_engine_name  # isort:skip
 
