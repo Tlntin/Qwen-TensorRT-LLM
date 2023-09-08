@@ -7,3 +7,6 @@ rouge_score
 tiktoken
 transformers_stream_generator
 evaluate
+# 用于跑web_demo
+gradio
+mdtex2html

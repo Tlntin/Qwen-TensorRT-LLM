@@ -3,3 +3,5 @@ rouge_score~=0.1.2
 transformers~=4.31.0
 sentencepiece~=0.1.99
 tiktoken
+gradio
+mdtex2html
