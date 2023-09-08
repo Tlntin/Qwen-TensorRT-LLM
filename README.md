@@ -107,6 +107,7 @@ Output
 3. 支持`gpt_attention_plugin`与`gemm_plugin`两个plugin。
 4. 同时支持qwen base和chat模型
 5. 支持fp16 / int8 (weight only) / int4 (weight only), 理论上最低只需要8G消费级显卡就能运行。
+6. 支持在终端对话和使用gradio构建的网页应用中对话，支持流式输出。
 
 ### 开发与优化过程
 
