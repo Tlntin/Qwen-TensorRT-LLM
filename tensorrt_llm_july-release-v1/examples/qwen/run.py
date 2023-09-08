@@ -26,7 +26,6 @@ now_dir = os.path.dirname(os.path.abspath(__file__))
 
 # copy from tensorrt_llm/runtime/generation.py to debug
 class QWenForCausalLMGenerationSession(GenerationSession):
-
     def __setup_decoder(self, input_ids: torch.Tensor,
                         sampling_config: SamplingConfig,
                         input_lengths: torch.Tensor):
@@ -148,13 +147,15 @@ class QWenForCausalLMGenerationSession(GenerationSession):
                                     dtype=torch.bool,
                                     device=self.device)
 
-    def decode(self,
-               input_ids: torch.Tensor,
-               input_lengths: torch.Tensor,
-               sampling_config: SamplingConfig,
-               prompt_embedding_table: torch.Tensor = None,
-               tasks: torch.Tensor = None,
-               prompt_vocab_size: torch.Tensor = None):
+    def decode(
+        self,
+        input_ids: torch.Tensor,
+        input_lengths: torch.Tensor,
+        sampling_config: SamplingConfig,
+        prompt_embedding_table: torch.Tensor = None,
+        tasks: torch.Tensor = None,
+        prompt_vocab_size: torch.Tensor = None,
+    ):
         batch_size = input_lengths.size(0)
         max_input_length = torch.max(input_lengths).item()
         assert batch_size == self.batch_size, \
@@ -370,6 +371,238 @@ class QWenForCausalLMGenerationSession(GenerationSession):
                                             self.max_seq_length)
 
         return final_output_ids, self.max_new_tokens
+    
+    def steam_decode(
+        self,
+        input_ids: torch.Tensor,
+        input_lengths: torch.Tensor,
+        sampling_config: SamplingConfig,
+        prompt_embedding_table: torch.Tensor = None,
+        tasks: torch.Tensor = None,
+        prompt_vocab_size: torch.Tensor = None,
+    ):
+        batch_size = input_lengths.size(0)
+        max_input_length = torch.max(input_lengths).item()
+        assert batch_size == self.batch_size, \
+            "Given batch size is different from the one used in setup()," \
+            "rerun the setup function with the new batch size to avoid buffer overflow."
+        assert max_input_length == self.max_input_length, \
+            "Given input length is large then the one used in setup()," \
+            "rerun the setup function with the new max_input_length to avoid buffer overflow."
+        ite = 0  # index of local batches, will always be 0 if pp_size = 1
+        scfg = sampling_config
+
+        self.__setup_decoder(input_ids, scfg, input_lengths)
+        if not self.buffer_allocated:
+            raise RuntimeError('Buffer not allocated, please call setup first!')
+
+        sequence_limit_lengths = torch.full((batch_size, 1),
+                                            self.max_seq_length,
+                                            dtype=torch.int32,
+                                            device=self.device)
+        sequence_lengths = torch.full((batch_size * scfg.num_beams, 1),
+                                      max_input_length,
+                                      dtype=torch.int32,
+                                      device=self.device)
+        len_list = torch.arange(0,
+                                self.max_seq_length,
+                                dtype=torch.int32,
+                                device=self.device).unsqueeze(0).expand(
+                                    batch_size, -1)
+        mask = (len_list >= input_lengths.unsqueeze(1)) & (len_list <
+                                                           max_input_length)
+        masked_tokens = torch.zeros((batch_size, self.max_seq_length),
+                                    dtype=torch.int32,
+                                    device=self.device).masked_fill_(mask, 1)
+
+        cache_indirections = [
+            torch.full((
+                batch_size,
+                scfg.num_beams,
+                self.max_seq_length,
+            ),
+                       0,
+                       dtype=torch.int32,
+                       device=self.device),
+            torch.full((
+                batch_size,
+                scfg.num_beams,
+                self.max_seq_length,
+            ),
+                       0,
+                       dtype=torch.int32,
+                       device=self.device)
+        ]  # ping-pong buffers
+
+        if self.paged_kv_cache:
+            # Add sequences to the manager
+            for bi in range(batch_size):
+                generation_sequence = GenerationSequence(seq_idx=bi,
+                                                         batch_idx=bi)
+                self.kv_cache_manager.add_sequence(generation_sequence,
+                                                   input_ids.size(1))
+
+        kv_cache_block_pointers = []
+        # start context phase
+        for step in range(0, self.max_new_tokens):
+            if self.paged_kv_cache:
+                kv_cache_block_pointers = self.kv_cache_manager.get_pointer_arrays(
+                )
+
+            if step % 2:
+                context = self.runtime.context_0
+                this_src_cache_indirection = cache_indirections[1]
+                this_tgt_cache_indirection = cache_indirections[0]
+                next_src_cache_indirection = cache_indirections[0]
+            else:
+                context = self.runtime.context_1
+                this_src_cache_indirection = cache_indirections[0]
+                this_tgt_cache_indirection = cache_indirections[1]
+                next_src_cache_indirection = cache_indirections[1]
+
+            if step == 0:
+                model_inputs = self._prepare_context_inputs(
+                    batch_size=batch_size,
+                    input_lengths=input_lengths,
+                    use_gpt_attention_plugin=self.use_gpt_attention_plugin,
+                    remove_input_padding=self.remove_input_padding,
+                    max_input_length=max_input_length,
+                    input_ids=input_ids,
+                    pad_id=scfg.pad_id)
+
+                position_ids = model_inputs.get('position_ids')
+                last_token_ids = model_inputs.get('last_token_ids')
+                attention_mask = model_inputs.get('attention_mask', None)
+
+                ctx_shape, ctx_buffer = self._get_context_shape_buffer(
+                    input_ids, max_input_length, step, masked_tokens,
+                    input_lengths, position_ids, last_token_ids, attention_mask,
+                    this_src_cache_indirection, kv_cache_block_pointers,
+                    prompt_embedding_table, tasks, prompt_vocab_size)
+                self.runtime._set_shape(context, ctx_shape)
+                self.runtime._set_buffer(context, ctx_buffer)
+                if self.debug_mode:
+                    debug_buffer = ctx_buffer
+
+            # dynamic_decoder currently use torch's current stream, so must let TRT enqueue use same stream here
+            stream = torch.cuda.current_stream().cuda_stream
+            ok = self.runtime._run(context, stream)
+            if not ok:
+                raise RuntimeError('Executing TRT engine failed!')
+            if self.debug_mode:
+                torch.cuda.synchronize()
+                if step == 0:
+                    print(debug_buffer.keys())
+
+            if step == 0 and scfg.num_beams > 1:
+
+                if not self.use_gpt_attention_plugin:
+                    attention_mask = _tile_beam_width(attention_mask,
+                                                      scfg.num_beams)
+                input_lengths = _tile_beam_width(input_lengths, scfg.num_beams)
+                if self.use_gpt_attention_plugin:
+                    self.sequence_length_buffer = _tile_beam_width(
+                        self.sequence_length_buffer, scfg.num_beams)
+                masked_tokens = _tile_beam_width(masked_tokens, scfg.num_beams)
+
+                # Move tiling before logit computing of context
+                for key in self.buffer.keys():
+                    if "present_key_value" in key:
+                        self.buffer[key] = _tile_beam_width(
+                            self.buffer[key], scfg.num_beams)
+                self.buffer['logits'] = _tile_beam_width(
+                    self.buffer['logits'], scfg.num_beams)
+
+            if not step == self.max_new_tokens - 1:
+                # Set shape and address for the next step
+                model_inputs = self._prepare_generation_inputs(
+                    batch_size=batch_size,
+                    input_lengths=input_lengths,
+                    use_gpt_attention_plugin=self.use_gpt_attention_plugin,
+                    remove_input_padding=self.remove_input_padding,
+                    step=step,
+                    num_beams=scfg.num_beams,
+                    attention_mask=attention_mask,
+                )
+
+                position_ids = model_inputs.get('position_ids')
+                last_token_ids = model_inputs.get('last_token_ids')
+                attention_mask = model_inputs.get('attention_mask', None)
+
+                next_context = self.runtime.context_1 if step % 2 else self.runtime.context_0
+                next_step_shape, next_step_buffer = self._get_next_step_shape_buffer(
+                    batch_size, scfg.num_beams, max_input_length, step,
+                    masked_tokens, input_lengths, position_ids, last_token_ids,
+                    attention_mask, next_src_cache_indirection,
+                    kv_cache_block_pointers, prompt_embedding_table, tasks,
+                    prompt_vocab_size)
+                self.runtime._set_shape(next_context, next_step_shape)
+                self.runtime._set_buffer(next_context, next_step_buffer)
+                if self.debug_mode:
+                    self.debug_buffer = next_step_buffer
+
+            logits = self.buffer['logits']
+            if logits is not None:
+                # [batch_size x scft.num_beams, vocab_size_padded] -> [batch_size, scfg.num_beams, vocab_size_padded]
+                next_token_logits = logits.reshape(
+                    (batch_size, scfg.num_beams, -1)).to(torch.float32)
+                decode_step = step + max_input_length
+                should_stop = self.dynamic_decoder.forward(
+                    next_token_logits, decode_step, max_input_length, ite,
+                    batch_size, self.end_ids, self.top_k, self.top_p,
+                    self.temperature, self.repetition_penalty,
+                    self.presence_penalty, self.min_length, self.length_penalty,
+                    self.beam_search_diversity_rate, self.top_p_decay,
+                    self.top_p_min, self.top_p_reset_ids,
+                    self.embedding_bias_opt, input_lengths,
+                    sequence_limit_lengths, self.stop_words_list,
+                    self.bad_words_list, this_src_cache_indirection,
+                    self.output_ids, self.finished, sequence_lengths,
+                    self.cum_log_probs, self.log_probs, self.parent_ids,
+                    this_tgt_cache_indirection)
+
+                if should_stop.item():
+                    if self.paged_kv_cache:
+                        # Free all blocks in all sequences.
+                        # With in-flight batching and while loop we'll free some sequences, when they are done
+                        self.kv_cache_manager.step([True] * batch_size *
+                                                   scfg.num_beams)
+
+                    # output shape of self.gather_tree: [batch_size, beam_width, output_len]
+                    final_output_ids = self.gather_tree(
+                        sequence_lengths, self.output_ids, self.parent_ids,
+                        self.end_ids, input_lengths, batch_size, scfg.num_beams,
+                        max_input_length, self.max_seq_length)
+                    yield final_output_ids, step + 1
+                    break
+
+            if self.paged_kv_cache and step < self.max_new_tokens - 1:
+                # Iterate to the next step in KV cache manager.
+                # Increase number of tokens for all unfinished sequences.
+                # And allocate new blocks if needed.
+                # We set this to False for all sequences, since we use only length criterion to stop now
+                self.kv_cache_manager.step([False] * batch_size *
+                                           scfg.num_beams)
+            final_output_ids = self.gather_tree(
+                sequence_lengths, self.output_ids, self.parent_ids,
+                self.end_ids, input_lengths, batch_size, scfg.num_beams,
+                max_input_length, self.max_seq_length
+            )
+            yield final_output_ids, step + 1
+
+        if self.paged_kv_cache:
+            # Free all blocks in all sequences.
+            # With in-flight batching and while loop we'll free some sequences, when they are done
+            self.kv_cache_manager.step([True] * batch_size * scfg.num_beams)
+
+        # # output shape of self.gather_tree: [batch_size, beam_width, output_len]
+        # final_output_ids = self.gather_tree(sequence_lengths, self.output_ids,
+        #                                     self.parent_ids, self.end_ids,
+        #                                     input_lengths, batch_size,
+        #                                     scfg.num_beams, max_input_length,
+        #                                     self.max_seq_length)
+
+        # return final_output_ids, self.max_new_tokens
 
 
 def parse_arguments():
