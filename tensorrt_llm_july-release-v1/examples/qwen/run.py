@@ -10,15 +10,13 @@ import torch
 # from qwen_7b_chat.tokenization_qwen import QWenTokenizer as AutoTokenizer
 # for realease
 from transformers import AutoTokenizer
-
 import tensorrt_llm
-from typing import List
-from transformers import PreTrainedTokenizer
 from tensorrt_llm.runtime import (
     ModelConfig, SamplingConfig, GenerationSession, GenerationSequence,
 )
 from tensorrt_llm.runtime.generation import _tile_beam_width
 from build import get_engine_name  # isort:skip
+from utils.utils import make_context
 
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
@@ -603,6 +601,73 @@ class QWenForCausalLMGenerationSession(GenerationSession):
         #                                     self.max_seq_length)
 
         # return final_output_ids, self.max_new_tokens
+    
+    def chat(
+        self,
+        tokenizer,
+        sampling_config: SamplingConfig,
+        input_text: str,
+        history: list = None,
+        max_input_len: int = 2048,
+        max_output_len: int = 512,
+        runtime_rank: int = 0,
+    ):
+        if history is None:
+            history = []
+        _, input_id_list = make_context(
+            tokenizer=tokenizer,
+            query=input_text,
+            history=history,
+            max_input_length=max_input_len,
+        )
+        input_ids = torch.from_numpy(
+            np.array(input_id_list, dtype=np.int32)
+        ).type(torch.int32).unsqueeze(0).cuda()
+        input_lengths = torch.cuda.IntTensor([input_ids.size(1)])
+
+        max_input_length = torch.max(input_lengths).item()
+        self.setup(input_lengths.size(0), max_input_length, max_output_len)
+        output_ids, end_step = self.decode(input_ids, input_lengths, sampling_config)
+        torch.cuda.synchronize()
+        if runtime_rank == 0:
+            output_begin = max_input_length
+            output_end = max_input_length + end_step
+            outputs = output_ids[0][0][output_begin: output_end].tolist()
+            output_text = tokenizer.decode(outputs, skip_special_tokens=True)
+            return output_text
+
+    def chat_stream(
+        self,
+        tokenizer,
+        input_text: str,
+        sampling_config: SamplingConfig,
+        history: list = None,
+        max_input_len: int = 2048,
+        max_output_len: int = 512,
+        runtime_rank: int = 0,
+    ):
+        if history is None:
+            history = []
+        _, input_id_list = make_context(
+            tokenizer=tokenizer,
+            query=input_text,
+            history=history,
+            max_input_length=max_input_len,
+        )
+        input_ids = torch.from_numpy(
+            np.array(input_id_list, dtype=np.int32)
+        ).type(torch.int32).unsqueeze(0).cuda()
+        input_lengths = torch.cuda.IntTensor([input_ids.size(1)])
+        max_input_length = torch.max(input_lengths).item()
+        self.setup(input_lengths.size(0), max_input_length, max_output_len)
+        for (output_ids, end_step) in self.steam_decode(input_ids, input_lengths, sampling_config):
+            torch.cuda.synchronize()
+            if runtime_rank == 0:
+                output_begin = max_input_length
+                output_end = max_input_length + end_step
+                outputs = output_ids[0][0][output_begin: output_end].tolist()
+                output_text = tokenizer.decode(outputs, skip_special_tokens=True)
+                yield output_text
 
 
 def parse_arguments():
@@ -646,17 +711,8 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def generate(
-    max_output_len: int,
-    log_level: str = 'error',
-    engine_dir: str = 'llama_outputs',
-    input_text: str = 'Born in north-east France, Soyer trained as a',
-    input_file: str = None,
-    output_csv: str = None,
-    output_npy: str = None,
-    tokenizer_dir: str = None,
-    num_beams: int = 1,
-):
+def get_model(tokenizer_dir, engine_dir, log_level='error'):
+    # --load the tokenizer and engine #
     tensorrt_llm.logger.set_level(log_level)
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_dir,
@@ -705,12 +761,36 @@ def generate(
                                remove_input_padding=remove_input_padding)
     sampling_config = SamplingConfig(end_id=eos_token_id,
                                      pad_id=pad_token_id,
-                                     num_beams=num_beams,
+                                     num_beams=1,
                                      top_k = top_k,
                                      top_p = top_p,)
 
     engine_name = get_engine_name('qwen', dtype, world_size, runtime_rank)
     serialize_path = os.path.join(engine_dir, engine_name)
+    print(f'Loading engine from {serialize_path}')
+    return (
+        model_config, sampling_config, runtime_mapping, runtime_rank,
+        serialize_path, remove_input_padding, 
+        tokenizer, eos_token_id, pad_token_id
+    )
+
+
+def generate(
+    max_output_len: int,
+    log_level: str = 'error',
+    engine_dir: str = 'llama_outputs',
+    input_text: str = 'Born in north-east France, Soyer trained as a',
+    input_file: str = None,
+    output_csv: str = None,
+    output_npy: str = None,
+    tokenizer_dir: str = None,
+    num_beams: int = 1,
+):
+    (
+        model_config, sampling_config, runtime_mapping, runtime_rank,
+        serialize_path, remove_input_padding, 
+        tokenizer, eos_token_id, pad_token_id
+    ) = get_model(tokenizer_dir, engine_dir, log_level)
     print(f'Loading engine from {serialize_path}')
     with open(serialize_path, 'rb') as f:
         engine_buffer = f.read()

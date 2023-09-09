@@ -7,6 +7,7 @@ def make_context(
     query: str,
     history: List[Tuple[str, str]] = None,
     system: str = "",
+    max_input_length: int = 2048, # if you want to change this, you need to change the max_input_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
     max_window_size: int = 6144,
     chat_format: str = "chatml",
 ):
@@ -19,25 +20,37 @@ def make_context(
         im_end_tokens = [tokenizer.im_end_id]
         nl_tokens = tokenizer.encode("\n")
 
-        def _tokenize_str(role, content):
-            return f"{role}\n{content}", tokenizer.encode(
-                role, allowed_special=set()
-            ) + nl_tokens + tokenizer.encode(content, allowed_special=set())
+        def _tokenize_str(role, content, max_input_len=max_input_length - 4):
+            return (
+                f"{role}\n{content}",
+                tokenizer.encode(
+                    role,
+                    allowed_special=set(),
+                    padding_side='left',
+                    max_length=max_input_len,
+                    truncation=True,
+                ) + nl_tokens + tokenizer.encode(
+                    content,
+                    allowed_special=set(),
+                    padding_side='left', 
+                    max_length=max_input_len,
+                    truncation=True,
+                )
+            )
 
         system_text, system_tokens_part = _tokenize_str("system", system)
         system_tokens = im_start_tokens + system_tokens_part + im_end_tokens
-
         raw_text = ""
         context_tokens = []
 
         for turn_query, turn_response in reversed(history):
-            query_text, query_tokens_part = _tokenize_str("user", turn_query)
+            query_text, query_tokens_part = _tokenize_str("user", turn_query, max_input_len=max_input_length)
             query_tokens = im_start_tokens + query_tokens_part + im_end_tokens
+
             response_text, response_tokens_part = _tokenize_str(
-                "assistant", turn_response
+                "assistant", turn_response, max_input_len=max_input_length
             )
             response_tokens = im_start_tokens + response_tokens_part + im_end_tokens
-
             next_context_tokens = nl_tokens + query_tokens + nl_tokens + response_tokens
             prev_chat = (
                 f"\n{im_start}{query_text}{im_end}\n{im_start}{response_text}{im_end}"
@@ -68,11 +81,16 @@ def make_context(
 
     elif chat_format == "raw":
         raw_text = query
-        context_tokens = tokenizer.encode(raw_text)
+        context_tokens = tokenizer.encode(
+            raw_text,
+            padding_side='left', 
+            max_length=max_input_length, 
+            truncation=True,
+        )
     else:
         raise NotImplementedError(f"Unknown chat format {chat_format!r}")
 
-    return raw_text, context_tokens
+    return raw_text, context_tokens[-max_input_length: ]
   
 
 def _decode_chatml(
