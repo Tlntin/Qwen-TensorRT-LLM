@@ -10,3 +10,9 @@ evaluate
 # 用于跑web_demo
 gradio
 mdtex2html
+# 用于创建api, 支持流式输出
+sse_starlette
+# 用于请求api，支持异步请求
+aiohttp_sse_client
+# 用于跑兼容openai的api，支持异步请求和同步请求
+openai

@@ -6,7 +6,7 @@ def make_context(
     tokenizer: PreTrainedTokenizer,
     query: str,
     history: List[Tuple[str, str]] = None,
-    system: str = "",
+    system: str = "You are a helpful assistant.",
     max_input_length: int = 2048, # if you want to change this, you need to change the max_input_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
     max_window_size: int = 6144,
     chat_format: str = "chatml",

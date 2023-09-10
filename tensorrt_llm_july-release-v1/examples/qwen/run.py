@@ -607,6 +607,7 @@ class QWenForCausalLMGenerationSession(GenerationSession):
         tokenizer,
         sampling_config: SamplingConfig,
         input_text: str,
+        system_text: str = "You are a helpful assistant.",
         history: list = None,
         max_input_len: int = 2048,
         max_output_len: int = 512,
@@ -617,6 +618,7 @@ class QWenForCausalLMGenerationSession(GenerationSession):
         _, input_id_list = make_context(
             tokenizer=tokenizer,
             query=input_text,
+            system=system_text,
             history=history,
             max_input_length=max_input_len,
         )
@@ -639,8 +641,9 @@ class QWenForCausalLMGenerationSession(GenerationSession):
     def chat_stream(
         self,
         tokenizer,
-        input_text: str,
         sampling_config: SamplingConfig,
+        input_text: str,
+        system_text: str = "You are a helpful assistant.",
         history: list = None,
         max_input_len: int = 2048,
         max_output_len: int = 512,
@@ -652,6 +655,7 @@ class QWenForCausalLMGenerationSession(GenerationSession):
             tokenizer=tokenizer,
             query=input_text,
             history=history,
+            system=system_text,
             max_input_length=max_input_len,
         )
         input_ids = torch.from_numpy(
