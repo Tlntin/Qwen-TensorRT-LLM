@@ -102,7 +102,7 @@ Output
 - 至此，在trt-llm上支持qwen模型的基础工作已经做完
 
 ##### 开发中的亮点
-1. 完整支持原版的logn和ntk（这俩参数是用于增强模型长输出效果，这里的长输出指的是大于2048小于8192）。
+1. 完整支持原版的logn和ntk（这俩参数是用于增强模型长输入的生成效果，这里的长输入指的是输入长度大于2048小于8192）。
 2. 支持`RotaryEmbedding`，并且在input_len > 2048时开启ntk相关计算。
 3. 支持`gpt_attention_plugin`与`gemm_plugin`两个plugin。
 4. 同时支持qwen base和chat模型
