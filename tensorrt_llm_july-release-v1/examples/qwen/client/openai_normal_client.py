@@ -1,10 +1,8 @@
-import os
-os.environ["OPENAI_API_BASE"] = "http://localhost:8000/v1"
-os.environ["OPENAI_API_KEY"] = ""
-
 import openai
+openai.api_base = "http://localhost:8000/v1"
+openai.api_key = ""
+
  
-model_engine = "gpt-3.5-turbo"
 messages = [{"role": "system", "content": "You are a helpful assistant."}]
 print("欢迎使用Qwen聊天机器人，输入exit退出，输入clear清空历史记录")
 while True:
