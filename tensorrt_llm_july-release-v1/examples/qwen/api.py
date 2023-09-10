@@ -46,8 +46,8 @@ class Data(BaseModel):
     history: List[List[str]] = [],
     max_input_length: Optional[int] = 2048
     max_output_length: Optional[int] = 512
-    top_p: Optional[float] = 0.95
-    temperature: Optional[float] = 0.8
+    top_p: Optional[float] = 0.5
+    temperature: Optional[float] = 1.0
 
 
 @app.post("/chat/")
@@ -58,7 +58,7 @@ async def create_item(data: Data):
     max_input_length = min(data.max_input_length, 2048)
     max_output_length = min(data.max_output_length, 512)
     sampling_config.top_p = data.top_p 
-    sampling_config.top_k = data.temperature
+    sampling_config.temperature = data.temperature
     history = data.history
     response = decoder.chat(
         tokenizer=tokenizer,
@@ -97,7 +97,7 @@ async def stream_chat(request: Request):
     max_input_length = json_post_list.get("max_input_length", 2048)
     max_output_length = json_post_list.get("max_output_length", 512)
     sampling_config.top_p = json_post_list.get("top_p", 0.5)
-    sampling_config.top_k = json_post_list.get("temperature", 0)
+    sampling_config.temperature = json_post_list.get("temperature", 1)
     # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
     max_input_length = min(max_input_length, 2048)
     max_output_length = min(max_output_length, 512)
@@ -226,7 +226,7 @@ async def list_models():
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
 async def create_chat_completion(request: ChatCompletionRequest):
     sampling_config.top_p = request.top_p
-    sampling_config.top_k = request.temperature
+    sampling_config.temperature = request.temperature
     # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
     max_output_length = min(request.max_length, 512)
     if request.messages[-1].role != "user":
