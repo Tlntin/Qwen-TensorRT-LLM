@@ -22,4 +22,4 @@ while True:
         stream=False,
     )
     message = completion.choices[0].message
-    print('ChatBot：', message["content"])
+    print('ChatBot: {}'.format(message["content"]))

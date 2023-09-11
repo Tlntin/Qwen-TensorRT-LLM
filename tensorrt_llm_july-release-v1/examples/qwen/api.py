@@ -69,11 +69,11 @@ async def create_item(data: Data):
         max_input_len=max_input_length,
         max_output_len=max_output_length
     )
-    history += [(data.query, response)]
+    history += [(data.query, response[0])]
     now = datetime.datetime.now()
     time = now.strftime("%Y-%m-%d %H:%M:%S")
     answer = {
-        "response": response,
+        "response": response[0],
         "history": history,
         "status": 200,
         "time": time,
@@ -123,8 +123,8 @@ async def stream_chat(request: Request):
             # Checks for new messages and return them to client if any
             try:
                 temp_dict = {
-                    "response": response,
-                    "history": history + [(query, response)],
+                    "response": response[0],
+                    "history": history + [(query, response[0])],
                     "finish": False,
                 }
                 yield {
@@ -136,8 +136,8 @@ async def stream_chat(request: Request):
             except StopIteration:
                 await asyncio.sleep(STREAM_DELAY)
         temp_dict = {
-            "response": response,
-            "history": history + [(query, response)],
+            "response": response[0],
+            "history": history + [(query, response[0])],
             "finish": True,
         }
         yield {
@@ -270,7 +270,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
     )
     choice_data = ChatCompletionResponseChoice(
         index=0,
-        message=ChatMessage(role="assistant", content=response),
+        message=ChatMessage(role="assistant", content=response[0]),
         finish_reason="stop",
     )
 
@@ -307,7 +307,7 @@ async def predict(query: str, system: str, history: List[List[str]], model_id: s
     ):
         if len(response) == 0:
             continue
-        new_text = response[old_position:]
+        new_text = response[0][old_position:]
         choice_data = ChatCompletionResponseStreamChoice(
             index=0,
             delta=DeltaMessage(content=new_text),
@@ -321,7 +321,7 @@ async def predict(query: str, system: str, history: List[List[str]], model_id: s
         yield "{}".format(
             chunk.json(exclude_unset=True, ensure_ascii=False)
         )
-        old_position = len(response)
+        old_position = len(response[0])
 
     choice_data = ChatCompletionResponseStreamChoice(
         index=0, delta=DeltaMessage(), finish_reason="stop"

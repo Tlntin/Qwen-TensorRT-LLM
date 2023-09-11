@@ -17,7 +17,7 @@ import tensorrt_llm
 import tensorrt_llm.profiler as profiler
 from tensorrt_llm.logger import logger
 from run import QWenForCausalLMGenerationSession
-from utils.utils import make_context
+from utils.utils import make_context, get_stop_words_ids
 
 from build import get_engine_name  # isort:skip
 
@@ -226,14 +226,7 @@ def main(args):
             output_beams_list,
             output_ids[:, :, max_length: max_length + end_step].tolist()
         )
-    def get_stop_words_ids(chat_format, tokenizer):
-        if chat_format == "raw":
-            stop_words_ids = [tokenizer.encode("Human:"), [tokenizer.eod_id]]
-        elif chat_format == "chatml":
-            stop_words_ids = [[tokenizer.im_end_id], [tokenizer.im_start_id]]
-        else:
-            raise NotImplementedError(f"Unknown chat format {chat_format!r}")
-        return stop_words_ids
+    
 
     def summarize_hf(datapoint):
         batch_size = len(datapoint['article'])
@@ -440,8 +433,8 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--test_trt_llm',
-        action='store_true',
-        # default=True,
+        # action='store_true',
+        default=True,
     )
     parser.add_argument('--data_type',
                         type=str,

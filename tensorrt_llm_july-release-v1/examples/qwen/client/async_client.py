@@ -33,6 +33,7 @@ async def listen_sse(query, history=None, max_length=512, top_p=0.5, temperature
         headers = {'Content-Type': 'application/json'}
         response, history = None, None
         position = 0
+        print("Chatbox: ", end='', flush=True)
         async with sseclient.EventSource(url, json=data, headers=headers, session=session) as event_source:
             try:
                 async for event in event_source:
@@ -52,7 +53,7 @@ if __name__ == "__main__":
     history1 = []
     print("欢迎使用Qwen聊天机器人，输入exit退出，输入clear清空历史记录")
     while True:
-        query = input("Human:")
+        query = input("Human: ")
         if query == 'exit':
             break
         if query == 'clear':

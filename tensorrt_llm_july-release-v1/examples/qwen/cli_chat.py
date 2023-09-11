@@ -25,7 +25,7 @@ def parse_arguments():
     parser.add_argument(
         '--stream',
         type=bool,
-        default=True,
+        default=None,
         help="return text with stream")
     return parser.parse_args()
 
@@ -63,17 +63,18 @@ if __name__ == "__main__":
                 history=history,
                 max_output_len=args.max_output_len
             )
-            print(f'Output: {response}')
+            print(f'Output: {response[0]}')
         else:
             position = 0
-            for response, history in decoder.chat_stream(
+            print("Output: ", end='')
+            for response in decoder.chat_stream(
                 tokenizer=tokenizer,
                 sampling_config=sampling_config,
                 input_text=input_text,
                 history=history,
                 max_output_len=args.max_output_len
             ):
-                print(response[position:], end='', flush=True)
-                position = len(response)
+                print(response[0][position:], end='', flush=True)
+                position = len(response[0])
             print("")
-        history.append((input_text, response))
+        history.append((input_text, response[0]))

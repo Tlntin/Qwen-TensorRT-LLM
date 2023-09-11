@@ -20,21 +20,15 @@ def make_context(
         im_end_tokens = [tokenizer.im_end_id]
         nl_tokens = tokenizer.encode("\n")
 
-        def _tokenize_str(role, content, max_input_len=max_input_length - 4):
+        def _tokenize_str(role, content):
             return (
                 f"{role}\n{content}",
                 tokenizer.encode(
                     role,
                     allowed_special=set(),
-                    padding_side='left',
-                    max_length=max_input_len,
-                    truncation=True,
                 ) + nl_tokens + tokenizer.encode(
                     content,
                     allowed_special=set(),
-                    padding_side='left', 
-                    max_length=max_input_len,
-                    truncation=True,
                 )
             )
 
@@ -44,11 +38,11 @@ def make_context(
         context_tokens = []
 
         for turn_query, turn_response in reversed(history):
-            query_text, query_tokens_part = _tokenize_str("user", turn_query, max_input_len=max_input_length)
+            query_text, query_tokens_part = _tokenize_str("user", turn_query)
             query_tokens = im_start_tokens + query_tokens_part + im_end_tokens
 
             response_text, response_tokens_part = _tokenize_str(
-                "assistant", turn_response, max_input_len=max_input_length
+                "assistant", turn_response
             )
             response_tokens = im_start_tokens + response_tokens_part + im_end_tokens
             next_context_tokens = nl_tokens + query_tokens + nl_tokens + response_tokens
@@ -81,15 +75,10 @@ def make_context(
 
     elif chat_format == "raw":
         raw_text = query
-        context_tokens = tokenizer.encode(
-            raw_text,
-            padding_side='left', 
-            max_length=max_input_length, 
-            truncation=True,
-        )
+        context_tokens = tokenizer.encode(raw_text)
     else:
         raise NotImplementedError(f"Unknown chat format {chat_format!r}")
-
+    # truncate to max_input_length, truncate from the front
     return raw_text, context_tokens[-max_input_length: ]
   
 
@@ -126,3 +115,13 @@ def _decode_chatml(
         return trim_decode_tokens, end_reason
     else:
         return trim_decode_tokens
+
+
+def get_stop_words_ids(chat_format, tokenizer):
+    if chat_format == "raw":
+        stop_words_ids = [tokenizer.encode("Human:"), [tokenizer.eod_id]]
+    elif chat_format == "chatml":
+        stop_words_ids = [[tokenizer.im_end_id], [tokenizer.im_start_id]]
+    else:
+        raise NotImplementedError(f"Unknown chat format {chat_format!r}")
+    return stop_words_ids

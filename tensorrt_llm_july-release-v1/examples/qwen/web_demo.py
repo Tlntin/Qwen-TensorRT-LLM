@@ -1,10 +1,6 @@
-import torch
 import os
 import gradio as gr
 import mdtex2html
-import os
-import torch
-import numpy as np
 from run import QWenForCausalLMGenerationSession
 from run import get_model
 from cli_chat import parse_arguments
@@ -89,10 +85,8 @@ def predict(input_text, chatbot, max_input_length, max_generate_length, history)
         max_input_len=max_input_length,
         max_output_len=max_generate_length,
     ):
-        if response is None:
-            break
-        chatbot[-1] = (parse_text(input_text), parse_text(response))
-        history[-1] = (input_text, response)
+        chatbot[-1] = (parse_text(input_text), parse_text(response[0]))
+        history[-1] = (input_text, response[0])
         yield chatbot, history
 
 

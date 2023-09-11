@@ -2,7 +2,7 @@ import json
 import requests
 
 
-def chat(query, history=None, max_length=512, top_p=0.5, temperature=0):
+def chat(query, history=None,max_length=512, top_p=0.5, temperature=0):
     if history is None:
         history = []
     url = 'http://127.0.0.1:8000/chat/'
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     history1 = []
     print("欢迎使用Qwen聊天机器人，输入exit退出，输入clear清空历史记录")
     while True:
-        query = input("Human:")
+        query = input("Human: ")
         if query == 'exit':
             break
         if query == 'clear':

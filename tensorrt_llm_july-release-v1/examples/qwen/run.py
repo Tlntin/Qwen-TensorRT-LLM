@@ -3,7 +3,7 @@ import csv
 import json
 import os
 from pathlib import Path
-
+from typing import List, Union
 import numpy as np
 import torch
 # for debug
@@ -601,77 +601,141 @@ class QWenForCausalLMGenerationSession(GenerationSession):
         #                                     self.max_seq_length)
 
         # return final_output_ids, self.max_new_tokens
+    def prepare_for_chat(
+        self,
+        tokenizer,
+        input_text: Union[str, List[str]],
+        system_text: str = "You are a helpful assistant.",
+        history: list = None,
+        max_input_len: int = 2048,
+    ):
+        pad_id = tokenizer.im_end_id
+        if not isinstance(input_text, list):
+            batch_text = [input_text]
+        else:
+            batch_text = input_text
+        if history is None:
+            history = []
+        input_ids = []
+        input_lengths = []
+
+        for line in batch_text:
+            # use make_content to generate prompt
+            _, input_id_list = make_context(
+                tokenizer=tokenizer,
+                query=line,
+                history=history,
+                system=system_text,
+                max_input_length=max_input_len,
+            )
+            input_id = torch.from_numpy(
+                np.array(input_id_list, dtype=np.int32)
+            ).type(torch.int32).unsqueeze(0)
+            input_ids.append(input_id)
+            input_lengths.append(input_id.shape[-1])
+        max_length = max(input_lengths)
+        # do padding, should move outside the profiling to prevent the overhead
+        for i in range(len(input_ids)):
+            pad_size = max_length - input_lengths[i]
+
+            pad = torch.ones([1, pad_size]).type(torch.int32) * pad_id
+            input_ids[i] = torch.cat(
+                [torch.IntTensor(input_ids[i]), pad], axis=-1)
+        input_ids = torch.cat(input_ids, axis=0).cuda()
+        input_lengths = torch.IntTensor(input_lengths).type(torch.int32).cuda()
+        return input_ids, input_lengths
+    
+    def generate(
+        self,
+        input_ids: torch.Tensor,
+        input_lengths: torch.Tensor,
+        sampling_config: SamplingConfig,
+        max_output_len: int = 512,
+        runtime_rank: int = 0,
+    ):
+        max_input_length = torch.max(input_lengths).item()
+        # setup batch_size, max_input_length, max_output_len
+        self.setup(input_lengths.size(0), max_input_length, max_output_len)
+        output_ids, end_step = self.decode(
+            input_ids, input_lengths, sampling_config
+        )
+        with torch.no_grad():
+            torch.cuda.synchronize()
+            if runtime_rank == 0:
+                outputs = output_ids[:, 0, :max_input_length + end_step]
+                return outputs
     
     def chat(
         self,
         tokenizer,
         sampling_config: SamplingConfig,
-        input_text: str,
+        input_text: Union[str, List[str]],
         system_text: str = "You are a helpful assistant.",
         history: list = None,
         max_input_len: int = 2048,
         max_output_len: int = 512,
         runtime_rank: int = 0,
     ):
-        if history is None:
-            history = []
-        _, input_id_list = make_context(
+        input_ids, input_lengths = self.prepare_for_chat(
             tokenizer=tokenizer,
-            query=input_text,
-            system=system_text,
+            input_text=input_text,
+            system_text=system_text,
             history=history,
-            max_input_length=max_input_len,
+            max_input_len=max_input_len,
         )
-        input_ids = torch.from_numpy(
-            np.array(input_id_list, dtype=np.int32)
-        ).type(torch.int32).unsqueeze(0).cuda()
-        input_lengths = torch.cuda.IntTensor([input_ids.size(1)])
-
         max_input_length = torch.max(input_lengths).item()
+        # setup batch_size, max_input_length, max_output_len
         self.setup(input_lengths.size(0), max_input_length, max_output_len)
-        output_ids, end_step = self.decode(input_ids, input_lengths, sampling_config)
-        torch.cuda.synchronize()
-        if runtime_rank == 0:
-            output_begin = max_input_length
-            output_end = max_input_length + end_step
-            outputs = output_ids[0][0][output_begin: output_end].tolist()
-            output_text = tokenizer.decode(outputs, skip_special_tokens=True)
-            return output_text
+        output_ids, end_step = self.decode(
+            input_ids, input_lengths, sampling_config
+        )
+        with torch.no_grad():
+            torch.cuda.synchronize()
+            if runtime_rank == 0:
+                output_texts = [
+                    tokenizer.decode(
+                        output_ids[i, 0, input_lengths[i]: input_lengths[i] + end_step],
+                        skip_special_tokens=True
+                    )
+                    for i in range(output_ids.size(0))
+                ]
+                return output_texts
 
     def chat_stream(
         self,
         tokenizer,
         sampling_config: SamplingConfig,
-        input_text: str,
+        input_text: Union[str, List[str]],
         system_text: str = "You are a helpful assistant.",
         history: list = None,
         max_input_len: int = 2048,
         max_output_len: int = 512,
         runtime_rank: int = 0,
     ):
-        if history is None:
-            history = []
-        _, input_id_list = make_context(
+        input_ids, input_lengths = self.prepare_for_chat(
             tokenizer=tokenizer,
-            query=input_text,
+            input_text=input_text,
+            system_text=system_text,
             history=history,
-            system=system_text,
-            max_input_length=max_input_len,
+            max_input_len=max_input_len,
         )
-        input_ids = torch.from_numpy(
-            np.array(input_id_list, dtype=np.int32)
-        ).type(torch.int32).unsqueeze(0).cuda()
-        input_lengths = torch.cuda.IntTensor([input_ids.size(1)])
         max_input_length = torch.max(input_lengths).item()
+        # setup batch_size, max_input_length, max_output_len
         self.setup(input_lengths.size(0), max_input_length, max_output_len)
-        for (output_ids, end_step) in self.steam_decode(input_ids, input_lengths, sampling_config):
-            torch.cuda.synchronize()
-            if runtime_rank == 0:
-                output_begin = max_input_length
-                output_end = max_input_length + end_step
-                outputs = output_ids[0][0][output_begin: output_end].tolist()
-                output_text = tokenizer.decode(outputs, skip_special_tokens=True)
-                yield output_text
+        with torch.no_grad():
+            for (output_ids, end_step) in self.steam_decode(
+                input_ids, input_lengths, sampling_config
+            ):
+                torch.cuda.synchronize()
+                if runtime_rank == 0:
+                    output_texts = [
+                    tokenizer.decode(
+                        output_ids[i, 0, input_lengths[i]: input_lengths[i] + end_step],
+                            skip_special_tokens=True
+                        ) 
+                        for i in range(output_ids.size(0))
+                    ]
+                    yield output_texts
 
 
 def parse_arguments():
@@ -782,7 +846,7 @@ def get_model(tokenizer_dir, engine_dir, log_level='error'):
 def generate(
     max_output_len: int,
     log_level: str = 'error',
-    engine_dir: str = 'llama_outputs',
+    engine_dir: str = 'qwen_outputs',
     input_text: str = 'Born in north-east France, Soyer trained as a',
     input_file: str = None,
     output_csv: str = None,
