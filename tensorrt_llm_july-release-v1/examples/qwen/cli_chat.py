@@ -2,28 +2,24 @@ import os
 import argparse
 from run import get_model
 from run import QWenForCausalLMGenerationSession
-
+from args import args as raw_args
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
-    parser.add_argument('--max_input_len', type=int, default=1024)
-    # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
-    parser.add_argument('--max_output_len', type=int, default=2048)
-    parser.add_argument('--max_new_tokens', type=int, default=2048)
+    parser.add_argument('--max_new_tokens', type=int, default=raw_args.max_new_tokens)
     parser.add_argument('--log_level', type=str, default='error')
     parser.add_argument(
         '--engine_dir',
         type=str,
-        default=os.path.join(now_dir, 'trt_engines', 'fp16', '1-gpu')
+        default=raw_args.engine_dir,
     )
     parser.add_argument(
         '--tokenizer_dir',
         type=str,
-        default=os.path.join(now_dir, 'qwen_7b_chat'),
+        default=raw_args.tokenizer_dir,
         help="Directory containing the tokenizer.model."
     )
     parser.add_argument(
@@ -48,8 +44,6 @@ if __name__ == "__main__":
         model_config,
         engine_buffer,
         runtime_mapping,
-        max_input_length=args.max_input_len,
-        max_output_length=args.max_output_len,
     )
     history = []
     response = ''

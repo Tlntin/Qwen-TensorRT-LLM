@@ -19,6 +19,7 @@ while True:
         top_p=0.5,
         temperature=0,
         n=1,
+        max_tokens=4096,
         stream=False,
     )
     message = completion.choices[0].message

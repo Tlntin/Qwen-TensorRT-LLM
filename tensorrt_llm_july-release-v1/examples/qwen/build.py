@@ -5,15 +5,12 @@ import time
 import tensorrt as trt
 import torch
 import torch.multiprocessing as mp
-
 # for release runing
 from transformers import AutoConfig, AutoModelForCausalLM
 # for debug runing
 # from qwen_7b_chat.configuration_qwen import QWenConfig as AutoConfig
 # from qwen_7b_chat.modeling_qwen import QWenLMHeadModel as AutoModelForCausalLM
-
 from model import QWenForCausalLM as QWenForCausalLM_TRT
-
 import tensorrt_llm
 from tensorrt_llm._utils import str_dtype_to_trt
 from tensorrt_llm.builder import Builder
@@ -21,9 +18,9 @@ from tensorrt_llm.logger import logger
 from tensorrt_llm.models import weight_only_quantize
 from tensorrt_llm.network import net_guard
 from tensorrt_llm.quantization import QuantMode
-
 from weight import load_from_hf_qwen, load_from_ft
 from utils.quantization import smooth_quantize
+from args import args as raw_args
 
 
 MODEL_NAME = "qwen"
@@ -34,7 +31,6 @@ MODEL_NAME = "qwen"
 import onnx
 import tensorrt as trt
 from onnx import TensorProto, helper
-
 
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
@@ -120,12 +116,12 @@ def parse_arguments():
     parser.add_argument(
         '--hf_model_dir',
         type=str,
-        default=os.path.join(now_dir, "qwen_7b_chat")
+        default=raw_args.hf_model_dir,
     )
     parser.add_argument(
         '--ft_dir_path',
         type=str,
-        default=os.path.join(now_dir, "c-model", "qwen_7b_chat", "1-gpu")
+        default=raw_args.ft_dir_path,
     )
     parser.add_argument(
         '--dtype',
@@ -151,9 +147,9 @@ def parse_arguments():
     parser.add_argument('--ffn_dim_multiplier', type=int, default=1)
     parser.add_argument('--inter_size', type=int, default=11008)
     parser.add_argument('--hidden_act', type=str, default='silu')
-    parser.add_argument('--max_batch_size', type=int, default=2)
-    parser.add_argument('--max_input_len', type=int, default=1024)
-    parser.add_argument('--max_output_len', type=int, default=2048)
+    parser.add_argument('--max_batch_size', type=int, default=raw_args.trt_max_batch_size)
+    parser.add_argument('--max_input_len', type=int, default=raw_args.max_input_len)
+    parser.add_argument('--max_new_tokens', type=int, default=raw_args.max_new_tokens)
     parser.add_argument('--max_beam_width', type=int, default=1)
     parser.add_argument(
         '--use_gpt_attention_plugin',
@@ -181,7 +177,7 @@ def parse_arguments():
     parser.add_argument(
         '--output_dir',
         type=str,
-        default=os.path.join(now_dir, 'trt_engines', "fp16", "1-gpu"),
+        default=raw_args.engine_dir,
         help=
         'The path to save the serialized engine files, timing cache file and model configs'
     )
@@ -384,11 +380,11 @@ def build_rank_engine(builder: Builder,
 
         # Forward
         inputs = tensorrt_llm_qwen.prepare_inputs(
-            args.max_batch_size,
-            args.max_input_len,
-            args.max_output_len,
-            True,
-            args.max_beam_width
+            max_batch_size=args.max_batch_size,
+            max_input_len=args.max_input_len,
+            max_new_tokens=args.max_new_tokens,
+            use_cache=True,
+            max_beam_width=args.max_beam_width
         )
         tensorrt_llm_qwen(*inputs)
         if args.enable_debug_output:
@@ -442,7 +438,7 @@ def build(rank, args):
             max_position_embeddings=args.n_positions,
             max_batch_size=args.max_batch_size,
             max_input_len=args.max_input_len,
-            max_output_len=args.max_output_len,
+            max_output_len=args.max_new_tokens,
             int8=args.quant_mode.has_act_and_weight_quant(),
             opt_level=args.builder_opt,
             multi_query_mode=multi_query_mode)

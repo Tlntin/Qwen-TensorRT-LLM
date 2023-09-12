@@ -4,7 +4,7 @@ import mdtex2html
 from run import QWenForCausalLMGenerationSession
 from run import get_model
 from cli_chat import parse_arguments
-
+from args import args as raw_args
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -21,8 +21,6 @@ decoder = QWenForCausalLMGenerationSession(
     model_config,
     engine_buffer,
     runtime_mapping,
-    max_input_length=args.max_input_len,
-    max_output_length=args.max_output_len,
 )
 
 
@@ -113,8 +111,21 @@ with gr.Blocks() as demo:
                 submitBtn = gr.Button("Submit", variant="primary")
         with gr.Column(scale=1):
             emptyBtn = gr.Button("Clear History")
-            max_input_length = gr.Slider(0, 1024, value=1024, step=1.0, label="Maximum input length", interactive=True)
-            max_generate_length = gr.Slider(0, 2048, value=2048, step=1.0, label="Maximum generate length", interactive=True)
+            max_input_length = gr.Slider(
+                0,
+                raw_args.max_input_len,
+                value=raw_args.max_input_len // 2,
+                step=1.0,
+                label="Maximum input length",
+                interactive=True
+            )
+            max_generate_length = gr.Slider(
+                0,
+                raw_args.max_new_tokens,
+                value=raw_args.max_new_tokens // 2,
+                step=1.0,
+                label="Maximum generate length", interactive=True
+            )
 
     history = gr.State([])
 

@@ -13,8 +13,7 @@ from transformers import (
 from tqdm import tqdm, trange
 from run import get_model, QWenForCausalLMGenerationSession
 from utils.utils import make_context, get_stop_words_ids
-
-# from vllm import LLM, SamplingParams
+from args import args as raw_args
 
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
@@ -24,13 +23,13 @@ def sample_requests(
     tokenizer: PreTrainedTokenizerBase,
     dataset_path: str,
     num_requests: int,
-    max_input_len: int,
-    max_output_len: int,
     chat_format: str = "chatml",
 ) -> List[Tuple[str, int, int]]:
     # Load the dataset.
     with open(dataset_path) as f:
         dataset = json.load(f)
+    max_input_len = raw_args.max_input_len
+    max_output_len = raw_args.max_input_len + raw_args.max_new_tokens
     # Filter out the conversations with less than 2 turns.
     dataset = [
         data for data in dataset
@@ -57,21 +56,21 @@ def sample_requests(
             max_input_length=max_input_len,
             chat_format=chat_format
         ) 
-        output_len = len(tokenizer(output_text).input_ids)
-        tokenized_dataset.append((raw_text, prompt_tokens, output_len))
+        new_token_len = len(tokenizer(output_text).input_ids)
+        tokenized_dataset.append((raw_text, prompt_tokens, new_token_len))
 
     # Filter out too long sequences.
     filtered_dataset: List[Tuple[str, int, int]] = []
-    for prompt, prompt_token_ids, output_len in tokenized_dataset:
+    for prompt, prompt_token_ids, new_token_len in tokenized_dataset:
         prompt_len = len(prompt_token_ids)
-        if prompt_len < 4 or output_len < 4:
+        if prompt_len < 4 or new_token_len < 4:
             # Prune too short sequences.
             continue
-        if prompt_len > max_input_len or prompt_len + output_len > max_output_len:
+        if prompt_len > max_input_len or (prompt_len + new_token_len) > max_output_len:
             # Prune too long sequences.
             continue
         # limit by max_output_len 
-        filtered_dataset.append((prompt, prompt_len, output_len))
+        filtered_dataset.append((prompt, prompt_len, new_token_len))
 
     # Sample the requests.
     sampled_requests = random.sample(filtered_dataset, num_requests)
@@ -83,12 +82,16 @@ def run_trt_llm(
     engine_dir: str,
     tokenizer_dir: str,
     n: int,
-    top_p: float,
-    temperature: float,
     max_batch_size: int,
-    global_max_input_len: int,
-    global_max_output_len: int,
 ) -> float:
+    global_max_input_len = raw_args.max_input_len
+    global_max_output_len = raw_args.max_input_len + raw_args.max_new_tokens
+    if max_batch_size > raw_args.trt_max_batch_size:
+        raise Exception(
+            "max batch size {} must be lower than trt_max_batch_size {}".format(
+                max_batch_size, raw_args.trt_max_batch_size
+            )
+        )
     (
         model_config, sampling_config, runtime_mapping, runtime_rank,
         serialize_path, remove_input_padding, 
@@ -107,18 +110,19 @@ def run_trt_llm(
 
     # Add the requests to the engine.
     sampling_config.num_beams = n
-    sampling_config.temperature = 0.0 if n > 1 else temperature
-    sampling_config.top_p = top_p
+    sampling_config.temperature = 0.0 if n > 1 else raw_args.temperature
+    sampling_config.top_p = raw_args.top_p
+    sampling_config.top_k = raw_args.top_k
     start = time.time()
     pad_id = tokenizer.im_end_id
 
     batch: List[str] = []
-    max_output_len = 0
+    max_new_tokens = 0
     total_num_tokens = []
-    for i, (prompt, prompt_len, output_len) in tqdm(enumerate(requests), total=len(requests)):
+    for i, (prompt, prompt_len, new_token_len) in tqdm(enumerate(requests), total=len(requests)):
         # Add the prompt to the batch. 
         batch.append(prompt)
-        max_output_len = max(max_output_len, output_len)
+        max_new_tokens = max(max_new_tokens, new_token_len)
         if len(batch) < max_batch_size and i < len(requests) - 1:
             continue
         input_ids = []
@@ -148,7 +152,7 @@ def run_trt_llm(
             input_ids=input_ids,
             input_lengths=input_lengths,
             sampling_config=sampling_config,
-            max_new_tokens=min(max_output_len, global_max_output_len),
+            max_new_tokens=min(max_new_tokens, global_max_output_len - input_ids.shape[1]),
         )
         step_len = output_ids.shape[-1] - max_length
         pure_output_ids = [
@@ -172,10 +176,10 @@ def run_trt_llm(
             if not early_stop:
                 output_lengths.append(len(out_ids))
         assert len(output_lengths) == len(batch)
-        for input_len, output_len in zip(input_lengths, output_lengths):
-            total_num_tokens.append(input_len + output_len)
+        for input_len, new_token_len in zip(input_lengths, output_lengths):
+            total_num_tokens.append(input_len + new_token_len)
         batch = []
-        max_output_len = 0
+        max_new_tokens = 0
 
     end = time.time()
     during = end - start
@@ -188,14 +192,12 @@ def run_hf(
     model: str,
     tokenizer: PreTrainedTokenizerBase,
     n: int,
-    top_p: float,
-    temperature: float,
     # use_beam_search: bool,
     max_batch_size: int,
-    global_max_input_len: int,
-    global_max_output_len: int,
     chat_format: str = "chatml",
 ) -> float:
+    global_max_input_len = raw_args.max_input_len
+    global_max_output_len = raw_args.max_input_len + raw_args.max_new_tokens
     # assert not use_beam_search
     llm = AutoModelForCausalLM.from_pretrained(
         model,
@@ -219,22 +221,21 @@ def run_hf(
     batch: List[str] = []
     input_lengths: List[int] = []
     max_prompt_len = 0
-    max_output_len = 0
+    max_new_tokens = 0
     for i in range(len(requests)):
-        prompt, prompt_len, output_len = requests[i]
+        prompt, prompt_len, new_token_len = requests[i]
         # Add the prompt to the batch.
         batch.append(prompt)
         input_lengths.append(prompt_len)
         max_prompt_len = max(max_prompt_len, prompt_len)
-        max_output_len = max(max_output_len, output_len)
+        max_new_tokens = max(max_new_tokens, new_token_len)
         if len(batch) < max_batch_size and i != len(requests) - 1:
             # Check if we can add more requests to the batch.
             _, next_prompt_len, next_output_len = requests[i + 1]
             temp_input_max = max(max_prompt_len, next_prompt_len)
-            temp_output_max = max(max_output_len, next_output_len)
-            # Because trt-llm limits the maximum input and maximum output, hf needs to be consistent
+            temp_new_token_max = max(max_new_tokens, next_output_len)
             if temp_input_max <= global_max_input_len and \
-                (temp_input_max + temp_output_max) <= global_max_output_len:
+                (temp_input_max + temp_new_token_max) <= global_max_output_len:
                 continue
         # Generate the sequences.
         input_ids = tokenizer(
@@ -245,17 +246,18 @@ def run_hf(
             max_length=global_max_input_len,
         ).input_ids
 
-        # limit the max_output_len
-        max_output_len = min(max_output_len, global_max_output_len - input_ids.shape[1])
+        # limit the max_new_tokens
+        max_new_tokens = min(max_new_tokens, global_max_output_len - input_ids.shape[1])
         llm_outputs = llm.generate(
             input_ids=input_ids.cuda(),
             do_sample=True,
             stop_words_ids=stop_words_ids,
             num_return_sequences=n,
-            temperature=temperature,
-            top_p=top_p,
+            top_k=raw_args.top_k,
+            top_p=raw_args.top_p,
+            temperature=raw_args.temperature,
             use_cache=True,
-            max_new_tokens=max_output_len,
+            max_new_tokens=max_new_tokens,
         )
         pure_output_ids = llm_outputs[:, input_ids.shape[-1]:]
         # get the output text
@@ -273,15 +275,15 @@ def run_hf(
             if not early_stop:
                 output_lengths.append(len(out_ids))
         assert len(output_lengths) == len(batch)
-        for input_len, output_len in zip(input_lengths, output_lengths):
-            total_num_tokens.append(input_len + output_len)
+        for input_len, new_token_len in zip(input_lengths, output_lengths):
+            total_num_tokens.append(input_len + new_token_len)
         pbar.update(len(batch))
 
         # Clear the batch.
         batch = []
         input_lengths = []
         max_prompt_len = 0
-        max_output_len = 0
+        max_new_tokens = 0
     end = time.time()
     during = end - start
     sum_total_num_tokens = sum(total_num_tokens)
@@ -302,8 +304,6 @@ def main(args: argparse.Namespace):
         tokenizer=tokenizer,
         dataset_path=args.dataset,
         num_requests=args.num_prompts,
-        max_input_len=args.max_input_len,
-        max_output_len=args.max_output_len,
         chat_format=args.chat_format
     )
 
@@ -313,25 +313,17 @@ def main(args: argparse.Namespace):
             engine_dir=args.engine_dir,
             tokenizer_dir=args.tokenizer_dir,
             n=args.n,
-            top_p=args.top_p,
-            temperature=args.temperature,
             max_batch_size=args.trt_max_batch_size,
-            global_max_input_len=args.max_input_len,
-            global_max_output_len=args.max_output_len,
         )
     elif args.backend == "hf":
         # assert args.tensor_parallel_size == 1
         elapsed_time, total_num_tokens = run_hf(
             requests=requests,
-            model=args.hf_model,
+            model=args.hf_model_dir,
             tokenizer=tokenizer,
             n=args.n,
-            top_p=args.top_p,
-            temperature=args.temperature,
             # use_beam_search=args.use_beam_search,
             max_batch_size=args.hf_max_batch_size,
-            global_max_input_len=args.max_input_len,
-            global_max_output_len=args.max_output_len,
         )
     else:
         raise ValueError(f"Unknown backend: {args.backend}")
@@ -362,19 +354,19 @@ if __name__ == "__main__":
         help="Path to the dataset."
     )
     parser.add_argument(
-        "--hf_model",
+        "--hf_model_dir",
         type=str,
-        default=os.path.join(now_dir, "qwen_7b_chat")
-    )
-    parser.add_argument(
-        '--engine_dir',
-        type=str,
-        default=os.path.join(now_dir, "trt_engines", "fp16", "1-gpu")
+        default=raw_args.hf_model_dir,
     )
     parser.add_argument(
         "--tokenizer_dir",
         type=str,
-        default=os.path.join(now_dir, "qwen_7b_chat")
+        default=raw_args.tokenizer_dir,
+    )
+    parser.add_argument(
+        '--engine_dir',
+        type=str,
+        default=raw_args.engine_dir,
     )
     # parser.add_argument(
     #     "--tensor-parallel-size",
@@ -396,7 +388,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-prompts",
         type=int,
-        default=1000,
+        default=100,
         help="Number of prompts to process."
     )
     parser.add_argument(
@@ -405,14 +397,14 @@ if __name__ == "__main__":
         default=0
     )
     parser.add_argument(
-        "--hf-max-batch-size",
+        "--hf_max_batch_size",
         type=int,
         default=1,
         help="Maximum batch size for HF backend."
     )
 
     parser.add_argument(
-        "--trt-max-batch-size",
+        "--trt_max_batch_size",
         type=int,
         default=1,
         help="Maximum batch size for TRT-LLM backend."
@@ -420,44 +412,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--chat-format",
         type=str,
-        default="chatml",
+        default=raw_args.chat_format,
         choices=["chatml", "raw"],
         help="choice the model format, base or chat"
-    )
-    # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
-    parser.add_argument(
-        "--max_input_len",
-        type=int,
-        default=1024,
-        help="Maximum output length."
-    )
-    # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
-    parser.add_argument(
-        "--max_output_len",
-        type=int,
-        default=2048,
-        help="Maximum output length."
-    )
-    parser.add_argument(
-        "--top_p",
-        type=float,
-        default=0.5,
-        help="Top p for sampling."
-    )
-    parser.add_argument(
-        "--temperature",
-        type=float,
-        default=1.0,
-        help="Temperature for sampling."
     )
     args = parser.parse_args()
 
     if args.backend == "trt-llm":
-        if args.hf_max_batch_size is not None:
-            raise ValueError("HF max batch size is only for HF backend.")
+        if args.trt_max_batch_size is None:
+            raise ValueError("trt max batch size is requried for TRT-LLM backend.")
     elif args.backend == "hf":
         if args.hf_max_batch_size is None:
-            raise ValueError("HF max batch size is required for HF backend.")
+            raise ValueError("hf max batch size is required for HF backend.")
     if args.tokenizer_dir is None:
         args.tokenizer_dir = args.hf_model
 

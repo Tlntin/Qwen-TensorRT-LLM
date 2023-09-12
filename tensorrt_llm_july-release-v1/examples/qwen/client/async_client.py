@@ -1,6 +1,5 @@
 import asyncio
 import json
-
 import aiohttp_sse_client.client
 from aiohttp import ClientSession
 from aiohttp_sse_client import client as sseclient
@@ -18,7 +17,7 @@ async def handle_event(event: aiohttp_sse_client.client.MessageEvent, event_sour
     return data["response"], data["history"], event.type
 
 
-async def listen_sse(query, history=None, max_length=512, top_p=0.5, temperature=0):
+async def listen_sse(query, history=None, max_new_tokens=4096, top_p=0.5, temperature=0):
     if history is None:
         history = []
     async with ClientSession() as session:
@@ -26,7 +25,7 @@ async def listen_sse(query, history=None, max_length=512, top_p=0.5, temperature
         data = {
             "query": query,
             "history": history,
-            "max_length": max_length,
+            "max_new_tokens": max_new_tokens,
             "top_p": top_p,
             "temperature": temperature,
         }

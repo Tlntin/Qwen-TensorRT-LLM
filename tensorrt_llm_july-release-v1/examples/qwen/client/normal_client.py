@@ -2,14 +2,14 @@ import json
 import requests
 
 
-def chat(query, history=None,max_length=512, top_p=0.5, temperature=0):
+def chat(query, history=None,max_new_tokens=4096, top_p=0.5, temperature=0):
     if history is None:
         history = []
     url = 'http://127.0.0.1:8000/chat/'
     data = {
         "query": query,
         "history": history,
-        "max_length": max_length,
+        "max_new_tokens": max_new_tokens,
         "top_p": top_p,
         "temperature": temperature,
     }
@@ -39,5 +39,5 @@ if __name__ == "__main__":
             history1 = []
             continue
         response, history1 = chat(query, history1)
-        print("ChatBot:" + response)
+        print("ChatBot: {}".format(response))
         

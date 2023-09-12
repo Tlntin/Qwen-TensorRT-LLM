@@ -18,8 +18,8 @@ import tensorrt_llm.profiler as profiler
 from tensorrt_llm.logger import logger
 from run import QWenForCausalLMGenerationSession
 from utils.utils import make_context, get_stop_words_ids
-
 from build import get_engine_name  # isort:skip
+from args import args as raw_args
 
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
@@ -81,10 +81,10 @@ def main(args):
 
     test_hf = args.test_hf and runtime_rank == 0  # only run hf on rank 0
     test_trt_llm = args.test_trt_llm
-    hf_model_location = args.hf_model_location
+    hf_model_dir = args.hf_model_dir
     profiler.start('load tokenizer')
     tokenizer = AutoTokenizer.from_pretrained(
-        hf_model_location,
+        hf_model_dir,
         legacy=False,
         padding_side='left',
         trust_remote_code=True,
@@ -98,7 +98,7 @@ def main(args):
         "ccdv/cnn_dailymail",
         '3.0.0'
     )
-    gen_config_path = os.path.join(hf_model_location, 'generation_config.json')
+    gen_config_path = os.path.join(hf_model_dir, 'generation_config.json')
     with open(gen_config_path, 'r') as f:
         gen_config = json.load(f)
     chat_format = gen_config['chat_format']
@@ -107,13 +107,12 @@ def main(args):
 
     # runtime parameters
     # repetition_penalty = 1
-    top_p = args.top_p
-    temperature = args.temperature
+    top_p = raw_args.top_p
+    top_k = raw_args.top_k
+    temperature = raw_args.temperature
     max_new_tokens = args.max_new_tokens
-    max_input_len = args.max_input_len
-    max_output_len = args.max_output_len
-    # top_p = 0.0
-    # random_seed = 5
+    max_input_len = raw_args.max_input_len
+    max_output_len = raw_args.max_input_len + raw_args.max_new_tokens
     num_beams = args.num_beams
 
     # pad_id = tokenizer.encode(tokenizer.pad_token, add_special_tokens=False)[0]
@@ -132,12 +131,12 @@ def main(args):
     if test_hf:
         profiler.start('load HF model')
         model = AutoModelForCausalLM.from_pretrained(
-            hf_model_location,
+            hf_model_dir,
             device_map='auto',
             trust_remote_code=True,
         )
         model.generation_config = GenerationConfig.from_pretrained(
-            hf_model_location,
+            hf_model_dir,
             trust_remote_code=True
         )
         profiler.stop('load HF model')
@@ -195,6 +194,7 @@ def main(args):
         sampling_config = tensorrt_llm.runtime.SamplingConfig(
             end_id=end_id,
             pad_id=pad_id,
+            top_k=top_k,
             top_p=top_p,
             temperature=temperature,
             num_beams=num_beams
@@ -298,7 +298,9 @@ def main(args):
             output = model.generate(
                 line_encoded,
                 max_new_tokens=min(max_new_tokens, max_output_len - line_encoded.shape[-1]),
+                top_k=top_k,
                 top_p=top_p,
+                do_sample=True,
                 temperature=temperature,
                 stop_words_ids=stop_words_ids,
                 num_beams=num_beams,
@@ -348,8 +350,7 @@ def main(args):
 
     ite_count = 0
     data_point_idx = 0
-    while (data_point_idx < len(dataset_cnn['test'])) and (ite_count <
-                                                           args.max_ite):
+    while (data_point_idx < len(dataset_cnn['test'])) and (ite_count < args.max_ite):
         if runtime_rank == 0:
             logger.debug(
                 f"run data_point {data_point_idx} ~ {data_point_idx + max_batch_size}"
@@ -428,11 +429,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '--hf_model_location',
-        type=str,
-        default=os.path.join(now_dir, "qwen_7b_chat")
-    )
+    
     parser.add_argument(
         '--test_hf',
         action='store_true',
@@ -442,6 +439,16 @@ if __name__ == '__main__':
         '--test_trt_llm',
         action='store_true',
         # default=True,
+    )
+    parser.add_argument(
+        '--hf_model_dir',
+        type=str,
+        default=raw_args.hf_model_dir,
+    )
+    parser.add_argument(
+        '--engine_dir',
+        type=str,
+        default=raw_args.engine_dir,
     )
     parser.add_argument(
         '--data_type',
@@ -455,11 +462,6 @@ if __name__ == '__main__':
         default=""
     )
     parser.add_argument('--log_level', type=str, default='info')
-    parser.add_argument(
-        '--engine_dir',
-        type=str,
-        default=os.path.join(now_dir, "trt_engines", "fp16", "1-gpu")
-    )
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--max_ite', type=int, default=20)
     parser.add_argument('--check_accuracy', action='store_true')
@@ -467,27 +469,6 @@ if __name__ == '__main__':
                         type=float,
                         default=15.0)
     parser.add_argument('--num_beams', type=int, default=1)
-    parser.add_argument('--top_p', type=int, default=0.5)
-    parser.add_argument(
-        "--temperature",
-        type=float,
-        default=1.0,
-        help="Temperature for sampling."
-    )
-    # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
-    parser.add_argument(
-        "--max_input_len",
-        type=int,
-        default=1024,
-        help="Maximum output length."
-    )
-    # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
-    parser.add_argument(
-        "--max_output_len",
-        type=int,
-        default=2048,
-        help="Maximum output length."
-    )
     parser.add_argument(
         "--max_new_tokens",
         type=int,
