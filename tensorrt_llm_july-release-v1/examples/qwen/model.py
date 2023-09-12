@@ -232,7 +232,7 @@ class QWenAttention(Module):
         self.logn_tensor = Parameter(
             value=logn_array,
             dtype=self.dtype,
-            shape=[1, 32717, 1, 1],
+            shape=[1, 32767, 1, 1],
         )  
         # self.attn_dropout = nn.Dropout(config.attn_dropout_prob)
 
@@ -626,11 +626,6 @@ class RotaryEmbedding(Module):
         self.seq_length = seq_length
         self.base = base
         super().__init__()
-        # self.normal_embedding = Embedding(
-        #     dim,
-        #     self.head_size,
-        #     dtype=trt.float32
-        # )
         self.position_embedding_cos = Embedding(
             max_position_dim,
             per_head_dim,
@@ -662,11 +657,12 @@ class RotaryEmbedding(Module):
             ntk_alpha = pow(ntk_alpha, (self.per_head_dim / (self.per_head_dim - 2)))
             base = self.base * ntk_alpha
             inv_freq = pow(base, 
-                constant(np.arange(0, self.per_head_dim, 2, dtype=np.float32) / (2 - self.per_head_dim))
+                constant(np.arange(0, self.per_head_dim, 2, dtype=np.float32) / (- self.per_head_dim))
             )
             # temp_length = f_max(2 * input_len, 16)
-            seq = arange(constant(np.array(0, dtype=np.int32)), input_len * 2, dtype="trt.int32")
+            seq = arange(constant(np.array(0, dtype=np.int32)), input_len * 2, dtype="int32")
             freqs = outer(seq.cast(trt.float32), inv_freq)
+            freqs = outer(seq, inv_freq)
 
             emb = concat([freqs, freqs], dim=1)
             # emb = rearrange(emb, "n d -> 1 n 1 d")
