@@ -662,7 +662,6 @@ class RotaryEmbedding(Module):
             # temp_length = f_max(2 * input_len, 16)
             seq = arange(constant(np.array(0, dtype=np.int32)), input_len * 2, dtype="int32")
             freqs = outer(seq.cast(trt.float32), inv_freq)
-            freqs = outer(seq, inv_freq)
 
             emb = concat([freqs, freqs], dim=1)
             # emb = rearrange(emb, "n d -> 1 n 1 d")
