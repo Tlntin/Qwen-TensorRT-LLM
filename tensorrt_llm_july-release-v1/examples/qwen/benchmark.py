@@ -148,7 +148,7 @@ def run_trt_llm(
             input_ids=input_ids,
             input_lengths=input_lengths,
             sampling_config=sampling_config,
-            max_output_len=min(max_output_len, global_max_output_len),
+            max_new_tokens=min(max_output_len, global_max_output_len),
         )
         step_len = output_ids.shape[-1] - max_length
         pure_output_ids = [
@@ -428,14 +428,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max_input_len",
         type=int,
-        default=2048,
+        default=1024,
         help="Maximum output length."
     )
     # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
     parser.add_argument(
         "--max_output_len",
         type=int,
-        default=512,
+        default=2048,
         help="Maximum output length."
     )
     parser.add_argument(

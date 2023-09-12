@@ -14,7 +14,7 @@ import tensorrt_llm
 from tensorrt_llm.runtime import (
     ModelConfig, SamplingConfig, GenerationSession, GenerationSequence,
 )
-from tensorrt_llm.runtime.generation import _tile_beam_width
+from tensorrt_llm.runtime.generation import _tile_beam_width, Mapping
 from build import get_engine_name  # isort:skip
 from utils.utils import make_context
 
@@ -24,6 +24,19 @@ now_dir = os.path.dirname(os.path.abspath(__file__))
 
 # copy from tensorrt_llm/runtime/generation.py to debug
 class QWenForCausalLMGenerationSession(GenerationSession):
+    def __init__(
+            self,
+            model_config: ModelConfig,
+            engine_buffer,
+            mapping: Mapping,
+            max_input_length,
+            max_output_length,
+            debug_mode=False,
+        ):
+        super().__init__(model_config, engine_buffer, mapping, debug_mode)
+        self.max_input_length = max_input_length
+        self.max_output_length = max_output_length
+
     def __setup_decoder(self, input_ids: torch.Tensor,
                         sampling_config: SamplingConfig,
                         input_lengths: torch.Tensor):
@@ -607,26 +620,36 @@ class QWenForCausalLMGenerationSession(GenerationSession):
         input_text: Union[str, List[str]],
         system_text: str = "You are a helpful assistant.",
         history: list = None,
-        max_input_len: int = 2048,
+        max_input_length: Union[int, None] = None,
     ):
+        if max_input_length is None:
+            max_input_length = self.max_input_length
+        if history is None:
+            history = []
         pad_id = tokenizer.im_end_id
+        # prepare for batch inference
         if not isinstance(input_text, list):
             batch_text = [input_text]
         else:
             batch_text = input_text
-        if history is None:
-            history = []
+        if len(history) > 0 and len(history[0]) and len(history[0][0]) > 0 \
+                and not isinstance(history[0][0], list):
+            history_list = [history]
+        elif len(history) == 0:
+            history_list = [[]]
+        else:
+            history_list = history
         input_ids = []
         input_lengths = []
 
-        for line in batch_text:
+        for line, history in zip(batch_text, history_list):
             # use make_content to generate prompt
             _, input_id_list = make_context(
                 tokenizer=tokenizer,
                 query=line,
                 history=history,
                 system=system_text,
-                max_input_length=max_input_len,
+                max_input_length=max_input_length,
             )
             input_id = torch.from_numpy(
                 np.array(input_id_list, dtype=np.int32)
@@ -650,12 +673,16 @@ class QWenForCausalLMGenerationSession(GenerationSession):
         input_ids: torch.Tensor,
         input_lengths: torch.Tensor,
         sampling_config: SamplingConfig,
-        max_output_len: int = 512,
+        max_new_tokens: int,
         runtime_rank: int = 0,
     ):
         max_input_length = torch.max(input_lengths).item()
         # setup batch_size, max_input_length, max_output_len
-        self.setup(input_lengths.size(0), max_input_length, max_output_len)
+        self.setup(
+            batch_size=input_lengths.size(0),
+            max_input_length=max_input_length,
+            max_new_tokens=max_new_tokens
+        )
         output_ids, end_step = self.decode(
             input_ids, input_lengths, sampling_config
         )
@@ -672,20 +699,30 @@ class QWenForCausalLMGenerationSession(GenerationSession):
         input_text: Union[str, List[str]],
         system_text: str = "You are a helpful assistant.",
         history: list = None,
-        max_input_len: int = 2048,
-        max_output_len: int = 512,
+        max_input_length: Union[int, None] = None,
+        max_new_tokens: Union[int, None] = None,
         runtime_rank: int = 0,
     ):
+        if max_input_length is None:
+            max_input_length = self.max_input_length
+        max_input_length = min(max_input_length, self.max_input_length)
         input_ids, input_lengths = self.prepare_for_chat(
             tokenizer=tokenizer,
             input_text=input_text,
             system_text=system_text,
             history=history,
-            max_input_len=max_input_len,
+            max_input_length=max_input_length,
         )
         max_input_length = torch.max(input_lengths).item()
+        if max_new_tokens is None:
+            max_new_tokens = self.max_output_length - max_input_length
+        max_new_tokens = min(max_new_tokens, self.max_output_length - max_input_length)
         # setup batch_size, max_input_length, max_output_len
-        self.setup(input_lengths.size(0), max_input_length, max_output_len)
+        self.setup(
+            batch_size=input_lengths.size(0),
+            max_input_length=max_input_length,
+            max_new_tokens=max_new_tokens
+        )
         output_ids, end_step = self.decode(
             input_ids, input_lengths, sampling_config
         )
@@ -708,20 +745,30 @@ class QWenForCausalLMGenerationSession(GenerationSession):
         input_text: Union[str, List[str]],
         system_text: str = "You are a helpful assistant.",
         history: list = None,
-        max_input_len: int = 2048,
-        max_output_len: int = 512,
+        max_input_length: Union[int, None] = None,
+        max_new_tokens: Union[int, None] = None,
         runtime_rank: int = 0,
     ):
+        if max_input_length is None:
+            max_input_length = self.max_input_length
+        max_input_length = min(max_input_length, self.max_input_length)
         input_ids, input_lengths = self.prepare_for_chat(
             tokenizer=tokenizer,
             input_text=input_text,
             system_text=system_text,
             history=history,
-            max_input_len=max_input_len,
+            max_input_length=max_input_length,
         )
         max_input_length = torch.max(input_lengths).item()
         # setup batch_size, max_input_length, max_output_len
-        self.setup(input_lengths.size(0), max_input_length, max_output_len)
+        if max_new_tokens is None:
+            max_new_tokens = self.max_output_length - max_input_length
+        max_new_tokens = min(max_new_tokens, self.max_output_length - max_input_length)
+        self.setup(
+            batch_size=input_lengths.size(0),
+            max_input_length=max_input_length,
+            max_new_tokens=max_new_tokens
+        )
         with torch.no_grad():
             for (output_ids, end_step) in self.steam_decode(
                 input_ids, input_lengths, sampling_config
@@ -740,23 +787,30 @@ class QWenForCausalLMGenerationSession(GenerationSession):
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max_output_len', type=int, default=50)
+    # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
+    parser.add_argument('--max_input_len', type=int, default=1024)
+    # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
+    parser.add_argument('--max_output_len', type=int, default=2048)
+    parser.add_argument('--max_new_tokens', type=int, default=200)
     parser.add_argument('--log_level', type=str, default='error')
     parser.add_argument(
         '--engine_dir',
         type=str,
         default=os.path.join(now_dir, 'trt_engines', 'fp16', '1-gpu')
     )
-    parser.add_argument('--tokenizer_dir',
-                        type=str,
-                        default=os.path.join(now_dir, 'qwen_7b_chat'),
-                        help="Directory containing the tokenizer.model.")
+    parser.add_argument(
+        '--tokenizer_dir',
+        type=str,
+        default=os.path.join(now_dir, 'qwen_7b_chat'),
+        help="Directory containing the tokenizer.model."
+    )
     default_text = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n你好，请问你叫什么？<|im_end|>\n<|im_start|>assistant\n"
-    parser.add_argument('--input_text',
-                        type=str,
-                        # default='Born in north-east France, Soyer trained as a'
-                        default=default_text
-                        )
+    parser.add_argument(
+        '--input_text',
+        type=str,
+        # default='Born in north-east France, Soyer trained as a'
+        default=default_text
+    )
     parser.add_argument(
         '--input_tokens',
         dest='input_file',
@@ -764,18 +818,24 @@ def parse_arguments():
         help=
         'CSV or Numpy file containing tokenized input. Alternative to text input.',
         default=None)
-    parser.add_argument('--output_csv',
-                        type=str,
-                        help='CSV file where the tokenized output is stored.',
-                        default=None)
-    parser.add_argument('--output_npy',
-                        type=str,
-                        help='Numpy file where the tokenized output is stored.',
-                        default=None)
-    parser.add_argument('--num_beams',
-                        type=int,
-                        help="Use beam search if num_beams >1",
-                        default=1)
+    parser.add_argument(
+        '--output_csv',
+        type=str,
+        help='CSV file where the tokenized output is stored.',
+        default=None
+    )
+    parser.add_argument(
+        '--output_npy',
+        type=str,
+        help='Numpy file where the tokenized output is stored.',
+        default=None
+    )
+    parser.add_argument(
+        '--num_beams',
+        type=int,
+        help="Use beam search if num_beams >1",
+        default=1
+    )
     return parser.parse_args()
 
 
@@ -844,7 +904,9 @@ def get_model(tokenizer_dir, engine_dir, log_level='error'):
 
 
 def generate(
+    max_input_len: int,
     max_output_len: int,
+    max_new_tokens: int,
     log_level: str = 'error',
     engine_dir: str = 'qwen_outputs',
     input_text: str = 'Born in north-east France, Soyer trained as a',
@@ -865,7 +927,9 @@ def generate(
     decoder = QWenForCausalLMGenerationSession(
         model_config,
         engine_buffer,
-        runtime_mapping
+        runtime_mapping,
+        max_input_length=max_input_len,
+        max_output_length=max_output_len,
     )
 
     input_tokens = []
@@ -903,7 +967,12 @@ def generate(
                 eos_token_id).cuda()
 
     max_input_length = torch.max(input_lengths).item()
-    decoder.setup(input_lengths.size(0), max_input_length, max_output_len)
+    max_new_tokens = min(max_new_tokens, max_output_len - max_input_length)
+    decoder.setup(
+        batch_size=input_lengths.size(0),
+        max_input_length=max_input_length,
+        max_new_tokens=max_new_tokens
+    )
 
     output_ids, end_step = decoder.decode(input_ids, input_lengths, sampling_config)
     torch.cuda.synchronize()

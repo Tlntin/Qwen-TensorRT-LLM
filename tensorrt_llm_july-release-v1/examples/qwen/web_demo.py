@@ -20,7 +20,9 @@ with open(serialize_path, 'rb') as f:
 decoder = QWenForCausalLMGenerationSession(
     model_config,
     engine_buffer,
-    runtime_mapping
+    runtime_mapping,
+    max_input_length=args.max_input_len,
+    max_output_length=args.max_output_len,
 )
 
 
@@ -82,8 +84,8 @@ def predict(input_text, chatbot, max_input_length, max_generate_length, history)
         sampling_config=sampling_config,
         input_text=input_text,
         history=history,
-        max_input_len=max_input_length,
-        max_output_len=max_generate_length,
+        max_input_length=max_input_length,
+        max_new_tokens=max_generate_length,
     ):
         chatbot[-1] = (parse_text(input_text), parse_text(response[0]))
         history[-1] = (input_text, response[0])
@@ -111,8 +113,8 @@ with gr.Blocks() as demo:
                 submitBtn = gr.Button("Submit", variant="primary")
         with gr.Column(scale=1):
             emptyBtn = gr.Button("Clear History")
-            max_input_length = gr.Slider(0, 2048, value=2048, step=1.0, label="Maximum input length", interactive=True)
-            max_generate_length = gr.Slider(0, 512, value=512, step=1.0, label="Maximum generate length", interactive=True)
+            max_input_length = gr.Slider(0, 1024, value=1024, step=1.0, label="Maximum input length", interactive=True)
+            max_generate_length = gr.Slider(0, 2048, value=2048, step=1.0, label="Maximum generate length", interactive=True)
 
     history = gr.State([])
 

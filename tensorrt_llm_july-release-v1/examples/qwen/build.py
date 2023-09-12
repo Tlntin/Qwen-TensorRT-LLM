@@ -127,10 +127,12 @@ def parse_arguments():
         type=str,
         default=os.path.join(now_dir, "c-model", "qwen_7b_chat", "1-gpu")
     )
-    parser.add_argument('--dtype',
-                        type=str,
-                        default='float16',
-                        choices=['float32', 'bfloat16', 'float16'])
+    parser.add_argument(
+        '--dtype',
+        type=str,
+        default='float16',
+        choices=['float32', 'bfloat16', 'float16']
+    )
     parser.add_argument(
         '--timing_cache',
         type=str,
@@ -150,8 +152,8 @@ def parse_arguments():
     parser.add_argument('--inter_size', type=int, default=11008)
     parser.add_argument('--hidden_act', type=str, default='silu')
     parser.add_argument('--max_batch_size', type=int, default=2)
-    parser.add_argument('--max_input_len', type=int, default=2048)
-    parser.add_argument('--max_output_len', type=int, default=512)
+    parser.add_argument('--max_input_len', type=int, default=1024)
+    parser.add_argument('--max_output_len', type=int, default=2048)
     parser.add_argument('--max_beam_width', type=int, default=1)
     parser.add_argument(
         '--use_gpt_attention_plugin',

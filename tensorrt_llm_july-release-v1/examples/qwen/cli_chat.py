@@ -9,7 +9,11 @@ now_dir = os.path.dirname(os.path.abspath(__file__))
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max_output_len', type=int, default=200)
+    # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
+    parser.add_argument('--max_input_len', type=int, default=1024)
+    # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
+    parser.add_argument('--max_output_len', type=int, default=2048)
+    parser.add_argument('--max_new_tokens', type=int, default=2048)
     parser.add_argument('--log_level', type=str, default='error')
     parser.add_argument(
         '--engine_dir',
@@ -25,7 +29,7 @@ def parse_arguments():
     parser.add_argument(
         '--stream',
         type=bool,
-        default=None,
+        default=True,
         help="return text with stream")
     return parser.parse_args()
 
@@ -43,7 +47,9 @@ if __name__ == "__main__":
     decoder = QWenForCausalLMGenerationSession(
         model_config,
         engine_buffer,
-        runtime_mapping
+        runtime_mapping,
+        max_input_length=args.max_input_len,
+        max_output_length=args.max_output_len,
     )
     history = []
     response = ''
@@ -61,7 +67,7 @@ if __name__ == "__main__":
                 sampling_config=sampling_config,
                 input_text=input_text, 
                 history=history,
-                max_output_len=args.max_output_len
+                max_new_tokens=args.max_new_tokens,
             )
             print(f'Output: {response[0]}')
         else:
@@ -72,7 +78,7 @@ if __name__ == "__main__":
                 sampling_config=sampling_config,
                 input_text=input_text,
                 history=history,
-                max_output_len=args.max_output_len
+                max_new_tokens=args.max_new_tokens,
             ):
                 print(response[0][position:], end='', flush=True)
                 position = len(response[0])

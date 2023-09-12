@@ -31,7 +31,9 @@ with open(serialize_path, 'rb') as f:
 decoder = QWenForCausalLMGenerationSession(
     model_config,
     engine_buffer,
-    runtime_mapping
+    runtime_mapping,
+    max_input_length=args.max_input_len,
+    max_output_length=args.max_output_len,
 )
 
 
@@ -44,8 +46,8 @@ class Data(BaseModel):
     query: str
     system: str = "You are a helpful assistant."
     history: List[List[str]] = [],
-    max_input_length: Optional[int] = 2048
-    max_output_length: Optional[int] = 512
+    max_input_length: Optional[int] = 1024
+    max_output_length: Optional[int] = 2048
     top_p: Optional[float] = 0.5
     temperature: Optional[float] = 1.0
 
@@ -55,8 +57,8 @@ async def create_item(data: Data):
     if not isinstance(data.query, str) or len(data.query) == 0:
         return HTTPException(status_code=400, detail="Invalid request")
     # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
-    max_input_length = min(data.max_input_length, 2048)
-    max_output_length = min(data.max_output_length, 512)
+    max_input_length = min(data.max_input_length, 1024)
+    max_output_length = min(data.max_output_length, 2048)
     sampling_config.top_p = data.top_p 
     sampling_config.temperature = data.temperature
     history = data.history
@@ -66,8 +68,8 @@ async def create_item(data: Data):
         input_text=data.query,
         system_text=data.system,
         history=history,
-        max_input_len=max_input_length,
-        max_output_len=max_output_length
+        max_input_length=max_input_length,
+        max_new_tokens=max_output_length
     )
     history += [(data.query, response[0])]
     now = datetime.datetime.now()
@@ -94,13 +96,13 @@ async def stream_chat(request: Request):
         return HTTPException(status_code=400, detail="Invalid request")
     system = json_post_list.get("system", "You are a helpful assistant.")
     history = json_post_list.get("history", [])
-    max_input_length = json_post_list.get("max_input_length", 2048)
-    max_output_length = json_post_list.get("max_output_length", 512)
+    max_input_length = json_post_list.get("max_input_length", 1024)
+    max_output_length = json_post_list.get("max_output_length", 2048)
     sampling_config.top_p = json_post_list.get("top_p", 0.5)
     sampling_config.temperature = json_post_list.get("temperature", 1)
     # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
-    max_input_length = min(max_input_length, 2048)
-    max_output_length = min(max_output_length, 512)
+    max_input_length = min(max_input_length, 1024)
+    max_output_length = min(max_output_length, 2048)
     STREAM_DELAY = 1  # second
     RETRY_TIMEOUT = 15000  # milisecond
 
@@ -114,8 +116,8 @@ async def stream_chat(request: Request):
             input_text=query,
             system_text=system,
             history=history,
-            max_input_len=max_input_length,
-            max_output_len=max_output_length
+            max_input_length=max_input_length,
+            max_new_tokens=max_output_length
         ):
             # If client closes connection, stop sending events
             if await request.is_disconnected():
@@ -186,7 +188,7 @@ class ChatCompletionRequest(BaseModel):
     messages: List[ChatMessage]
     temperature: Optional[float] = 0
     top_p: Optional[float] = 0.5
-    max_length: Optional[int] = 512
+    max_tokens: Optional[int] = 2048
     stream: Optional[bool] = False
 
 
@@ -228,7 +230,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
     sampling_config.top_p = request.top_p
     sampling_config.temperature = request.temperature
     # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
-    max_output_length = min(request.max_length, 512)
+    max_new_tokens = min(request.max_tokens, 2048)
     if request.messages[-1].role != "user":
         raise HTTPException(status_code=400, detail="Invalid request")
     query = request.messages[-1].content
@@ -254,7 +256,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
                 )
 
     if request.stream:
-        generate = predict(query, system, history, request.model)
+        generate = predict(query, system, history, max_new_tokens, request.model)
         return EventSourceResponse(
             generate, media_type="text/event-stream"
         )
@@ -266,7 +268,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
         input_text=query_text,
         system_text=system,
         history=history,
-        max_output_len=max_output_length,
+        max_new_tokens=max_new_tokens,
     )
     choice_data = ChatCompletionResponseChoice(
         index=0,
@@ -281,7 +283,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
     )
 
 
-async def predict(query: str, system: str, history: List[List[str]], model_id: str):
+async def predict(query: str, system: str, history: List[List[str]], max_new_tokens,  model_id: str):
 
     choice_data = ChatCompletionResponseStreamChoice(
         index=0,
@@ -304,6 +306,7 @@ async def predict(query: str, system: str, history: List[List[str]], model_id: s
         input_text=query,
         system_text=system,
         history=history,
+        max_new_tokens=max_new_tokens,
     ):
         if len(response) == 0:
             continue

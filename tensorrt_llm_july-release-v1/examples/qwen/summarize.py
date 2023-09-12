@@ -107,12 +107,13 @@ def main(args):
 
     # runtime parameters
     # repetition_penalty = 1
-    top_k = args.top_k
-    output_len = 100
-    test_token_num = 923
+    top_p = args.top_p
+    temperature = args.temperature
+    max_new_tokens = args.max_new_tokens
+    max_input_len = args.max_input_len
+    max_output_len = args.max_output_len
     # top_p = 0.0
     # random_seed = 5
-    temperature = 1
     num_beams = args.num_beams
 
     # pad_id = tokenizer.encode(tokenizer.pad_token, add_special_tokens=False)[0]
@@ -164,11 +165,12 @@ def main(args):
                 query=line[i],
                 history=[],
                 system=system_prompt,
+                max_input_length=max_input_len,
             )
             input_id = torch.from_numpy(
                 np.array(input_id_list, dtype=np.int32)
             ).type(torch.int32).unsqueeze(0)
-            input_id = input_id[:, -test_token_num:]
+            # input_id = input_id[:, -max_input_len:]
 
             line_encoded.append(input_id)
             input_lengths.append(input_id.shape[-1])
@@ -191,12 +193,19 @@ def main(args):
                 torch.int32).cuda()
 
         sampling_config = tensorrt_llm.runtime.SamplingConfig(
-            end_id=end_id, pad_id=pad_id, top_k=top_k, num_beams=num_beams)
+            end_id=end_id,
+            pad_id=pad_id,
+            top_p=top_p,
+            temperature=temperature,
+            num_beams=num_beams
+        )
 
         with torch.no_grad():
-            tensorrt_llm_qwen.setup(batch_size,
-                                     max_input_length=max_length,
-                                     max_new_tokens=output_len)
+            tensorrt_llm_qwen.setup(
+                batch_size,
+                max_input_length=max_length,
+                max_new_tokens=min(max_new_tokens, max_output_len - max_length),
+            )
 
             if tensorrt_llm_qwen.remove_input_padding:
                 output_ids, end_step = tensorrt_llm_qwen.decode_batch(
@@ -251,7 +260,8 @@ def main(args):
                     query=line[i],
                     history=[],
                     system=system_prompt,
-                    chat_format=chat_format
+                    chat_format=chat_format,
+                    max_input_length=max_input_len
                 )
                 new_line_list.append(raw_text)
             line_encoded = tokenizer(
@@ -270,39 +280,36 @@ def main(args):
                 query=line[0],
                 history=[],
                 system=system_prompt,
-                chat_format=chat_format
+                chat_format=chat_format,
+                max_input_length=max_input_len
             )
             line_encoded = torch.from_numpy(
                 np.array(input_id_list, dtype=np.int32)
             ).type(torch.int32).unsqueeze(0)
 
-        line_encoded = line_encoded[:, -test_token_num:]
+        # line_encoded = line_encoded[:, -max_input_len:]
         line_encoded = line_encoded.cuda()
 
         stop_words_ids=[]
         stop_words_ids.extend(get_stop_words_ids(
             chat_format, tokenizer
         ))
-
         with torch.no_grad():
             output = model.generate(
                 line_encoded,
-                max_new_tokens=len(line_encoded[0]) + output_len,
-                top_k=top_k,
+                max_new_tokens=min(max_new_tokens, max_output_len - line_encoded.shape[-1]),
+                top_p=top_p,
                 temperature=temperature,
-                # eos_token_id=tokenizer.im_end_id,
-                # pad_token_id=tokenizer.im_end_id,
                 stop_words_ids=stop_words_ids,
                 num_beams=num_beams,
                 num_return_sequences=num_beams,
                 early_stopping=True
             )
-
-        tokens_list = output[:, len(line_encoded[0]): len(line_encoded[0]) + output_len].tolist()
+        tokens_list = output[:, line_encoded.shape[-1]: ].tolist()
         output = output.reshape([batch_size, num_beams, -1])
         output_lines_list = [
             tokenizer.batch_decode(
-                output[:, i, len(line_encoded[0]): len(line_encoded[0]) + output_len],
+                output[:, i, line_encoded.shape[-1]: ],
                 skip_special_tokens=True
             )
             for i in range(num_beams)
@@ -433,13 +440,15 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--test_trt_llm',
-        # action='store_true',
-        default=True,
+        action='store_true',
+        # default=True,
     )
-    parser.add_argument('--data_type',
-                        type=str,
-                        choices=['fp32', 'fp16'],
-                        default='fp16')
+    parser.add_argument(
+        '--data_type',
+        type=str,
+        choices=['fp32', 'fp16'],
+        default='fp16'
+    )
     parser.add_argument(
         '--dataset_path',
         type=str,
@@ -458,8 +467,33 @@ if __name__ == '__main__':
                         type=float,
                         default=15.0)
     parser.add_argument('--num_beams', type=int, default=1)
-    parser.add_argument('--top_k', type=int, default=1)
-
+    parser.add_argument('--top_p', type=int, default=0.5)
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="Temperature for sampling."
+    )
+    # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
+    parser.add_argument(
+        "--max_input_len",
+        type=int,
+        default=1024,
+        help="Maximum output length."
+    )
+    # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
+    parser.add_argument(
+        "--max_output_len",
+        type=int,
+        default=2048,
+        help="Maximum output length."
+    )
+    parser.add_argument(
+        "--max_new_tokens",
+        type=int,
+        default=100,
+        help="Maximum number of new tokens to generate."
+    )
     args = parser.parse_args()
 
     main(args)
