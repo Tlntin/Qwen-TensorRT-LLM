@@ -34,7 +34,7 @@ parser.add_argument(
 parser.add_argument(
     "--trt_max_batch_size",
     type=int,
-    default=1,
+    default=2,
     help="Maximum batch size for TRT-LLM backend."
 )
 parser.add_argument(
@@ -47,13 +47,13 @@ parser.add_argument(
 parser.add_argument(
     "--max_input_len",
     type=int,
-    default=4096,
+    default=2048,
     help="Maximum input length."
 )
 parser.add_argument(
     "--max_new_tokens",
     type=int,
-    default=4096,
+    default=2048,
     help="Maximum number of generate new tokens."
 )
 
