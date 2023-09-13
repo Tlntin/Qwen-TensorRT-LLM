@@ -5,8 +5,7 @@ import os
 
 import numpy as np
 import torch
-from datasets import load_dataset
-from evaluate import load
+from datasets import load_dataset, load_metric
 from transformers import AutoModelForCausalLM, GenerationConfig
 # for debug
 # from qwen_7b_chat.tokenization_qwen import QWenTokenizer as AutoTokenizer
@@ -19,7 +18,7 @@ from tensorrt_llm.logger import logger
 from run import QWenForCausalLMGenerationSession
 from utils.utils import make_context, get_stop_words_ids
 from build import get_engine_name  # isort:skip
-from args import args as raw_args
+from default_config import default_config
 
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
@@ -79,12 +78,17 @@ def main(args):
     runtime_rank = tensorrt_llm.mpi_rank()
     logger.set_level(args.log_level)
 
-    test_hf = args.test_hf and runtime_rank == 0  # only run hf on rank 0
-    test_trt_llm = args.test_trt_llm
-    hf_model_dir = args.hf_model_dir
+    test_trt_llm = False
+    test_hf = False
+    if args.backend == 'trt_llm':
+        test_trt_llm = True
+    elif args.backend == "hf":
+        test_hf = runtime_rank == 0  # only run hf on rank 0
+    else:
+        raise Exception ("unkown backend, only support trt_llm and hf.")
     profiler.start('load tokenizer')
     tokenizer = AutoTokenizer.from_pretrained(
-        hf_model_dir,
+        args.tokenizer_dir,
         legacy=False,
         padding_side='left',
         trust_remote_code=True,
@@ -98,7 +102,7 @@ def main(args):
         "ccdv/cnn_dailymail",
         '3.0.0'
     )
-    gen_config_path = os.path.join(hf_model_dir, 'generation_config.json')
+    gen_config_path = os.path.join(args.tokenizer_dir, 'generation_config.json')
     with open(gen_config_path, 'r') as f:
         gen_config = json.load(f)
     chat_format = gen_config['chat_format']
@@ -107,12 +111,12 @@ def main(args):
 
     # runtime parameters
     # repetition_penalty = 1
-    top_p = raw_args.top_p
-    top_k = raw_args.top_k
-    temperature = raw_args.temperature
+    top_p = default_config.top_p
+    top_k = default_config.top_k
+    temperature = default_config.temperature
     max_new_tokens = args.max_new_tokens
-    max_input_len = raw_args.max_input_len
-    max_output_len = raw_args.max_input_len + raw_args.max_new_tokens
+    max_input_len = default_config.max_input_len
+    max_output_len = default_config.max_input_len + default_config.max_new_tokens
     num_beams = args.num_beams
 
     # pad_id = tokenizer.encode(tokenizer.pad_token, add_special_tokens=False)[0]
@@ -131,12 +135,12 @@ def main(args):
     if test_hf:
         profiler.start('load HF model')
         model = AutoModelForCausalLM.from_pretrained(
-            hf_model_dir,
+            args.hf_model_dir,
             device_map='auto',
             trust_remote_code=True,
         )
         model.generation_config = GenerationConfig.from_pretrained(
-            hf_model_dir,
+            args.hf_model_dir,
             trust_remote_code=True
         )
         profiler.stop('load HF model')
@@ -342,8 +346,10 @@ def main(args):
         logger.info(f"\n Summary : {summary}")
         logger.info("---------------------------------------------------------")
 
-    metric_tensorrt_llm = [load("rouge") for _ in range(num_beams)]
-    metric_hf = [load("rouge") for _ in range(num_beams)]
+    print("load rouge ...")
+    metric_tensorrt_llm = [load_metric("rouge") for _ in range(num_beams)]
+    metric_hf = [load_metric("rouge") for _ in range(num_beams)]
+    print("load rouge done")
     for i in range(num_beams):
         metric_tensorrt_llm[i].seed = 0
         metric_hf[i].seed = 0
@@ -408,7 +414,7 @@ def main(args):
                     beam_idx].compute()
                 for key in computed_metrics_tensorrt_llm.keys():
                     logger.info(
-                        f'  {key} : {computed_metrics_tensorrt_llm[key] * 100}'
+                        f'  {key} : {computed_metrics_tensorrt_llm[key].mid[2]*100}'
                     )
 
                 if args.check_accuracy and beam_idx == 0:
@@ -423,7 +429,7 @@ def main(args):
                 computed_metrics_hf = metric_hf[beam_idx].compute()
                 for key in computed_metrics_hf.keys():
                     logger.info(
-                        f'{key} : {computed_metrics_hf[key] * 100}'
+                        f'  {key} : {computed_metrics_hf[key].mid[2]*100}'
                     )
 
 
@@ -431,24 +437,25 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     
     parser.add_argument(
-        '--test_hf',
-        action='store_true',
-        # default=True,
-    )
-    parser.add_argument(
-        '--test_trt_llm',
-        action='store_true',
-        # default=True,
+        "--backend",
+        type=str,
+        choices=["trt_llm", "hf"],
+        default="hf",
     )
     parser.add_argument(
         '--hf_model_dir',
         type=str,
-        default=raw_args.hf_model_dir,
+        default=default_config.hf_model_dir,
+    )
+    parser.add_argument(
+        "--tokenizer_dir",
+        type=str,
+        default=default_config.tokenizer_dir,
     )
     parser.add_argument(
         '--engine_dir',
         type=str,
-        default=raw_args.engine_dir,
+        default=default_config.engine_dir,
     )
     parser.add_argument(
         '--data_type',

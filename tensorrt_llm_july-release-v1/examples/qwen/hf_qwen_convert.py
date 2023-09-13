@@ -15,7 +15,6 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM  # transformers-4.10.0-py3
 from transformers import AutoTokenizer
 # for debug
-from qwen_7b_chat.modeling_qwen import QWenBlock
 from utils.convert import split_and_save_weight
 from tensorrt_llm._utils import str_dtype_to_torch, torch_to_numpy
 

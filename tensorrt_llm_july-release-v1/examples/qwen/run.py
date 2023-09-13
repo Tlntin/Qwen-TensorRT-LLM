@@ -17,8 +17,7 @@ from tensorrt_llm.runtime import (
 from tensorrt_llm.runtime.generation import _tile_beam_width, Mapping
 from build import get_engine_name  # isort:skip
 from utils.utils import make_context
-from args import args as raw_args
-
+from default_config import default_config
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -30,8 +29,8 @@ class QWenForCausalLMGenerationSession(GenerationSession):
             model_config: ModelConfig,
             engine_buffer,
             mapping: Mapping,
-            global_max_input_length=raw_args.max_input_len,
-            global_max_output_length=raw_args.max_input_len + raw_args.max_new_tokens,
+            global_max_input_length=default_config.max_input_len,
+            global_max_output_length=default_config.max_input_len + default_config.max_new_tokens,
             debug_mode=False,
         ):
         super().__init__(model_config, engine_buffer, mapping, debug_mode)
@@ -802,12 +801,12 @@ def parse_arguments():
     parser.add_argument(
         '--engine_dir',
         type=str,
-        default=raw_args.engine_dir,
+        default=default_config.engine_dir,
     )
     parser.add_argument(
         '--tokenizer_dir',
         type=str,
-        default=raw_args.tokenizer_dir,
+        default=default_config.tokenizer_dir,
         help="Directory containing the tokenizer.model."
     )
     default_text = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n你好，请问你叫什么？<|im_end|>\n<|im_start|>assistant\n"
@@ -973,9 +972,9 @@ def generate(
                 eos_token_id).cuda()
 
     max_input_length = torch.max(input_lengths).item()
-    max_new_tokens = max(
+    max_new_tokens = min(
         max_new_tokens,
-        raw_args.max_input_len + raw_args.max_new_tokens - max_input_length
+        default_config.max_input_len + default_config.max_new_tokens - max_input_length
     )
     decoder.setup(
         batch_size=input_lengths.size(0),

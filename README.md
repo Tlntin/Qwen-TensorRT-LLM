@@ -125,21 +125,21 @@ Output
 这一部分介绍你的工作在云主机上的运行效果。如果是优化模型，需要分两部分说明：
 1. 精度
 - 报告与原始模型进行精度对比测试的结果，验证精度达标（abs(rouge_diff) < 1）。
-- 注：`datasets.load_metric("rouge")`已提示废弃，将由`evaluate.load("rouge")`代替
 - 测试平台：NVIDIA A10 | TensorRT 9.0.0.1
+- 最大输入长度：2048， 最大新增长度：2048，beam=batch=1
 - 测试结果（该结果由`tensorrt_llm_july-release-v1/examples/qwen/summarize.py`生成）：
 ```bash
-Hugging Face (dtype: bf16 | total latency: 134.0561056137085 sec)
-  rouge1 : 26.98400945199415
-  rouge2 : 8.362191635355105
-  rougeL : 18.64579951191403
-  rougeLsum : 20.76437573207235
+HuggingFace (dtype: bf16 | total latency: 99.70530200004578 sec)
+  rouge1 : 28.219357100978343
+  rouge2 : 9.369007098940832
+  rougeL : 19.198723845033232
+  rougeLsum : 22.37342869203733
 
-TensorRT-LLM (dtype: fp16 | total latency: 68.62463283538818 sec)
-  rouge1 : 26.98400945199415
-  rouge2 : 8.362191635355105
-  rougeL : 18.64579951191403
-  rougeLsum : 20.76437573207235
+TensorRT-LLM (dtype: fp16 | total latency: 73.86007595062256 sec)
+  rouge1 : 28.24200534394352
+  rouge2 : 9.385498589891833
+  rougeL : 19.22414575248309
+  rougeLsum : 22.408209721264484
 
 TensorRT-LLM (dtype: int8 (weight only) | total latency: 42.23632740974426 sec)
   rouge1 : 26.98263929036846

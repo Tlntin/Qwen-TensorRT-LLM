@@ -2,24 +2,24 @@ import os
 import argparse
 from run import get_model
 from run import QWenForCausalLMGenerationSession
-from args import args as raw_args
+from default_config import default_config
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max_new_tokens', type=int, default=raw_args.max_new_tokens)
+    parser.add_argument('--max_new_tokens', type=int, default=default_config.max_new_tokens)
     parser.add_argument('--log_level', type=str, default='error')
     parser.add_argument(
         '--engine_dir',
         type=str,
-        default=raw_args.engine_dir,
+        default=default_config.engine_dir,
     )
     parser.add_argument(
         '--tokenizer_dir',
         type=str,
-        default=raw_args.tokenizer_dir,
+        default=default_config.tokenizer_dir,
         help="Directory containing the tokenizer.model."
     )
     parser.add_argument(

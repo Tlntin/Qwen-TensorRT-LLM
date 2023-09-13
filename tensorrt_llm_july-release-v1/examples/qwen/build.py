@@ -20,7 +20,7 @@ from tensorrt_llm.network import net_guard
 from tensorrt_llm.quantization import QuantMode
 from weight import load_from_hf_qwen, load_from_ft
 from utils.quantization import smooth_quantize
-from args import args as raw_args
+from default_config import default_config
 
 
 MODEL_NAME = "qwen"
@@ -116,12 +116,12 @@ def parse_arguments():
     parser.add_argument(
         '--hf_model_dir',
         type=str,
-        default=raw_args.hf_model_dir,
+        default=default_config.hf_model_dir,
     )
     parser.add_argument(
         '--ft_dir_path',
         type=str,
-        default=raw_args.ft_dir_path,
+        default=default_config.ft_dir_path,
     )
     parser.add_argument(
         '--dtype',
@@ -147,9 +147,9 @@ def parse_arguments():
     parser.add_argument('--ffn_dim_multiplier', type=int, default=1)
     parser.add_argument('--inter_size', type=int, default=11008)
     parser.add_argument('--hidden_act', type=str, default='silu')
-    parser.add_argument('--max_batch_size', type=int, default=raw_args.trt_max_batch_size)
-    parser.add_argument('--max_input_len', type=int, default=raw_args.max_input_len)
-    parser.add_argument('--max_new_tokens', type=int, default=raw_args.max_new_tokens)
+    parser.add_argument('--max_batch_size', type=int, default=default_config.trt_max_batch_size)
+    parser.add_argument('--max_input_len', type=int, default=default_config.max_input_len)
+    parser.add_argument('--max_new_tokens', type=int, default=default_config.max_new_tokens)
     parser.add_argument('--max_beam_width', type=int, default=1)
     parser.add_argument(
         '--use_gpt_attention_plugin',
@@ -177,7 +177,7 @@ def parse_arguments():
     parser.add_argument(
         '--output_dir',
         type=str,
-        default=raw_args.engine_dir,
+        default=default_config.engine_dir,
         help=
         'The path to save the serialized engine files, timing cache file and model configs'
     )

@@ -4,7 +4,7 @@ import mdtex2html
 from run import QWenForCausalLMGenerationSession
 from run import get_model
 from cli_chat import parse_arguments
-from args import args as raw_args
+from default_config import default_config
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -113,16 +113,16 @@ with gr.Blocks() as demo:
             emptyBtn = gr.Button("Clear History")
             max_input_length = gr.Slider(
                 0,
-                raw_args.max_input_len,
-                value=raw_args.max_input_len // 2,
+                default_config.max_input_len,
+                value=default_config.max_input_len // 2,
                 step=1.0,
                 label="Maximum input length",
                 interactive=True
             )
             max_generate_length = gr.Slider(
                 0,
-                raw_args.max_new_tokens,
-                value=raw_args.max_new_tokens // 2,
+                default_config.max_new_tokens,
+                value=default_config.max_new_tokens // 2,
                 step=1.0,
                 label="Maximum generate length", interactive=True
             )

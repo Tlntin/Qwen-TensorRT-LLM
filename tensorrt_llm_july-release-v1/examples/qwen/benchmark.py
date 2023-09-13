@@ -13,7 +13,7 @@ from transformers import (
 from tqdm import tqdm, trange
 from run import get_model, QWenForCausalLMGenerationSession
 from utils.utils import make_context, get_stop_words_ids
-from args import args as raw_args
+from default_config import default_config
 
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
@@ -28,8 +28,8 @@ def sample_requests(
     # Load the dataset.
     with open(dataset_path) as f:
         dataset = json.load(f)
-    max_input_len = raw_args.max_input_len
-    max_output_len = raw_args.max_input_len + raw_args.max_new_tokens
+    max_input_len = default_config.max_input_len
+    max_output_len = default_config.max_input_len + default_config.max_new_tokens
     # Filter out the conversations with less than 2 turns.
     dataset = [
         data for data in dataset
@@ -84,12 +84,12 @@ def run_trt_llm(
     n: int,
     max_batch_size: int,
 ) -> float:
-    global_max_input_len = raw_args.max_input_len
-    global_max_output_len = raw_args.max_input_len + raw_args.max_new_tokens
-    if max_batch_size > raw_args.trt_max_batch_size:
+    global_max_input_len = default_config.max_input_len
+    global_max_output_len = default_config.max_input_len + default_config.max_new_tokens
+    if max_batch_size > default_config.trt_max_batch_size:
         raise Exception(
             "max batch size {} must be lower than trt_max_batch_size {}".format(
-                max_batch_size, raw_args.trt_max_batch_size
+                max_batch_size, default_config.trt_max_batch_size
             )
         )
     (
@@ -110,9 +110,9 @@ def run_trt_llm(
 
     # Add the requests to the engine.
     sampling_config.num_beams = n
-    sampling_config.temperature = 0.0 if n > 1 else raw_args.temperature
-    sampling_config.top_p = raw_args.top_p
-    sampling_config.top_k = raw_args.top_k
+    sampling_config.temperature = 0.0 if n > 1 else default_config.temperature
+    sampling_config.top_p = default_config.top_p
+    sampling_config.top_k = default_config.top_k
     start = time.time()
     pad_id = tokenizer.im_end_id
 
@@ -196,8 +196,8 @@ def run_hf(
     max_batch_size: int,
     chat_format: str = "chatml",
 ) -> float:
-    global_max_input_len = raw_args.max_input_len
-    global_max_output_len = raw_args.max_input_len + raw_args.max_new_tokens
+    global_max_input_len = default_config.max_input_len
+    global_max_output_len = default_config.max_input_len + default_config.max_new_tokens
     # assert not use_beam_search
     llm = AutoModelForCausalLM.from_pretrained(
         model,
@@ -253,9 +253,9 @@ def run_hf(
             do_sample=True,
             stop_words_ids=stop_words_ids,
             num_return_sequences=n,
-            top_k=raw_args.top_k,
-            top_p=raw_args.top_p,
-            temperature=raw_args.temperature,
+            top_k=default_config.top_k,
+            top_p=default_config.top_p,
+            temperature=default_config.temperature,
             use_cache=True,
             max_new_tokens=max_new_tokens,
         )
@@ -356,17 +356,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--hf_model_dir",
         type=str,
-        default=raw_args.hf_model_dir,
+        default=default_config.hf_model_dir,
     )
     parser.add_argument(
         "--tokenizer_dir",
         type=str,
-        default=raw_args.tokenizer_dir,
+        default=default_config.tokenizer_dir,
     )
     parser.add_argument(
         '--engine_dir',
         type=str,
-        default=raw_args.engine_dir,
+        default=default_config.engine_dir,
     )
     # parser.add_argument(
     #     "--tensor-parallel-size",
@@ -412,7 +412,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--chat-format",
         type=str,
-        default=raw_args.chat_format,
+        default=default_config.chat_format,
         choices=["chatml", "raw"],
         help="choice the model format, base or chat"
     )

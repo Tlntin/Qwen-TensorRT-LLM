@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 from run import get_model, QWenForCausalLMGenerationSession
 from cli_chat import parse_arguments
-from args import args as raw_args
+from default_config import default_config
 
 
 app = FastAPI()
@@ -45,10 +45,10 @@ class Data(BaseModel):
     query: str
     system: str = "You are a helpful assistant."
     history: List[List[str]] = [],
-    max_input_length: Optional[int] = raw_args.max_input_len
-    max_new_tokens: Optional[int] = raw_args.max_new_tokens
-    top_p: Optional[float] = raw_args.top_p
-    temperature: Optional[float] = raw_args.temperature
+    max_input_length: Optional[int] = default_config.max_input_len
+    max_new_tokens: Optional[int] = default_config.max_new_tokens
+    top_p: Optional[float] = default_config.top_p
+    temperature: Optional[float] = default_config.temperature
 
 
 @app.post("/chat/")
@@ -56,8 +56,8 @@ async def create_item(data: Data):
     if not isinstance(data.query, str) or len(data.query) == 0:
         return HTTPException(status_code=400, detail="Invalid request")
     # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
-    max_input_length = min(data.max_input_length, raw_args.max_input_len)
-    max_new_tokens = min(data.max_new_tokens, raw_args.max_new_tokens)
+    max_input_length = min(data.max_input_length, default_config.max_input_len)
+    max_new_tokens = min(data.max_new_tokens, default_config.max_new_tokens)
     sampling_config.top_p = data.top_p 
     sampling_config.temperature = data.temperature
     history = data.history
@@ -95,13 +95,13 @@ async def stream_chat(request: Request):
         return HTTPException(status_code=400, detail="Invalid request")
     system = json_post_list.get("system", "You are a helpful assistant.")
     history = json_post_list.get("history", [])
-    max_input_length = json_post_list.get("max_input_length", raw_args.max_input_len)
-    max_new_tokens = json_post_list.get("max_new_tokens", raw_args.max_new_tokens)
-    sampling_config.top_p = json_post_list.get("top_p", raw_args.top_p)
-    sampling_config.temperature = json_post_list.get("temperature", raw_args.temperature)
+    max_input_length = json_post_list.get("max_input_length", default_config.max_input_len)
+    max_new_tokens = json_post_list.get("max_new_tokens", default_config.max_new_tokens)
+    sampling_config.top_p = json_post_list.get("top_p", default_config.top_p)
+    sampling_config.temperature = json_post_list.get("temperature", default_config.temperature)
     # if you want to change this, you need to change the max_input_len/max_output_len in tensorrt_llm_july-release-v1/examples/qwen/build.py
-    max_input_length = min(max_input_length, raw_args.max_input_len)
-    max_new_tokens = min(max_new_tokens, raw_args.max_new_tokens)
+    max_input_length = min(max_input_length, default_config.max_input_len)
+    max_new_tokens = min(max_new_tokens, default_config.max_new_tokens)
     STREAM_DELAY = 1  # second
     RETRY_TIMEOUT = 15000  # milisecond
 
@@ -185,9 +185,9 @@ class DeltaMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     model: str
     messages: List[ChatMessage]
-    temperature: Optional[float] = raw_args.temperature
-    top_p: Optional[float] = raw_args.top_p
-    max_tokens: Optional[int] = raw_args.max_new_tokens
+    temperature: Optional[float] = default_config.temperature
+    top_p: Optional[float] = default_config.top_p
+    max_tokens: Optional[int] = default_config.max_new_tokens
     stream: Optional[bool] = False
 
 
@@ -228,7 +228,7 @@ async def list_models():
 async def create_chat_completion(request: ChatCompletionRequest):
     sampling_config.top_p = request.top_p
     sampling_config.temperature = request.temperature
-    max_new_tokens = min(request.max_tokens, raw_args.max_new_tokens)
+    max_new_tokens = min(request.max_tokens, default_config.max_new_tokens)
     if request.messages[-1].role != "user":
         raise HTTPException(status_code=400, detail="Invalid request")
     query = request.messages[-1].content
