@@ -170,7 +170,7 @@ rougeLsum : 21.995243873709555
 
 - 提交bug是对TensorRT/TensorRT-LLM的另一种贡献。发现的TensorRT/TensorRT-LLM或cookbook、或文档和教程相关bug，请提交到[github issues](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues)，并请在这里给出链接。
 
- - 目前已提交的针对TensorRT的bug链接（已由导师复核确定）：https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/86
+ - 目前已提交的针对TensorRT的bug链接（已由导师复核确定）：[Bug1](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/86), [Bug2](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/89)
 
 ### 送分题答案 | [操作步骤](SEND_POINT_README.md)
 1. 第一题。
