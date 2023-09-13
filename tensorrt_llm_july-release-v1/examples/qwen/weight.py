@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import tensorrt_llm
+from tqdm import trange
 from tensorrt_llm._utils import str_dtype_to_torch, str_dtype_to_np, pad_vocab_size, torch_to_numpy
 from tensorrt_llm.quantization import QuantMode
 from model import QWenForCausalLM
@@ -199,7 +200,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
     
     tensorrt_llm_qwen.ln_f.weight.value = fromfile(dir_path, 'ln_f.weight.bin')
 
-    for i in range(num_hidden_layers):
+    for i in trange(num_hidden_layers, desc="load weights"):
         c_attn_out_dim = (3 * hidden_size //
                           tensor_parallel) if not multi_query_mode else (
                               hidden_size // tensor_parallel +

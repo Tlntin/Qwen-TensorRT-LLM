@@ -141,17 +141,17 @@ TensorRT-LLM (dtype: fp16 | total latency: 73.86007595062256 sec)
   rougeL : 19.22414575248309
   rougeLsum : 22.408209721264484
 
-TensorRT-LLM (dtype: int8 (weight only) | total latency: 42.23632740974426 sec)
-  rouge1 : 26.98263929036846
-  rouge2 : 8.327280257593927
-  rougeL : 18.630452012787206
-  rougeLsum : 20.853083825182235
+TensorRT-LLM (dtype: int8 (weight only) | total latency: 48.43972039222717 sec)
+  rouge1 : 29.731668873583533
+  rouge2 : 10.353891207345667
+  rougeL : 20.10478449235491
+  rougeLsum : 23.55666137261072
 
-TensorRT-LLM (dtype: int4 (weight only) | total latency: 31.1434268951416 sec)
-rouge1 : 26.65239213023417
-rouge2 : 8.148988533684609
-rougeL : 18.180307238649856
-rougeLsum : 21.995243873709555
+TensorRT-LLM (dtype: int4 (weight only) | total latency: 35.63924956321716 sec)
+  rouge1 : 29.533080483794283
+  rouge2 : 10.748989074452952
+  rougeL : 19.7774466999517
+  rougeLsum : 23.959476739209514
 
 ```
 
