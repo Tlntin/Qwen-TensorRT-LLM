@@ -201,7 +201,7 @@ def run_hf(
     # assert not use_beam_search
     llm = AutoModelForCausalLM.from_pretrained(
         model,
-        torch_dtype=torch.float16,
+        torch_dtype=torch.bfloat16,
         trust_remote_code=True
     )
     if llm.config.model_type == "llama":

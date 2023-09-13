@@ -123,9 +123,9 @@ Output
 ### 优化效果
 
 这一部分介绍你的工作在云主机上的运行效果。如果是优化模型，需要分两部分说明：
-1. 精度
+##### 精度
 - 报告与原始模型进行精度对比测试的结果，验证精度达标（abs(rouge_diff) < 1）。
-- 测试平台：NVIDIA A10 | TensorRT 9.0.0.1
+- 测试平台：NVIDIA A10 (24G显存) | TensorRT 9.0.0.1
 - 最大输入长度：2048， 最大新增长度：2048，beam=batch=1
 - 测试结果（该结果由`tensorrt_llm_july-release-v1/examples/qwen/summarize.py`生成）：
 ```bash
@@ -155,11 +155,21 @@ TensorRT-LLM (dtype: int4 (weight only) | total latency: 35.63924956321716 sec)
 
 ```
 
-2. 性能（待写）
+##### 性能
 - 例如可以用图表展示不同batch size或sequence length下性能加速效果（考虑到可能模型可能比较大，可以只给batch size为1的数据）
 - 一般用原始模型作为baseline
 - 一般提供模型推理时间的加速比即可；若能提供压力测试下的吞吐提升则更好。
+- 测试平台：NVIDIA A10 (24G显存) | TensorRT 9.0.0.1
+- 测试结果（该结果由`tensorrt_llm_july-release-v1/examples/qwen/benchmark.py`生成）
+1. 最大输入长度：2048， 最大新增长度：2048，beam=1
 
+| 测试平台     | 加速方式    | max_batch_size | 吞吐量（requests/s） | 生成速度（tokens/s） | 吞吐加速比 | 生成加速比 |
+| ------------ | ----------- | -------------- | -------------------- | -------------------- | ---------- | ---------- |
+| HuggingFace  | dtype: bf16 | 1              | 0.12                 | 60.45                | 1          | 1          |
+| HuggingFace  | dtype: bf16 | 2              | OOM                  | OOM                  | /          | /          |
+| TensorRT-LLM | dtype: fp16 | 1              | 0.18                 | 88.73                | 1.50       | 1.46       |
+| TensorRT-LLM | dtype: fp16 | 2              | 0.22                 | 115.23               | 1.83       | 1.90       |
+| TensorRT-LLM | dtype: fp16 | 3              | OOM                  | OOM                  | /          | /          |
 
 请注意：
 
