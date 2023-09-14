@@ -17,6 +17,7 @@ from transformers import AutoTokenizer
 # for debug
 from utils.convert import split_and_save_weight
 from tensorrt_llm._utils import str_dtype_to_torch, torch_to_numpy
+from default_config import default_config
 
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
@@ -43,7 +44,7 @@ class ProgArgs:
             '-o',
             type=str,
             help='file name of output directory',
-            default=os.path.join(now_dir, "c-model", "qwen_7b_chat")
+            default=default_config.ft_dir_path
             # required=True
         )
         parser.add_argument(
@@ -51,7 +52,7 @@ class ProgArgs:
             '-i',
             type=str,
             help='file name of input checkpoint file',
-            default=os.path.join(now_dir, "qwen_7b_chat"),
+            default=default_config.hf_model_dir
             # required=True
         )
         parser.add_argument(

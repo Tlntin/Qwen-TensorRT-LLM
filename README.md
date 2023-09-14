@@ -1,108 +1,256 @@
 ### 总述
 
 - 介绍本工作是 [NVIDIA TensorRT Hackathon 2023](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023) 的参赛题目，本项目将使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。
-
 - 原始模型：Qwen-7B-Chat
-- 原始模型URL：[Qwen-7B-Chat 🤗](https://huggingface.co/Qwen/Qwen-7B-Chat) [Qwen-7B-Chat Github](https://github.com/QwenLM/Qwen-7B)
+- 原始模型URL：[Qwen-7B-Chat 🤗](https://huggingface.co/Qwen/Qwen-7B-Chat) [Qwen-7B-Chat Github](https://github.com/QwenLM/Qwen-7B) 
+  - 注：Hugggingface的Qwen-7B-Chat貌似下架了，需要的可以用百度网盘下载，[百度网盘链接](https://pan.baidu.com/s/1Ra4mvQcRCbkzkReFYhk3Vw?pwd=6fxh) 提取码: 6fxh 
+
 - 选题类型：2+4（注：2指的是TRT-LLM实现新模型。4指的是在新模型上启用了TRT-LLM现有feature）
 
 ### 主要贡献
 
 请简练地概括项目的主要贡献，使读者可以快速理解并复现你的工作，包括：
+##### 优化效果（待写）
+（例如给出精度和加速比），简单给出关键的数字即可，在这里不必详细展开
 
-- 优化效果（例如给出精度和加速比），简单给出关键的数字即可，在这里不必详细展开
-- 在Docker里面代码编译、运行步骤的完整说明
-  - 请做到只要逐行运行你给的命令，就能把代码跑起来
+- 精度：fp16 基本和原版一样，int8 / int4(weight only) Rouge分数略有提高。总的来说，和原版基本相差不大。
+
+##### 运行指南
+
+1. 准备工作
+   - 有一个英伟达显卡，建议12G显存以上，推荐24G（注：12G显存可以用int4, 16G显存可以用int8, 24G显存可以用fp16）。
+   - 需要Linux系统，WSL或许也可以试试。
+   - 已经安装了docker，并且安装了nvidia-docker
+   - 需要较大的磁盘空间，最少50G以上，推荐100G。
+   - 需要较大的CPU内存，最少32G，推荐64G以上。
+
+2. 拉取本项目代码，并且安装额外依赖
+
+```bash
+git clone https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM.git
+```
+
+3. 拉取docker镜像。
+
+```bash
+docker pull registry.cn-hangzhou.aliyuncs.com/trt-hackathon/trt-hackathon:final_v1
+```
+
+4. 进入项目目录，然后创建并启动容器，同时将本地代码路径映射到`/root/workspace/trt2023`路径
+
+```bash
+cd Qwen-7B-Chat-TensorRT-LLM
+
+docker run --gpus all \
+  --name trt2023 \
+  -d \
+  --ipc=host \
+  --ulimit memlock=-1 \
+  --restart=always \
+  --ulimit stack=67108864 \
+  -v ${PWD}:/root/workspace/trt2023 \
+  registry.cn-hangzhou.aliyuncs.com/trt-hackathon/trt-hackathon:final_v1 sleep 8640000
+```
+
+5. 下载模型`QWen-7B-Chat`模型（可以参考总述部分），然后将文件夹重命名为`qwen_7b_chat`，最后放到`tensorrt_llm_july-release-v1/examples/qwen/`路径下即可。
+6. 安装根目录的提供的Python依赖，然后再进入qwen路径
+
+```bash
+pip install -r requirements.txt
+cd tensorrt_llm_july-release-v1/examples/qwen/
+```
+
+7. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式
+```bash
+python3 hf_qwen_convert.py
+```
+8. 修改编译参数（可选）
+
+    - 默认编译参数，包括batch_size, max_input_len, max_new_tokens都存放在`default_config.py`中
+    - 对于24G显存用户，直接编译即可，默认是fp16数据类型，max_batch_size=2
+    - 对于低显存用户，可以降低max_batch_size=1，或者继续降低max_input_len, max_new_tokens
+
+9. 开始编译。
+   - 对于24G显存用户，可以直接编译fp16。
+
+    ```bash
+    python3 build.py
+    ```
+
+    - 对于16G显存用户，可以试试int8 (weight only)。
+
+    ```bash
+    python3 build.py --use_weight_only --weight_only_precision=int8
+    ```
+
+    - 对于12G显存用户，可以试试int4 (weight only)
+    ```bash
+    python3 build.py --use_weight_only --weight_only_precision=int4
+    ```
+
+10. 试运行（可选）编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。
+
+```bash
+python3 run.py
+```
+
+11.  验证模型精度精度（可选）。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。对于`网络不好`的用户，可以从网盘下载数据集，然后按照使用说明操作即可。
+    - 百度网盘：链接: https://pan.baidu.com/s/1UQ01fBBELesQLMF4gP0vcg?pwd=b62q 提取码: b62q 
+    - 谷歌云盘：https://drive.google.com/drive/folders/1YrSv1NNhqihPhCh6JYcz7aAR5DAuO5gU?usp=sharing
+
+    - 跑hugggingface版
+
+    ```bash
+    python3 summarize.py --backend=hf
+    ```
+    
+    - 跑trt-llm版
+    ```bash
+    python3 summarize.py --backend=trt_llm
+    ```
+    
+    - 注：如果用了网盘的数据集，解压后加载就需要多两个环境变量了。
+    ```bash
+    HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python3 summarize.py --backend=hf
+    或者
+    HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python3 summarize.py --backend=trt_llm
+    ```
+    - 一般来说，如果trt-llm的rouge分数和huggingface差不多，略低一些（1以内）或者略高一些（2以内），则说明精度基本对齐。
+
+12. 测量模型吞吐速度和生成速度（可选）。需要下载`ShareGPT_V3_unfiltered_cleaned_split.json`这个文件。
+
+    - 可以通过wget/浏览器直接下载，[下载链接](https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json)
+    - 也可通过百度网盘下载，链接: https://pan.baidu.com/s/12rot0Lc0hc9oCb7GxBS6Ng?pwd=jps5 提取码: jps5
+    - 下载后同样放到`tensorrt_llm_july-release-v1/examples/qwen/`路径下即可
+    - 测量前，如果需要改max_input_length/max_new_tokens，可以直接改`default_config.py`即可。一般不推荐修改，如果修改了这个，则需要重新编译一次trt-llm，保证两者输入数据集长度统一。
+    - 测量huggingface模型
+
+    ```bash
+    python3 benchmark.py --backend=hf --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --hf_max_batch_size=1
+    ```
+
+    - 测量trt-llm模型 (注意：`--trt_max_batch_size`不应该超过build时候定义的最大batch_size，否则会出现内存错误。)
+
+    ```bash
+    python3 benchmark.py --backend=trt_llm --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --trt_max_batch_size=1
+    ```
+
+13. 尝试终端对话（可选）。运行下面的命令，然后输入你的问题，直接回车即可。
+
+```bash
+python3 cli_chat.py
+```
+
+14. 尝试网页对话（可选）。运行下面的命令，然后打开本地浏览器，访问：[http://127.0.0.1:7860](http://127.0.0.1:7860) 即可
+
+```bash
+python3 web_demo.py
+```
+
+15. 部署api，并调用api进行对话（可选）。
+
+    - 部署api
+
+    ```bash
+    python3 api.py
+    ```
+
+    - 另开一个终端，进入`tensorrt_llm_july-release-v1/examples/qwen/client`目录，里面有4个文件，分别代表不同的调用方式。
+    - `async_client.py`，通过异步的方式调用api，通过SSE协议来支持流式输出。
+    - `normal_client.py`，通过同步的方式调用api，为常规的HTTP协议，Post请求，不支持流式输出，请求一次需要等模型生成完所有文字后，才能返回。
+    - `openai_normal_client.py`，通过`openai`模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。
+    - `openai_stream_client.py`，通过`openai`模块直接调用自己部署的api，该示例为流式调用。
 
 ### 主要开发工作
+
 - 请在这一节里总结你的工作难点与亮点。
 - 如果使用 TensorRT-LLM 进行优化，描述以下方面可供选手参考：如果搭建了新模型， 请介绍模型结构有无特别之处，在模型的搭建过程中使用了什么算子，有没有通过plugin支持的新算子。如果支持新feature，请介绍这个feature具体需要修改哪些模块才能实现。如果优化已有模型，请介绍模型性能瓶颈以及解决方法。另外还可以包含工程实现以及debug过程中的难点。
 
 ##### 开发工作的难点
 
 1. huggingface转llm-trt比较繁琐。
-- 目前只能肉眼观察已有成功案例，例如参考chatglm/llama, 通过debug huggingface版和观察trt-llm版，了解整体思路。
-- 然后观察qwen和chatglm/llama的差异，拿这两个案例做魔改。
-- 通过对比代码，发现examples下面的chatglm-6b的rope embedding和qwen类似，所以chatglm-6b的rope embedding的trt实现可以作为参考项。
-- 移植时发现,rope提前算好了weights，然后分割成了两个cos_embedding和sin_embedding。为确保该方案可行，于是在huggingface版的qwen中实现了类似结构，对比rope_cos和rope_sim的输出结果，以及对应sum值，发现该操作可行，于是将其移植到了qwen trt-llm中。
-- 不过需要注意的是，qwen的dim和max_position_dim和chatglm-6b不一样，加上chatglm-6b trt-llm的rope的inv_freq做了一定约分，导致看起来比较奇怪，所以后续我们直接使用了的qwen原版的inv_freq计算，以及qwen原版的apply_rotary_pos_emb方法。
-- 整体代码魔改自llama, attention/rope参考了chatglm-6b。
+    - 目前只能肉眼观察已有成功案例，例如参考chatglm/llama, 通过debug huggingface版和观察trt-llm版，了解整体思路。
+    - 然后观察qwen和chatglm/llama的差异，拿这两个案例做魔改。
+    - 通过对比代码，发现examples下面的chatglm-6b的rope embedding和qwen类似，所以chatglm-6b的rope embedding的trt实现可以作为参考项。
+    - 移植时发现,rope提前算好了weights，然后分割成了两个cos_embedding和sin_embedding。为确保该方案可行，于是在huggingface版的qwen中实现了类似结构，对比rope_cos和rope_sim的输出结果，以及对应sum值，发现该操作可行，于是将其移植到了qwen trt-llm中。
+    - 不过需要注意的是，qwen的dim和max_position_dim和chatglm-6b不一样，加上chatglm-6b trt-llm的rope的inv_freq做了一定约分，导致看起来比较奇怪，所以后续我们直接使用了的qwen原版的inv_freq计算，以及qwen原版的apply_rotary_pos_emb方法。
+    - 整体代码魔改自llama, attention/rope参考了chatglm-6b。
 
 2. 首次运行报显存分配错误。
-- 在其附近插入可用显存和需要分配的显存代码，发现是显存不够, 将max_batch_size从默认的8改成2后解决。
+    - 在其附近插入可用显存和需要分配的显存代码，发现是显存不够, 将max_batch_size从默认的8改成2后解决。
 
 3. fp16下，模型的logits无法对齐。
-- 通过阅读`docs/2023-05-19-how-to-debug.md`文档，基本掌握的debug能力，然后按照代码运行顺序，从外到内debug，找到误差所在层。
-- 首先我们对比了wte和rope输出，基本确定这两个layer没有问题。
-- 然后我们打印了qwen_block的每层输入，其中第一个layer的输入hidden_states正常，后续误差逐步增加，所以初步确定误差在QwenBlock这个类中。
-- 由于attention使用了rope相关计算+gpt attention_layer，这里出问题的可能性较大，于是我们在QwenBlock中的attention计算里面加入调试操作，打印其输入与输出结果，并和pytorch做数值对比（主要对比mean, sum数值）。经对比发现QwenBlock的attention输入sum误差在0.2以内，基本ok，但是其输出误差很大，所以需要进一步定位。
-- 由于QwenAttention中采用了rope相关计算+gpt attention plugin的方式组合而成，而plugin调试相对困难，所以我们需要进一步测试gpt attention plugin的输入输出。若输入正常，输出异常，则gpt attention plugin异常，反之，则可能是plugin之前的layer有问题。
-- 在gpt attention plugin处打印发现输入结果无法对齐，于是逐层对比QwenAttention forward过程，最终定位到下面这段代码输出异常。
-```bash
-qkv = concat([query, key, value], dim=2)
-qkv = qkv.view(
-    concat([shape(qkv, 0),
-            shape(qkv, 1),
-            self.hidden_size * 3])
-)
-```
-- 在经过2/3天调试后，发现与concat无瓜，是plugin内部再次计算了一次rope,导致qkv结果异常，将`tensorrt_llm.functional.gpt_attention`输入的`rotary_embedding_dim`设置为0后，该问题得到解决。不过最终输出还是有问题，经过对比发现attention输出已经正常，但是QwenBlock里面的self.mlp输出异常，需要进一步对比。
-- 经对比发现原来的`GateMLP` forward函数中，是对第一个layer输出做了silu激活，而qwen是对第二个layer的输出做silu激活，两者存在区别，所以我们又重新建了一个`QwenMLP`类用来实现原版的计算过程。
-- 经过上述优化，经对比输出的logits平均误差大概在0.002左右，基本完成了精度对齐。
+    - 通过阅读`docs/2023-05-19-how-to-debug.md`文档，基本掌握的debug能力，然后按照代码运行顺序，从外到内debug，找到误差所在层。
+    - 首先我们对比了wte和rope输出，基本确定这两个layer没有问题。
+    - 然后我们打印了qwen_block的每层输入，其中第一个layer的输入hidden_states正常，后续误差逐步增加，所以初步确定误差在QwenBlock这个类中。
+    - 由于attention使用了rope相关计算+gpt attention_layer，这里出问题的可能性较大，于是我们在QwenBlock中的attention计算里面加入调试操作，打印其输入与输出结果，并和pytorch做数值对比（主要对比mean, sum数值）。经对比发现QwenBlock的attention输入sum误差在0.2以内，基本ok，但是其输出误差很大，所以需要进一步定位。
+    - 由于QwenAttention中采用了rope相关计算+gpt attention plugin的方式组合而成，而plugin调试相对困难，所以我们需要进一步测试gpt attention plugin的输入输出。若输入正常，输出异常，则gpt attention plugin异常，反之，则可能是plugin之前的layer有问题。
+    - 在gpt attention plugin处打印发现输入结果无法对齐，于是逐层对比QwenAttention forward过程，最终定位到下面这段代码输出异常。
+    ```bash
+    qkv = concat([query, key, value], dim=2)
+    qkv = qkv.view(
+        concat([shape(qkv, 0),
+                shape(qkv, 1),
+                self.hidden_size * 3])
+    )
+    ```
+    - 在经过2/3天调试后，发现与concat无瓜，是plugin内部再次计算了一次rope,导致qkv结果异常，将`tensorrt_llm.functional.gpt_attention`输入的`rotary_embedding_dim`设置为0后，该问题得到解决。不过最终输出还是有问题，经过对比发现attention输出已经正常，但是QwenBlock里面的self.mlp输出异常，需要进一步对比。
+    - 经对比发现原来的`GateMLP` forward函数中，是对第一个layer输出做了silu激活，而qwen是对第二个layer的输出做silu激活，两者存在区别，所以我们又重新建了一个`QwenMLP`类用来实现原版的计算过程。
+    - 经过上述优化，经对比输出的logits平均误差大概在0.002左右，基本完成了精度对齐。
 
 4. trt-llm输出结果和pytorch不一致。
-- 此时整个模型的计算过程已经没有问题，也对比了不同step的输出，都是可以对上的，但是输出的结果和pytorch还是有区别：
-```bash
-input:
-"""
-<|im_start|>system
-You are a helpful assistant.<|im_end|>
-<|im_start|>user
-你好，请问你叫什么？<|im_end|>
-<|im_start|>assistant
-"""
-
-pytorch output: 
-"""
-您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
-"""
-
-trt-llm output: 
-"""
-您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
-<|im_start|>assistant
-
-很高兴为您服务。<|im_end|>
-<|endoftext|> решил купить новый ноутбук, но не могу выбрать между тремя предложениями."
-"""
-```
-- 经过对比发现是因为sampling config没有对齐，观察了pytorch原版的后处理逻辑，发现其将`tokenizer.im_start_id, tokenizer.im_end_id`设置为了end of token，考虑到trt-llm只能设置一个end of token, 而在输出时<|im_end|>先于需要<|im_start|>，所以我们将将`EOS_TOKEN`修改为`tokenizer.im_end_id`对应的数字。并将top-p, top-k设置原pytorch版`generation_config.json`中对应的数字。
-- 改完后我们发现结尾存在大量重复`<|im_end|>`（`PAD`和`EOS_TOKEN`解码对应的内容），这个主要是前期past_key_value赋值的时候是默认给了最长的长度`max_input_length+max_output_length`，我们在debug run.py中发现decode的step并不一定输出最大长度，而是经常中途退出循环。所以我们决定将退出时的step返回，如果没有中途退出就返回最大max_output_length, 这样就可以知道模型真实生成的长度。以最大输入长度+真实生成长度做截断，然后再用tokenizer解码，就可以得到最终输出结果了。
-```bash
-Input: 
-"""
-<|im_start|>system
-You are a helpful assistant.<|im_end|>
-<|im_start|>user
-你好，请问你叫什么？<|im_end|>
-<|im_start|>assistant
-"""
-
-Output
-"""
-您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
-"""
-```
-- 此时输出结果和pytorch完全一致。
+    - 此时整个模型的计算过程已经没有问题，也对比了不同step的输出，都是可以对上的，但是输出的结果和pytorch还是有区别：
+    ```bash
+    input:
+    """
+    <|im_start|>system
+    You are a helpful assistant.<|im_end|>
+    <|im_start|>user
+    你好，请问你叫什么？<|im_end|>
+    <|im_start|>assistant
+    """
+	
+    pytorch output: 
+    """
+    您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
+    """
+	
+    trt-llm output: 
+    """
+    您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
+    <|im_start|>assistant
+	
+    很高兴为您服务。<|im_end|>
+    <|endoftext|> решил купить новый ноутбук, но не могу выбрать между тремя предложениями."
+    """
+    ```
+    - 经过对比发现是因为sampling config没有对齐，观察了pytorch原版的后处理逻辑，发现其将`tokenizer.im_start_id, tokenizer.im_end_id`设置为了end of token，考虑到trt-llm只能设置一个end of token, 而在输出时<|im_end|>先于需要<|im_start|>，所以我们将将`EOS_TOKEN`修改为`tokenizer.im_end_id`对应的数字。并将top-p, top-k设置原pytorch版`generation_config.json`中对应的数字。
+    - 改完后我们发现结尾存在大量重复`<|im_end|>`（`PAD`和`EOS_TOKEN`解码对应的内容），这个主要是前期past_key_value赋值的时候是默认给了最长的长度`max_input_length+max_output_length`，我们在debug run.py中发现decode的step并不一定输出最大长度，而是经常中途退出循环。所以我们决定将退出时的step返回，如果没有中途退出就返回最大max_output_length, 这样就可以知道模型真实生成的长度。以最大输入长度+真实生成长度做截断，然后再用tokenizer解码，就可以得到最终输出结果了。
+    ```bash
+    Input: 
+    """
+    <|im_start|>system
+    You are a helpful assistant.<|im_end|>
+    <|im_start|>user
+    你好，请问你叫什么？<|im_end|>
+    <|im_start|>assistant
+    """
+	
+    Output
+    """
+    您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>
+    """
+    ```
+	- 此时输出结果和pytorch完全一致。
 5. 运行`summarize.py`无输出。
-- 由于我们选择qwen-chat-7b是一个chat模型，无法直接输入一段文本做总结，需要写一个专门的prompt（提示语）来让模型做这个总结的工作。
-- 于是我们将原版的`make_context`移植过来，并设置专门的`system_prompt`让模型根据用户输入直接做总结，这样将原始输入加工后再输出结果，使得模型有了总结能力。
+    - 由于我们选择qwen-chat-7b是一个chat模型，无法直接输入一段文本做总结，需要写一个专门的prompt（提示语）来让模型做这个总结的工作。
+    - 于是我们将原版的`make_context`移植过来，并设置专门的`system_prompt`让模型根据用户输入直接做总结，这样将原始输入加工后再输出结果，使得模型有了总结能力。
 
 
-- 至此，在trt-llm上支持qwen模型的基础工作已经做完
+    - 至此，在trt-llm上支持qwen模型的基础工作已经做完
 
 ##### 开发中的亮点
-1. 完整支持原版的logn和ntk（这俩参数是用于增强模型长输入的生成效果，这里的长输入指的是输入长度大于2048小于8192）。
+1. 完整支持原版的logn和ntk（这俩参数是用于增强模型长输入的生成效果，这里的长输入指的是输入长度大于2048小于8192）。不过由于trt-llm的某些bug，导致输入长度>2048时，实际输出会很短甚至为空，详见[issue](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/90)。
 2. 支持`RotaryEmbedding`，并且在input_len > 2048时开启ntk相关计算。
 3. 支持`gpt_attention_plugin`与`gemm_plugin`两个plugin。
 4. 同时支持qwen base和chat模型
@@ -119,6 +267,64 @@ Output
 - 分步骤讲清楚开发过程
 - 最好能介绍为什么需要某个特别步骤，通过这个特别步骤解决了什么问题
   - 比如，通过Nsight Systems绘制timeline做了性能分析，发现attention时间占比高且有优化空间（贴图展示分析过程），所以决定要写plugin。然后介绍plugin的设计与实现，并在timeline上显示attention这一部分的性能改进。
+1. 跑一下`tensorrt_llm_july-release-v1/examples/gpt`的代码，了解一下trt-llm的基本流程。
+
+2. 读`QWen-7B-Chat`的Readme信息，基本了解它是一个`decoder only模型`，并且模型结构类llama。
+
+3. 将`tensorrt_llm_july-release-v1/examples/llama`复制一份，然后重命名为`tensorrt_llm_july-release-v1/examples/qwen`,将里面的模型带`llama`的全部替换为`qwen`。
+
+4. 运行`build.py`时，发现调用了`weight.py`，而llama项目里面的`weight.py`里面有一个`load_from_meta_llama`函数，函数里面有一个`tensorrt_llm.models.LLaMAForCausalLM`，里面定义了整个trt的模型结构。我用vscode进入其中，将里面的`LLaMAForCausalLM`复制出来，然后新建了一个mode.py,将内容粘贴进去。同样，将里面的模型带`llama`的全部替换为`qwen`
+
+5. 然后我们就开始改本项目的`weight.py`的`load_from_meta_qwen`函数，将huggingface里面的权重名称和trt的权重名称逐步对齐。然后我们运行了一下build.py，发现可以编译通过，但是运行`run.py`结果不对。
+
+6. 我们通过肉眼观察模型结构，发现trt版少了一个`RotaryEmbedding`，这个该如何实现了？观察了一下`tensorrt_llm_july-release-v1/examples/`目录下面的其他项目，突然发现里面的`chatglm6b`有类似的结构，不过他却分成了`position_embedding_cos`和`position_embedding_sin`两个普通的embedding。我们大概知道它或许是一个新的实现方式，但是功能和原版一样。通过观察，我们发现其rope权重是在weight.py里面用numpy手搓直接导入的。导入代码如下：
+
+   - chatglm6b/hf_chatglm6b_convert.py
+
+   ```python
+   nMaxSL = 2048
+   inv_freq = 10**(-1 / 16 * np.arange(0, 64, 2, dtype=np.float32))
+   valueTable = np.matmul(
+       np.arange(nMaxSL, dtype=np.float32).reshape(-1, 1),
+       np.concatenate([inv_freq, inv_freq],
+                      axis=0).reshape(1, -1)).reshape(nMaxSL,
+                                                      len(inv_freq) * 2)
+   np.cos(valueTable).astype(storage_type).tofile(saved_dir /
+                                                  "model.cosTable.weight.bin")
+   np.sin(valueTable).astype(storage_type).tofile(saved_dir /
+                                                  "model.sinTable.weight.bin")
+   print("Save model.cosTable.weight.bin")
+   print("Save model.sinTable.weight.bin")
+   ```
+
+   - chatglm6b/weight.py
+
+   ```bash
+   chatglm6bModel.position_embedding_cos.weight.value = (fromfile(
+       dir_path, 'model.cosTable.weight.bin',
+       [n_positions, n_embd // n_head // 2]))
+   chatglm6bModel.position_embedding_sin.weight.value = (fromfile(
+       dir_path, 'model.sinTable.weight.bin',
+       [n_positions, n_embd // n_head // 2]))
+   ```
+
+   - 经过和原版ChatGLM-6b进行对比，大概知道了2048是原版的最大输入长度，64是他的per_head_dim//2
+   - 而qwen里面的apply_rope时的计算和chatglm略有差异，并且qwen的最大输入长度是8192，这些需要略作修改。
+   - 修改完后利用debug_mode将对应的数值打印出来，与原版进行对比，发现基本一致。
+
+7. 再次通过通过肉眼观察模型结构，发现原模型Attention中还有logn以及ntk的计算，再增加这两结构后，再次做了一次编译，可以正常编译。
+
+8. 然后就是做fp16对齐了，参考`开发工作的难点`中关于`fp16下，模型的logits无法对齐`部分即可。
+
+9. 在fp16对齐，并且run.py/summarize.py都正常后，我们就开始尝试实现weight only in8/int4，我们先直接运行 `--use_weight_only --weight_only_precision=int8`，编译成功后，再次运行run.py/summarize.py，发现都正常。int4也重复该操作，发现还是正常，说明weight only in8/int4适配成功。
+
+10. 适配完后，发现还有一个smooth_quant量化，可以降低显存，提高推理速度。不过问了导师，说目前只有gpt适配了，后续可能适配bloom和llama，所以我们参考了gpt的代码，新增了一个`hf_qwen_convert.py`文件，用于将huggingface的权重导出到FT(FastTransformer)格式的文件。同时我们将gpt/weight.py里面的`load_from_ft`拷贝到qwen/weight.py，并根据我们导出的权重文件修改进行了简单修改，然后再将build.py里面默认加载函数从`load_from_hf_qwen`换成 `load_from_ft`,不过当开发者没有导出FT权重的时候，还是会自动加载`load_from_hf_qwen`来生成engine。
+
+11. 在用了新的`load_from_ft`方法后，我们又运行了一次run.py和summarize.py，发现输出结果异常，经过对examples/gpt进行调试，发现qwen的attention权重和gpt的attention权重shape顺序略有不同。为了更好的对比差异，我们将`load_from_ft`的加载权重的代码粘贴到`load_from_hf_qwen`，然后一个个变量对比其shape以及value值，对比发现`load_from_hf_qwen`中，非weight_only量化，则权重直接赋值，否则需要多一个转置操作。经过一轮修改，`load_from_ft`的fp16终于正常。然后我们又顺便编译了weight_only的int8/int4，发现也同样正常。
+
+12. 回到smooth quant量化这里，参考example/gpt的smooth quant过程，我们在`hf_qwen_convert.py`里面同样加了`--smoothquant`选项。通过调试`example/gpt/hf_gpt_convert.py`文件，观察它的`smooth_gpt_model`函数的计算方法以及参数的shape，不过他它mlp只有一个fc1, 而我们的mlp有w1/w2和`c_proj`。并且gpt里面有`from smoothquant import capture_activation_range, smooth_gemm`和`from utils.convert import split_and_save_weight`，通过调试这些文件，我们写了自己的对应的函数，并且成功导出了和smooth quant密切相关的int8权重。
+
+13. 再次观察example/gpt的smooth quant过程，参考其build.py文件，发现里面有一个`from tensorrt_llm.models import smooth_quantize`过程，这个函数会将trt-llm原本的模型结构给替换掉，主要替换了layer_norm, attention, 和mlp部分。其中attention基本和我们的qwen一样，只是我们比他多了logn/apply rope/ntk三个，mlp也可以通过简单修改实现。但是layer_norm,这里我们用的是`RotaryEmbedding`，所以这个部分的smooth quant,需要我们自己实现。
 
 ### 优化效果
 
@@ -161,15 +367,55 @@ TensorRT-LLM (dtype: int4 (weight only) | total latency: 35.63924956321716 sec)
 - 一般提供模型推理时间的加速比即可；若能提供压力测试下的吞吐提升则更好。
 - 测试平台：NVIDIA A10 (24G显存) | TensorRT 9.0.0.1
 - 测试结果（该结果由`tensorrt_llm_july-release-v1/examples/qwen/benchmark.py`生成）
-1. 最大输入长度：2048， 最大新增长度：2048，beam=1
+1. 最大输入长度：2048， 最大新增长度：2048，num-prompts=100, beam=1, seed=0
 
-| 测试平台     | 加速方式    | max_batch_size | 吞吐量（requests/s） | 生成速度（tokens/s） | 吞吐加速比 | 生成加速比 |
-| ------------ | ----------- | -------------- | -------------------- | -------------------- | ---------- | ---------- |
-| HuggingFace  | dtype: bf16 | 1              | 0.12                 | 60.45                | 1          | 1          |
-| HuggingFace  | dtype: bf16 | 2              | OOM                  | OOM                  | /          | /          |
-| TensorRT-LLM | dtype: fp16 | 1              | 0.18                 | 88.73                | 1.50       | 1.46       |
-| TensorRT-LLM | dtype: fp16 | 2              | 0.22                 | 115.23               | 1.83       | 1.90       |
-| TensorRT-LLM | dtype: fp16 | 3              | OOM                  | OOM                  | /          | /          |
+| 测试平台     | 加速方式                  | max_batch_size | 吞吐速度（requests/s） | 生成速度（tokens/s） | 吞吐加速比 | 生成加速比 |
+| ------------ | ------------------------- | -------------- | ---------------------- | -------------------- | ---------- | ---------- |
+| HuggingFace  | dtype: bf16               | 1              | 0.12                   | 60.45                | 1          | 1          |
+| HuggingFace  | dtype: bf16               | 2              | OOM                    | OOM                  | /          | /          |
+|              |                           |                |                        |                      |            |            |
+| TensorRT-LLM | dtype: fp16               | 1              | 0.18                   | 88.73                | 1.50       | 1.46       |
+| TensorRT-LLM | dtype: fp16               | 2              | 0.22                   | 115.23               | 1.83       | 1.90       |
+| TensorRT-LLM | dtype: fp16               | 3              | OOM                    | OOM                  | /          | /          |
+|              |                           |                |                        |                      |            |            |
+| TensorRT-LLM | dtype: int8 (weight only) | 1              | 0.30                   | 147.38               | 2.50       | 2.44       |
+| TensorRT-LLM | dtype: int8 (weight only) | 2              | 0.31                   | 162.60               | 2.58       | 2.69       |
+| TensorRT-LLM | dtype: int8 (weight only) | 3              | 0.34                   | 185.65               | 2.83       | 3.07       |
+| TensorRT-LLM | dtype: int8 (weight only) | 4              | 0.36                   | 198.46               | 3.00       | 3.28       |
+| TensorRT-LLM | dtype: int8 (weight only) | 5              | OOM                    | OOM                  | /          | /          |
+|              |                           |                |                        |                      |            |            |
+| TensorRT-LLM | dtype: int4 (weight only) | 1              | 0.43                   | 210.88               | 3.58       | 3.49       |
+| TensorRT-LLM | dtype: int4 (weight only) | 2              | 0.44                   | 223.55               | 3.67       | 3.70       |
+| TensorRT-LLM | dtype: int4 (weight only) | 3              | 0.46                   | 247.34               | 3.83       | 4.09       |
+| TensorRT-LLM | dtype: int4 (weight only) | 4              | **0.47**               | 252.80               | **3.92**   | 4.18       |
+| TensorRT-LLM | dtype: int4 (weight only) | 5              | 0.45                   | 246.13               | 3.75       | 4.07       |
+| TensorRT-LLM | dtype: int4 (weight only) | 6              | **0.47**               | **261.53**           | **3.92**   | **4.33**   |
+| TensorRT-LLM | dtype: int4 (weight only) | 7              | OOM                    | OOM                  | /          | /          |
+
+2. 最大输入长度：1024， 最大新增长度：1024，num-prompts=100, beam=1, seed=0
+| 测试平台     | 加速方式                  | max_batch_size | 吞吐量（requests/s） | 生成速度（tokens/s） | 吞吐加速比 | 生成加速比 |
+| ------------ | ------------------------- | -------------- | -------------------- | -------------------- | ---------- | ---------- |
+| HuggingFace  | dtype: bf16               | 1              | 0.14                 | 51.48                | 1          | 1          |
+| HuggingFace  | dtype: bf16               | 2              | 0.12                 | 53.87                | 0.86       | 1.05       |
+| HuggingFace  | dtype: bf16               | 3              | OOM                  | OOM                  | /          | /          |
+|              |                           |                |                      |                      |            |            |
+| TensorRT-LLM | dtype: fp16               | 1              | 0.20                 | 74.75                | 1.43       | 1.45       |
+| TensorRT-LLM | dtype: fp16               | 2              | 0.23                 | 91.80                | 1.64       | 1.70       |
+| TensorRT-LLM | dtype: fp16               | 3              | 0.26                 | 108.50               | 1.86       | 2.01       |
+| TensorRT-LLM | dtype: fp16               | 4              | 0.29                 | 123.58               | 2.07       | 2.29       |
+| TensorRT-LLM | dtype: fp16               | 5              | 0.31                 | 136.06               | 2.21       | 2.53       |
+| TensorRT-LLM | dtype: fp16               | 6              | 0.31                 | 137.69               | 2.21       | 2.56       |
+| TensorRT-LLM | dtype: fp16               | 7              | OOM                  | OOM                  | /          | /          |
+|              |                           |                |                      |                      |            |            |
+| TensorRT-LLM | dtype: int8 (weight only) | 1              | 0.34                 | 128.52               | 2.43       | 2.39       |
+| TensorRT-LLM | dtype: int8 (weight only) | 2              | 0.34                 | 139.42               | 2.43       | 2.59       |
+| TensorRT-LLM | dtype: int8 (weight only) | 3              | 0.37                 | 158.25               | 2.64       | 2.94       |
+| TensorRT-LLM | dtype: int8 (weight only) | 4              | 0.40                 | 175.28               | 2.86       | 3.25       |
+| TensorRT-LLM | dtype: int8 (weight only) | 5              | 0.44                 | 193.93               | 3.14       | 3.60       |
+| TensorRT-LLM | dtype: int8 (weight only) | 6              | 0.41                 | 184.75               | 2.93       | 3.43       |
+| TensorRT-LLM | dtype: int8 (weight only) | 7              | 0.46                 | 206.81               | 3.29       | 3.84       |
+| TensorRT-LLM | dtype: int8 (weight only) | 8              | 0.43                 | 195.05               | 3.07       | 3.62       |
+|              |                           |                |                      |                      |            |            |
 
 请注意：
 
@@ -181,6 +427,8 @@ TensorRT-LLM (dtype: int4 (weight only) | total latency: 35.63924956321716 sec)
 - 提交bug是对TensorRT/TensorRT-LLM的另一种贡献。发现的TensorRT/TensorRT-LLM或cookbook、或文档和教程相关bug，请提交到[github issues](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues)，并请在这里给出链接。
 
  - 目前已提交的针对TensorRT的bug链接（已由导师复核确定）：[Bug1](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/86), [Bug2](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/89)
+
+ - 已提交，待复核的bug：[Bug3](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/90)
 
 ### 送分题答案 | [操作步骤](SEND_POINT_README.md)
 1. 第一题。
