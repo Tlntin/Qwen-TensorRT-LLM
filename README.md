@@ -393,6 +393,7 @@ TensorRT-LLM (dtype: int4 (weight only) | total latency: 35.63924956321716 sec)
 | TensorRT-LLM | dtype: int4 (weight only) | 7              | OOM                    | OOM                  | /          | /          |
 
 2. 最大输入长度：1024， 最大新增长度：1024，num-prompts=100, beam=1, seed=0
+
 | 测试平台     | 加速方式                  | max_batch_size | 吞吐量（requests/s） | 生成速度（tokens/s） | 吞吐加速比 | 生成加速比 |
 | ------------ | ------------------------- | -------------- | -------------------- | -------------------- | ---------- | ---------- |
 | HuggingFace  | dtype: bf16               | 1              | 0.14                 | 51.48                | 1          | 1          |
