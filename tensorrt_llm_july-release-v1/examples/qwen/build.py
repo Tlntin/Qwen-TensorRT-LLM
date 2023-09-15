@@ -121,7 +121,7 @@ def parse_arguments():
     parser.add_argument(
         '--ft_dir_path',
         type=str,
-        default=default_config.ft_dir_path,
+        default=os.path.join(default_config.ft_dir_path, "1-gpu"),
     )
     parser.add_argument(
         '--dtype',
@@ -306,6 +306,7 @@ def build_rank_engine(builder: Builder,
         tensorrt_llm_qwen = smooth_quantize(
             tensorrt_llm_qwen, args.quant_mode
         )
+        print("load smooth quantize ok")
     elif args.use_weight_only and args.weight_only_precision == 'int8':
         tensorrt_llm_qwen = weight_only_quantize(
             tensorrt_llm_qwen,

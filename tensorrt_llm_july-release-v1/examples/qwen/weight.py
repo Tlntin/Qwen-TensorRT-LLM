@@ -1,7 +1,7 @@
 import time
 import configparser
 from pathlib import Path
-
+import os
 import numpy as np
 import torch
 import tensorrt_llm
@@ -37,6 +37,7 @@ def split(v, tp_size, idx, dim=0):
     
 def parse_ft_config(ini_file):
     qwen_config = configparser.ConfigParser()
+    assert os.path.exists(ini_file), f"Config file {ini_file} does not exist."
     qwen_config.read(ini_file)
 
     vocab_size = qwen_config.getint('qwen', 'vocab_size')

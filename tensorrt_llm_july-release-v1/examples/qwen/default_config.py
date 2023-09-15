@@ -5,7 +5,7 @@ class DefaultConfig:
     now_dir = os.path.dirname(os.path.abspath(__file__))
     hf_model_dir = os.path.join(now_dir, "qwen_7b_chat")
     tokenizer_dir = os.path.join(now_dir, "qwen_7b_chat")
-    ft_dir_path = os.path.join(now_dir, "c-model", "qwen_7b_chat", "1-gpu")
+    ft_dir_path = os.path.join(now_dir, "c-model", "qwen_7b_chat")
     engine_dir=os.path.join(now_dir, "trt_engines", "fp16", "1-gpu")
 
     # Maximum batch size for HF backend.
@@ -22,7 +22,7 @@ class DefaultConfig:
     max_input_len = 2048
 
     # Maximum number of generate new tokens.
-    max_new_tokens =2048
+    max_new_tokens = 2048
 
 
     # Top p for sampling.
