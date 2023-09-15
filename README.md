@@ -25,7 +25,7 @@
    - 需要较大的磁盘空间，最少50G以上，推荐100G。
    - 需要较大的CPU内存，最少32G，推荐64G以上。
 
-2. 拉取本项目代码，并且安装额外依赖
+2. 拉取本项目代码
 
 ```bash
 git clone https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM.git
