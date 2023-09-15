@@ -60,8 +60,6 @@ def parse_ft_config(ini_file):
         'multi_query_mode',
         fallback=False
     )
-                            
-
     return (
         vocab_size,
         hidden_size,
@@ -223,11 +221,10 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         if t is not None:
             dst = tensorrt_llm_qwen.layers[i].attention.qkv.weight
             if use_smooth_quant:
-                dst.value = sq_trick(
-                    np.ascontiguousarray(np.transpose(t, [1, 0])))
+                dst.value = sq_trick(np.ascontiguousarray(t))
                 set_smoothquant_scale_factors(
                     tensorrt_llm_qwen.layers[i].attention.qkv,
-                    tensorrt_llm_qwen.layers[i].input_layernorm.scale_to_int,
+                    tensorrt_llm_qwen.layers[i].ln_1.scale_to_int,
                     dir_path,
                     'model.layers.' + str(i) + '.attention.qkv.',
                     [1, c_attn_out_dim],
@@ -250,7 +247,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         dst = tensorrt_llm_qwen.layers[i].attention.qkv.bias
         t = fromfile(
             dir_path, 'model.layers.' + str(i) +
-            '.attention.qkv.bias.' + str(rank) + '.bin', [c_attn_out_dim], w_type)
+            '.attention.qkv.bias.' + str(rank) + '.bin', [c_attn_out_dim])
         dst.value = np.ascontiguousarray(t)
 
         dst = tensorrt_llm_qwen.layers[i].attention.dense.weight
@@ -259,7 +256,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             'model.layers.' + str(i) + '.attention.dense.weight.' + suffix,
             [hidden_size // tensor_parallel, hidden_size], w_type)
         if use_smooth_quant:
-            dst.value = sq_trick(np.ascontiguousarray(np.transpose(t, [1, 0])))
+            dst.value = sq_trick(np.ascontiguousarray(t))
             dense_scale = getattr(tensorrt_llm_qwen.layers[i].attention,
                                   "quantization_scaling_factor", None)
             set_smoothquant_scale_factors(
@@ -286,10 +283,10 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         )
         if use_smooth_quant:
             tensorrt_llm_qwen.layers[i].mlp.w1.weight.value = sq_trick(
-                np.ascontiguousarray(np.transpose(t, [1, 0])))
+                np.ascontiguousarray(t))
             set_smoothquant_scale_factors(
                 tensorrt_llm_qwen.layers[i].mlp.w1,
-                tensorrt_llm_qwen.layers[i].post_layernorm.scale_to_int,
+                tensorrt_llm_qwen.layers[i].ln_2.scale_to_int,
                 dir_path,
                 'model.layers.' + str(i) + '.mlp.w1.',
                 [1, inter_size // tensor_parallel],
@@ -315,7 +312,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             [inter_size // tensor_parallel//2, hidden_size], w_type)
         if use_smooth_quant:
             tensorrt_llm_qwen.layers[i].mlp.w2.weight.value = sq_trick(
-                np.ascontiguousarray(np.transpose(t, [1, 0])))
+                np.ascontiguousarray(t))
             proj_scale = getattr(tensorrt_llm_qwen.layers[i].mlp,
                                  "quantization_scaling_factor", None)
             set_smoothquant_scale_factors(
@@ -337,12 +334,12 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             
         t = fromfile(
             dir_path,
-            'model.layers.' + str(i) + '.mlp.c_proj.weight.' + str(rank) + '.bin',
-            [hidden_size, inter_size // tensor_parallel//2]
+            'model.layers.' + str(i) + '.mlp.c_proj.weight.' +  suffix,
+            [hidden_size, inter_size // tensor_parallel//2], w_type
         )
         if use_smooth_quant:
             tensorrt_llm_qwen.layers[i].mlp.c_proj.weight.value = sq_trick(
-                np.ascontiguousarray(np.transpose(t, [1, 0])))
+                np.ascontiguousarray(t))
             proj_scale = getattr(tensorrt_llm_qwen.layers[i].mlp,
                                  "quantization_scaling_factor", None)
             set_smoothquant_scale_factors(
