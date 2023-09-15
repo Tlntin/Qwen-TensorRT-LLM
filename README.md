@@ -98,7 +98,7 @@ python3 run.py
 11.  验证模型精度精度（可选）。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。对于`网络不好`的用户，可以从网盘下载数据集，然后按照使用说明操作即可。
 
     - 百度网盘：链接: https://pan.baidu.com/s/1UQ01fBBELesQLMF4gP0vcg?pwd=b62q 提取码: b62q 
-    
+
     - 谷歌云盘：https://drive.google.com/drive/folders/1YrSv1NNhqihPhCh6JYcz7aAR5DAuO5gU?usp=sharing
 
     - 跑hugggingface版
@@ -106,18 +106,21 @@ python3 run.py
     ```bash
     python3 summarize.py --backend=hf
     ```
-    
+
     - 跑trt-llm版
+
     ```bash
     python3 summarize.py --backend=trt_llm
     ```
-    
+
     - 注：如果用了网盘的数据集，解压后加载就需要多两个环境变量了。
+
     ```bash
     HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python3 summarize.py --backend=hf
     或者
     HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python3 summarize.py --backend=trt_llm
     ```
+
     - 一般来说，如果trt-llm的rouge分数和huggingface差不多，略低一些（1以内）或者略高一些（2以内），则说明精度基本对齐。
 
 12. 测量模型吞吐速度和生成速度（可选）。需要下载`ShareGPT_V3_unfiltered_cleaned_split.json`这个文件。
