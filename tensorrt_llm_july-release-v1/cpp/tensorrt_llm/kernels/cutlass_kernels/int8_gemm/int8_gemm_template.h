@@ -372,8 +372,11 @@ template <typename T>
 float CutlassInt8GemmRunner<T>::profileConfig(const tkc::CutlassGemmConfig& config, tk::QuantOption quantOption, int m,
     int n, int k, int8_t* A, int8_t* B, void* C, float* alphaCol, float* alphaRow, char* workspace)
 {
-    constexpr int warmup = 5;
-    constexpr int runs = 15;
+    // reduce run times to reduce shared memory
+    // try to make warmup:run = 1:3
+    // different GPU has difference times
+    constexpr int warmup = 3;
+    constexpr int runs = 10;
 
     const auto workspaceBytes = getWorkspaceSize(m, n, k);
 
@@ -423,19 +426,32 @@ tkc::CutlassGemmConfig CutlassInt8GemmRunner<T>::profileGemm(tk::QuantOption qua
 
     float bestTime = std::numeric_limits<float>::max();
     tkc::CutlassGemmConfig bestConfig;
-
+    float time = bestTime;
+    bool is_ok = false;
     for (int ii = 0; ii < candidateConfigs.size(); ++ii)
     {
         tkc::CutlassGemmConfig candidateConfig = candidateConfigs[ii];
-        const float time = profileConfig(candidateConfig, quantOption, m, n, k, A, B, C, alphaCol, alphaRow, workspace);
-        if (time < bestTime)
-        {
+
+        try {
+            time = profileConfig(candidateConfig, quantOption, m, n, k, A, B, C, alphaCol, alphaRow, workspace);
+            is_ok = true;
+        } catch (...) {
+            std::ostringstream msg;
+            msg << "it seem init failed, because has no enough shared memory.";
+            TLLM_LOG_DEBUG(msg.str());
+        }
+        if (time < bestTime) {
             bestConfig = candidateConfig;
             bestTime = time;
         }
     }
-
-    return bestConfig;
+    if (is_ok) {
+        return bestConfig;
+    } else {
+        std::ostringstream msg;
+        msg << "it seem can't found any good config.";
+        TLLM_LOG_ERROR(msg.str());
+    }
 }
 
 template <typename T>
