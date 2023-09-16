@@ -200,7 +200,7 @@ def parse_arguments():
     # Arguments related to the quantization of the model.
     parser.add_argument(
         '--use_smooth_quant',
-        default=True,
+        default=None,
         action="store_true",
         help=
         'Use the SmoothQuant method to quantize activations and weights for the various GEMMs.'
@@ -210,9 +210,9 @@ def parse_arguments():
     parser.add_argument(
         '--use_rmsnorm_quantization_plugin',
         nargs='?',
-        const='float16',
+        const=False,
         type=str,
-        default="float16",
+        default=False,
         choices=['float16', 'bfloat16', 'float32', False]
     )
     parser.add_argument(
