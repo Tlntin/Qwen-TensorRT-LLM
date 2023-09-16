@@ -328,7 +328,35 @@ python3 web_demo.py
 
 12. 回到smooth quant量化这里，参考example/gpt的smooth quant过程，我们在`hf_qwen_convert.py`里面同样加了`--smoothquant`选项。通过调试`example/gpt/hf_gpt_convert.py`文件，观察它的`smooth_gpt_model`函数的计算方法以及参数的shape，不过他它mlp只有一个fc1, 而我们的mlp有w1/w2和`c_proj`。并且gpt里面有`from smoothquant import capture_activation_range, smooth_gemm`和`from utils.convert import split_and_save_weight`，通过调试这些文件，我们写了自己的对应的函数，并且成功导出了和smooth quant密切相关的int8权重。
 
-13. 再次观察example/gpt的smooth quant过程，参考其build.py文件，发现里面有一个`from tensorrt_llm.models import smooth_quantize`过程，这个函数会将trt-llm原本的模型结构给替换掉，主要替换了layer_norm, attention, 和mlp部分。其中attention基本和我们的qwen一样，只是我们比他多了logn/apply rope/ntk三个，mlp也可以通过简单修改实现。但是layer_norm,这里我们用的是`RotaryEmbedding`，所以这个部分的smooth quant,需要我们自己实现。
+13. 再次观察example/gpt的smooth quant过程，参考其build.py文件，发现里面有一个`from tensorrt_llm.models import smooth_quantize`过程，这个函数会将trt-llm原本的模型结构给替换掉，主要替换了layer_norm, attention, 和mlp部分。其中attention基本和我们的qwen一样，只是我们比他多了logn/apply rope/ntk三个，mlp也可以通过简单修改实现。但是layer_norm,这里我们用的是`RmsNorm`，所以这个部分的smooth quant,需要我们自己实现。
+
+14. RmsNorm相对LayerNorm来说，就是少了一个减均值操作，并且没有bias，所以我们先拷贝了一份layerNorm的kernel。
+
+    - 拷贝操作。
+
+    ```bash
+    cd tensorrt_llm_july-release-v1/cpp/tensorrt_llm/kernels
+    cp layernormKernels.cu rmsnormKernels.cu
+    cp layernormKernels.h rmsnormKernels.h
+    ```
+
+    - 拷贝完后我们将里面的mean/bias去掉，并将layernorm关键词换成rmsnorm的关键词。同时我们发现layerNorm的.cu文件里面有个`USE_DIFF_OF_SQUARES`，这个值为Ture时是算方差，为False时算平均值。由于我们不需要平均值，所以这个数值常为True，所以我们将为True的部分保留，为Fasle的部位删除，并且删除了这个变量。
+    - 同理我们对plugins目录下面的layerNorm做了同样的操作。
+
+    ```bash
+    cd tensorrt_llm_july-release-v1/cpp/tensorrt_llm/plugins
+    cp layernormPlugin/* rmsnormPlugin/
+    cp layernormQuantizationPlugin/* rmsnormQuantizationPlugin/
+    ```
+
+    - 同样和上面一样做替换，去bias，去mean，去`USE_DIFF_OF_SQUARES`（去除这个需要忽略大小写，有的是小写）
+
+15. 参考[教程](https://www.http5.cn/index.php/archives/30/)，我们重新编译了TensorRT-LLM，并且加载了`RmsnormQuantization`插件，但是加载编译后报了一个和cublas相关的错误，错误提示：`terminate called after throwing an instance of 'std::runtime_error'  what():  [TensorRT-LLM Error][int8gemm Runner] Failed to initialize cutlass int8 gemm. Error: Error Internal`。通过多次排查，以及群友的提醒，我们发现这个不是我们plugin的问题，而是smooth_quant_gemm这个插件的问题。该问题可以通过下面的单元测试复现。
+
+    ```bash
+    cd tensorrt_llm_july-release-v1/tests/quantization
+    python -m unittest test_smooth_quant_gemm.py TestSmoothQuantGemm.test_matmul
+    ```
 
 ### 优化效果
 
