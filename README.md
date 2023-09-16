@@ -27,44 +27,46 @@
 
 2. 拉取本项目代码
 
-```bash
-git clone https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM.git
-```
+    ```bash
+    git clone https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM.git
+    ```
 
 3. 拉取docker镜像。
 
-```bash
-docker pull registry.cn-hangzhou.aliyuncs.com/trt-hackathon/trt-hackathon:final_v1
-```
+    ```bash
+    docker pull registry.cn-hangzhou.aliyuncs.com/trt-hackathon/trt-hackathon:final_v1
+    ```
 
 4. 进入项目目录，然后创建并启动容器，同时将本地代码路径映射到`/root/workspace/trt2023`路径
 
-```bash
-cd Qwen-7B-Chat-TensorRT-LLM
+    ```bash
+    cd Qwen-7B-Chat-TensorRT-LLM
 
-docker run --gpus all \
-  --name trt2023 \
-  -d \
-  --ipc=host \
-  --ulimit memlock=-1 \
-  --restart=always \
-  --ulimit stack=67108864 \
-  -v ${PWD}:/root/workspace/trt2023 \
-  registry.cn-hangzhou.aliyuncs.com/trt-hackathon/trt-hackathon:final_v1 sleep 8640000
-```
+    docker run --gpus all \
+      --name trt2023 \
+      -d \
+      --ipc=host \
+      --ulimit memlock=-1 \
+      --restart=always \
+      --ulimit stack=67108864 \
+      -v ${PWD}:/root/workspace/trt2023 \
+      registry.cn-hangzhou.aliyuncs.com/trt-hackathon/trt-hackathon:final_v1 sleep 8640000
+    ```
 
 5. 下载模型`QWen-7B-Chat`模型（可以参考总述部分），然后将文件夹重命名为`qwen_7b_chat`，最后放到`tensorrt_llm_july-release-v1/examples/qwen/`路径下即可。
 6. 安装根目录的提供的Python依赖，然后再进入qwen路径
 
-```bash
-pip install -r requirements.txt
-cd tensorrt_llm_july-release-v1/examples/qwen/
-```
+    ```bash
+    pip install -r requirements.txt
+    cd tensorrt_llm_july-release-v1/examples/qwen/
+    ```
 
 7. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式
-```bash
-python3 hf_qwen_convert.py
-```
+
+    ```bash
+    python3 hf_qwen_convert.py
+    ```
+
 8. 修改编译参数（可选）
 
     - 默认编译参数，包括batch_size, max_input_len, max_new_tokens都存放在`default_config.py`中
@@ -91,9 +93,9 @@ python3 hf_qwen_convert.py
 
 10. 试运行（可选）编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。
 
-```bash
-python3 run.py
-```
+    ```bash
+    python3 run.py
+    ```
 
 11. 验证模型精度精度（可选）。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。对于`网络不好`的用户，可以从网盘下载数据集，然后按照使用说明操作即可。
 
@@ -141,15 +143,15 @@ python3 run.py
 
 13. 尝试终端对话（可选）。运行下面的命令，然后输入你的问题，直接回车即可。
 
-```bash
-python3 cli_chat.py
-```
+    ```bash
+    python3 cli_chat.py
+    ```
 
 14. 尝试网页对话（可选）。运行下面的命令，然后打开本地浏览器，访问：[http://127.0.0.1:7860](http://127.0.0.1:7860) 即可
 
-```bash
-python3 web_demo.py
-```
+    ```bash
+    python3 web_demo.py
+    ```
 
 15. 部署api，并调用api进行对话（可选）。
 
@@ -164,6 +166,30 @@ python3 web_demo.py
     - `normal_client.py`，通过同步的方式调用api，为常规的HTTP协议，Post请求，不支持流式输出，请求一次需要等模型生成完所有文字后，才能返回。
     - `openai_normal_client.py`，通过`openai`模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。
     - `openai_stream_client.py`，通过`openai`模块直接调用自己部署的api，该示例为流式调用。
+
+
+##### 运行指南（Smooth Quant篇）
+1. 前6节和上面一样，参考上面运行就行。
+
+2. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式
+    ```bash
+    python3 hf_qwen_convert.py --smoothquant=0.5
+    ```
+
+3. 编译前需要编译一下整个项目，这样后面才能加载新增的rmsnorm插件。参考该[教程](https://www.http5.cn/index.php/archives/30/)。
+
+
+4. 开始编译trt_engine(未完待续)
+    - 普通版 (调用第三步编译的rmsnorm)
+    ```bash
+    python3 build.py --use_smooth_quan --use_rmsnorm_quantization_plugin=fp16
+    ```
+
+    - 升级版（理论上速度更快一些）
+    ```bash
+    python3 build.py --use_smooth_quan --use_rmsnorm_quantization_plugin=fp16
+      --per_token --per_channel
+    ```
 
 ### 主要开发工作
 
@@ -256,7 +282,7 @@ python3 web_demo.py
 ##### 开发中的亮点
 1. 完整支持原版的logn和ntk（这俩参数是用于增强模型长输入的生成效果，这里的长输入指的是输入长度大于2048小于8192）。不过由于trt-llm的某些bug，导致输入长度>2048时，实际输出会很短甚至为空，详见[issue](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/90)。
 2. 支持`RotaryEmbedding`，并且在input_len > 2048时开启ntk相关计算。
-3. 支持`gpt_attention_plugin`与`gemm_plugin`两个plugin。
+3. 支持自带的`gpt_attention_plugin`与`gemm_plugin`两个plugin，同时将`layernorm_plugin`魔改成`rmsnorm_plugin`以支持smooth_quant量化技术。
 4. 同时支持qwen base和chat模型
 5. 支持fp16 / int8 (weight only) / int4 (weight only), 理论上最低只需要8G消费级显卡就能运行。
 6. 支持在终端对话和使用gradio构建的网页应用中对话，支持流式输出。
