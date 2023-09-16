@@ -25,6 +25,8 @@
 #include "tensorrt_llm/plugins/identityPlugin/identityPlugin.h"
 #include "tensorrt_llm/plugins/layernormPlugin/layernormPlugin.h"
 #include "tensorrt_llm/plugins/layernormQuantizationPlugin/layernormQuantizationPlugin.h"
+#include "tensorrt_llm/plugins/rmsnormPlugin/rmsnormPlugin.h"
+#include "tensorrt_llm/plugins/rmsnormQuantizationPlugin/rmsnormQuantizationPlugin.h"
 #include "tensorrt_llm/plugins/lookupPlugin/lookupPlugin.h"
 #include "tensorrt_llm/plugins/ncclPlugin/allgatherPlugin.h"
 #include "tensorrt_llm/plugins/ncclPlugin/allreducePlugin.h"
@@ -160,8 +162,10 @@ extern "C"
         nvinfer1::initializePlugin<nvinfer1::plugin::AllreducePluginCreator>(logger, libNamespace);
         nvinfer1::initializePlugin<nvinfer1::plugin::AllgatherPluginCreator>(logger, libNamespace);
         nvinfer1::initializePlugin<nvinfer1::plugin::LayernormPluginCreator>(logger, libNamespace);
-        nvinfer1::initializePlugin<nvinfer1::plugin::SmoothQuantGemmPluginCreator>(logger, libNamespace);
         nvinfer1::initializePlugin<nvinfer1::plugin::LayernormQuantizationPluginCreator>(logger, libNamespace);
+        nvinfer1::initializePlugin<nvinfer1::plugin::RmsNormPluginCreator>(logger, libNamespace);
+        nvinfer1::initializePlugin<nvinfer1::plugin::RmsNormQuantizationPluginCreator>(logger, libNamespace);
+        nvinfer1::initializePlugin<nvinfer1::plugin::SmoothQuantGemmPluginCreator>(logger, libNamespace);
         nvinfer1::initializePlugin<nvinfer1::plugin::QuantizePerTokenPluginCreator>(logger, libNamespace);
         nvinfer1::initializePlugin<nvinfer1::plugin::QuantizeTensorPluginCreator>(logger, libNamespace);
         nvinfer1::initializePlugin<nvinfer1::plugin::WeightOnlyQuantMatmulPluginCreator>(logger, libNamespace);

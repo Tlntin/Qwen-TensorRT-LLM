@@ -35,11 +35,13 @@ set(PLUGIN_LISTS
     ibGptAttentionPlugin
     identityPlugin
     layernormPlugin
+    layernormQuantizationPlugin
+    rmsnormPlugin
+    rmsnormQuantizationPlugin
     gemmPlugin
     smoothQuantGemmPlugin
     quantizePerTokenPlugin
     quantizeTensorPlugin
-    layernormQuantizationPlugin
     ncclPlugin
     weightOnlyQuantMatmulPlugin
     lookupPlugin)

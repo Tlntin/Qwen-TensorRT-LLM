@@ -173,9 +173,9 @@ def parse_arguments():
     parser.add_argument(
         '--use_gemm_plugin',
         nargs='?',
-        const=False,
+        const='float16',
         type=str,
-        default=False,
+        default="float16",
         choices=['float16', 'bfloat16', 'float32', False]
     )
     parser.add_argument('--parallel_build', default=False, action='store_true')
