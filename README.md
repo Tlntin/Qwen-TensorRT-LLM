@@ -187,7 +187,7 @@
 
     - 升级版（理论上速度更快一些）
     ```bash
-    python3 build.py --use_smooth_quan --use_rmsnorm_quantization_plugin=fp16
+    python3 build.py --use_smooth_quan --use_rmsnorm_quantization_plugin=fp16 \
       --per_token --per_channel
     ```
 
