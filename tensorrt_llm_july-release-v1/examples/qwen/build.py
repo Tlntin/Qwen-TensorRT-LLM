@@ -1,7 +1,7 @@
 import argparse
 import os
 import time
-
+import ctypes
 import tensorrt as trt
 import torch
 import torch.multiprocessing as mp
@@ -136,7 +136,18 @@ def parse_arguments():
         help=
         'The path of to read timing cache from, will be ignored if the file does not exist'
     )
-    parser.add_argument('--log_level', type=str, default='info')
+    parser.add_argument(
+        '--log_level',
+        type=str,
+        default='info',
+        choices=[
+            'internal_error',
+            'error',
+            'warning',
+            'info',
+            'verbose',
+        ]
+    )
     parser.add_argument('--vocab_size', type=int, default=32000)
     parser.add_argument('--n_layer', type=int, default=32)
     parser.add_argument('--n_positions', type=int, default=2048)
@@ -157,15 +168,15 @@ def parse_arguments():
         const='float16',
         type=str,
         default="float16",
-        choices=['float16', 'bfloat16', 'float32']
+        choices=['float16', 'bfloat16', 'float32', False]
     )
     parser.add_argument(
         '--use_gemm_plugin',
         nargs='?',
-        const='float16',
+        const=False,
         type=str,
-        default="float16",
-        choices=['float16', 'bfloat16', 'float32']
+        default=False,
+        choices=['float16', 'bfloat16', 'float32', False]
     )
     parser.add_argument('--parallel_build', default=False, action='store_true')
     parser.add_argument('--visualize', default=False, action='store_true')
@@ -189,11 +200,29 @@ def parse_arguments():
     # Arguments related to the quantization of the model.
     parser.add_argument(
         '--use_smooth_quant',
-        default=False,
+        default=True,
         action="store_true",
         help=
         'Use the SmoothQuant method to quantize activations and weights for the various GEMMs.'
         'See --per_channel and --per_token for finer-grained quantization options.'
+    )
+
+    parser.add_argument(
+        '--use_rmsnorm_quantization_plugin',
+        nargs='?',
+        const='float16',
+        type=str,
+        default="float16",
+        choices=['float16', 'bfloat16', 'float32', False]
+    )
+    parser.add_argument(
+        "--add_plugins",
+        nargs='?',
+        type=str,
+        default=os.path.join(
+            now_dir, "plugins", "build", "librmsnorm_quantization_1.0.0.so"
+        ),
+        help="add custom plugins, eg: --add_plugins xxx.so,yyy.so,zzz.so"
     )
     parser.add_argument(
         '--use_weight_only',
@@ -302,9 +331,24 @@ def build_rank_engine(builder: Builder,
         multi_query_mode=multi_query_mode,
         tensor_parallel=args.world_size,  # TP only
         tensor_parallel_group=list(range(args.world_size)))
+    # load custom plugins
+    custom_plugin_paths = [
+        plugin_path
+        for plugin_path in args.add_plugins.split(",")
+        if os.path.exists(plugin_path)
+    ] 
+    if len(custom_plugin_paths) > 0:
+        trt.init_libnvinfer_plugins(tensorrt_llm.logger, "")
+        for custom_plugin_path in custom_plugin_paths:
+            ctypes.cdll.LoadLibrary(custom_plugin_path)
     if args.use_smooth_quant:
+        assert args.use_rmsnorm_quantization_plugin, \
+            print("use_rmsnorm_quantization_plugin must be set when using smooth quantize")
         tensorrt_llm_qwen = smooth_quantize(
-            tensorrt_llm_qwen, args.quant_mode
+            tensorrt_llm_qwen,
+            args.quant_mode,
+            args.use_rmsnorm_quantization_plugin,
+            custom_plugin_paths,
         )
         print("load smooth quantize ok")
     elif args.use_weight_only and args.weight_only_precision == 'int8':
@@ -364,12 +408,22 @@ def build_rank_engine(builder: Builder,
     network.trt_network.name = engine_name
     if args.use_gpt_attention_plugin:
         network.plugin_config.set_gpt_attention_plugin(
-            dtype=args.use_gpt_attention_plugin)
+            dtype=args.use_gpt_attention_plugin
+        )
     if args.use_gemm_plugin:
         network.plugin_config.set_gemm_plugin(dtype=args.use_gemm_plugin)
     if args.use_weight_only:
         network.plugin_config.set_weight_only_quant_matmul_plugin(
-            dtype='float16')
+            dtype='float16'
+        )
+    # Quantization plugins.
+    if args.use_smooth_quant:
+        network.plugin_config.set_smooth_quant_gemm_plugin(dtype=args.dtype)
+        # FIXME(nkorobov)
+        # See https://nvbugs/4164762
+        # See https://nvbugs/4174113
+        network.plugin_config.set_quantize_tensor_plugin()
+        network.plugin_config.set_quantize_per_token_plugin()
     if args.world_size > 1:
         network.plugin_config.set_nccl_plugin(args.dtype)
     if args.remove_input_padding:
