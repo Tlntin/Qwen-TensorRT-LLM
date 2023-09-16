@@ -182,12 +182,12 @@
 4. 开始编译trt_engine(未完待续)
     - 普通版 (调用第三步编译的rmsnorm)
     ```bash
-    python3 build.py --use_smooth_quan --use_rmsnorm_quantization_plugin=fp16
+    python3 build.py --use_smooth_quan --use_rmsnorm_quantization_plugin=float16
     ```
 
     - 升级版（理论上速度更快一些）
     ```bash
-    python3 build.py --use_smooth_quan --use_rmsnorm_quantization_plugin=fp16 \
+    python3 build.py --use_smooth_quan --use_rmsnorm_quantization_plugin=float16 \
       --per_token --per_channel
     ```
 
