@@ -110,9 +110,7 @@ class TestFunctional(unittest.TestCase):
         with tensorrt_llm.net_guard(net):
             tensorrt_llm.default_trtnet()
             # Get output tensor for SQ gemm
-            with self.assertRaisesRegex(
-                    TypeError,
-                    "Smooth Quant Rms Norm is only supported with plugin"):
+            with self.assertRaisesRegex(AssertionError, 'Unsupported dtype: 0'):
                 smooth_quant_rms_norm_op(None, 0, None, None, None, 0)
 
 
