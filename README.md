@@ -392,7 +392,7 @@
     what():  [TensorRT-LLM Error][int8gemm Runner] Failed to run cutlass int8 gemm. Error: Error Internal
     ```
 17. 直觉告诉我们策略选择器能运行的代码，到插件运行阶段确又失败应该是某个参数过大导致了重复运行，所以我们调整了里面和运行阶段有关的两个参数`warmup`和`runs`，经过多次编译，运行单元测试，发现3和10是比较合适的数字，可以产生较长的日志（说明能运行较长时间）。但是最终单元测试还是未能通过，后面我们还是试了一下smooth quant编译，结果发现可以。所以这个单元测试可能并不适合24G显存的A10来运行，或许是给A100跑的呢，相关变更可以通过[该commit](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/commit/0667e03b726a18a9a52e8242ddaf517f90c0e16f)查看，此时smooth_quant可以编译与运行，但是结果并不对，需要进一步校准代码。
-18. 我们重新跑了gpt2的示例代码，并且发现按照readme的操作做smooth quant，我们发现，当开启gpt attention plugin比不开效果更好，这样就可以说明gpt attention plugin是支持int8 smooth quant的。我们的qwen比和gpt用了同一个attention plugin，所以如果能把rope计算放到plugin里面，那么自然SmoothAttention结构就能完全对齐了。后面我们测试了trt-llm版，fp16模式下，把外部的rope注释，将rotary_embedding_dim从0重新设置为`self.rotary_embedding_dim,`，然后我们重新build以及run然后加上summarize，完全是ok的，rouge分数和之前一样，但是summarize总计用时明显减少了3-4秒。保险起见，我们又测试新rope计算下的int8/int4 wight only，测试结果表明
+18. 我们重新跑了gpt2的示例代码，并且发现按照readme的操作做smooth quant，我们发现，当开启gpt attention plugin比不开效果更好，这样就可以说明gpt attention plugin是支持int8 smooth quant的。我们的qwen比和gpt用了同一个attention plugin，所以如果能把rope计算放到plugin里面，那么自然SmoothAttention结构就能完全对齐了。后面我们测试了trt-llm版，fp16模式下，把外部的rope注释，将rotary_embedding_dim从0重新设置为`self.rotary_embedding_dim,`，然后我们重新build以及run然后加上summarize，完全是ok的，rouge分数和之前一样，但是summarize总计用时明显减少了3秒左右。保险起见，我们又测试新rope计算下的int8/int4 wight only，测试结果表明rouge分数基本和之前一样，并且推理时间均下降2-3秒。
 
 ### 优化效果
 
