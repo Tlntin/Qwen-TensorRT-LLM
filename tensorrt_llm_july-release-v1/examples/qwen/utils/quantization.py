@@ -168,6 +168,7 @@ class SmoothQuantAttention(Module):
             qkv = self.qkv(hidden_states)
         else:
             raise ValueError("smooth_quant_gemm_plugin is not set")
+        """
         # copy from model.py QWenAttention
         # query, key, value = qkv.split(self.split_size, dim=2)
         query, key, value = split(qkv, self.split_size, dim=2)
@@ -223,12 +224,6 @@ class SmoothQuantAttention(Module):
         q_pos_emb, k_pos_emb = rotary_pos_emb
         query = apply_rotary_pos_emb(query, q_pos_emb)
         key = apply_rotary_pos_emb(key, k_pos_emb)
-
-        kv_orig_quant_scale = self.kv_orig_quant_scale.value \
-            if self.quant_mode.has_int8_kv_cache() else None
-        kv_quant_orig_scale = self.kv_quant_orig_scale.value \
-            if self.quant_mode.has_int8_kv_cache() else None
-
         # implement in trt
         # seq_start = slice(shape(key), [1], [1]) - slice(shape(query), [1], [1])
         # seq_end = slice(shape(key), [1], [1])
@@ -246,6 +241,13 @@ class SmoothQuantAttention(Module):
                     shape(qkv, 1),
                     self.hidden_size * 3])
         )
+        """ 
+        kv_orig_quant_scale = self.kv_orig_quant_scale.value \
+            if self.quant_mode.has_int8_kv_cache() else None
+        kv_quant_orig_scale = self.kv_quant_orig_scale.value \
+            if self.quant_mode.has_int8_kv_cache() else None
+
+        
         if default_net().plugin_config.gpt_attention_plugin:
             assert sequence_length is not None
             assert past_key_value_length is not None
@@ -267,7 +269,7 @@ class SmoothQuantAttention(Module):
                 num_heads=self.num_attention_heads,
                 head_size=self.num_kv_heads,
                 q_scaling=self.q_scaling,
-                rotary_embedding_dim=0, # self.rotary_embedding_dim,
+                rotary_embedding_dim=self.rotary_embedding_dim, # when we use it 0, we will not use rotary embedding in plugin
                 neox_rotary_style=self.neox_rotary_style,
                 multi_block_mode=self.multi_block_mode,
                 multi_query_mode=self.multi_query_mode,
