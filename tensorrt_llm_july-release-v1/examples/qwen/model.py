@@ -141,6 +141,7 @@ class QWenAttention(Module):
         )
         # copy from chatglm6b trt-llm
         self.attention_mask_type = attention_mask_type
+        self.bias = bias
         self.attention_head_size = hidden_size // num_attention_heads
         self.num_attention_heads = num_attention_heads // tp_size
         self.num_attention_kv_heads = 1 if multi_query_mode else self.num_attention_heads
@@ -489,7 +490,10 @@ class QWenMLP(Module):
             tp_group=tp_group,
             tp_size=tp_size
         )
+        self.hidden_size = hidden_size 
+        self.ffn_hidden_size = ffn_hidden_size
         self.hidden_act = hidden_act
+        self.bias = bias
         self.dtype = dtype
 
     def forward(self, hidden_states):
@@ -527,6 +531,9 @@ class QWenBlock(Module):
         self.hidden_size = hidden_size
         self.seq_length = seq_length
         self.mlp_hidden_size = mlp_hidden_size
+        self.neox_rotary_style = neox_rotary_style
+        self.bias = bias
+        self.multi_query_mode = multi_query_mode
         self.hidden_act = hidden_act
         self.dtype = dtype
         self.attention_mask_type = attention_mask_type
