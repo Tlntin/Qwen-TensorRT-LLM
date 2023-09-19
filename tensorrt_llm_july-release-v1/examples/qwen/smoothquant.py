@@ -9,6 +9,12 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 from transformers.pytorch_utils import Conv1D
+import numpy as np
+import os
+import sys
+project_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(project_dir)
+from utils.utils import make_context
 
 
 @torch.no_grad()
@@ -136,8 +142,10 @@ def capture_activation_range(
     model,
     tokenizer,
     dataset,
+    system_prompt,
+    chat_format,
+    max_input_len,
     num_samples=512,
-    seq_len=512
 ):
     model.eval()
     device = next(model.parameters()).device
@@ -170,13 +178,31 @@ def capture_activation_range(
             hooks.append(
                 m.register_forward_hook(
                     functools.partial(stat_input_hook, name=name)))
-
+    num_samples = min(num_samples, len(dataset))
     for i in tqdm(range(num_samples), desc="calibrating model"):
-        input_ids = tokenizer(dataset[i]["text"],
-                              return_tensors="pt",
-                              max_length=seq_len,
-                              truncation=True).input_ids.to(device)
-        model(input_ids)
+        line = dataset[i]["article"]
+        line = line + ' TL;DR: '
+        line = line.strip()
+        line = line.replace(" n't", "n't")
+        # use make_content to generate prompt
+        _, input_id_list = make_context(
+            tokenizer=tokenizer,
+            query=line,
+            history=[],
+            system=system_prompt,
+            chat_format=chat_format,
+            max_input_length=max_input_len
+        )
+        line_encoded = torch.from_numpy(
+            np.array(input_id_list, dtype=np.int32)
+        ).type(torch.int32).unsqueeze(0)
+        line_encoded = line_encoded.cuda()
+        # input_ids = tokenizer(dataset[i]["text"],
+        #                       return_tensors="pt",
+        #                       max_length=seq_len,
+        #                       truncation=True).input_ids.to(device)
+        # model(input_ids)
+        model(line_encoded)
 
     for h in hooks:
         h.remove()

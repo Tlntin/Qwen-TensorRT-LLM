@@ -3,7 +3,11 @@
 - 介绍本工作是 [NVIDIA TensorRT Hackathon 2023](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023) 的参赛题目，本项目将使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。
 - 原始模型：Qwen-7B-Chat
 - 原始模型URL：[Qwen-7B-Chat 🤗](https://huggingface.co/Qwen/Qwen-7B-Chat) [Qwen-7B-Chat Github](https://github.com/QwenLM/Qwen-7B) 
-  - 注：Hugggingface的Qwen-7B-Chat貌似下架了，需要的可以用百度网盘下载，[百度网盘链接](https://pan.baidu.com/s/1Ra4mvQcRCbkzkReFYhk3Vw?pwd=6fxh) 提取码: 6fxh 
+- 注：Hugggingface的Qwen-7B-Chat貌似下架了，需要的可以用网盘下载。
+    - [百度网盘](https://pan.baidu.com/s/1Ra4mvQcRCbkzkReFYhk3Vw?pwd=6fxh) 提取码: 6fxh 
+    - [Mega网盘](https://mega.nz/folder/d3YH2SaJ#QSoyfqSXBmNKlpyro6lvVA)
+    - [123pan](https://www.123pan.com/s/oEqDVv-LFik.html) 提取码:JAUb
+    - 123pan直链: `https://vip.123pan.cn/1811989133/trt2023%E7%9B%B8%E5%85%B3/qwen_7b_chat.tar.gz`, 下载解压即可
 
 - 选题类型：2+4（注：2指的是TRT-LLM实现新模型。4指的是在新模型上启用了TRT-LLM现有feature）
 
@@ -77,18 +81,18 @@
    - 对于24G显存用户，可以直接编译fp16。
 
     ```bash
-    python3 build.py
+    python3 build.py --use_gpt_attention_plugin=float16 --use_gemm_plugin=float16
     ```
 
     - 对于16G显存用户，可以试试int8 (weight only)。
 
     ```bash
-    python3 build.py --use_weight_only --weight_only_precision=int8
+    python3 build.py --use_weight_only --weight_only_precision=int8 --use_gpt_attention_plugin=float16 --use_gemm_plugin=float16
     ```
 
     - 对于12G显存用户，可以试试int4 (weight only)
     ```bash
-    python3 build.py --use_weight_only --weight_only_precision=int4
+    python3 build.py --use_weight_only --weight_only_precision=int4 --use_gpt_attention_plugin=float16 --use_gemm_plugin=float16
     ```
 
 10. 试运行（可选）编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。

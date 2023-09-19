@@ -17,7 +17,7 @@ from tensorrt_llm.layers.attention import AttentionMaskType, PositionEmbeddingTy
 from tensorrt_llm.module import Module
 from tensorrt_llm.functional import (
     ACT2FN, RaggedTensor, Tensor, cast, concat, constant, gpt_attention,
-    shape, slice, _create_tensor, expand_dims_like, split
+    shape, slice, _create_tensor, expand_dims_like, split, matmul, softmax, where
 )
 
 
@@ -36,16 +36,18 @@ class SmoothQuantAttention(Module):
         num_layers=1,
         apply_query_key_layer_scaling=False,
         attention_mask_type=AttentionMaskType.causal,
-        bias=True,
+        bias=False,
         dtype=None,
         position_embedding_type=PositionEmbeddingType.rope,
+        neox_rotary_style=False,
         tp_group=None,
         tp_size=1,
         multi_block_mode=False,
         multi_query_mode=False,
+        paged_kv_cache=False,
         use_dynamic_ntk=True,
         use_logn_attn=True,
-        paged_kv_cache=False,
+        rotary_embedding_percentage=1.0,
         quant_mode=QuantMode(0)
     ):
         super().__init__()
@@ -73,8 +75,13 @@ class SmoothQuantAttention(Module):
         self.paged_kv_cache = paged_kv_cache
 
         self.rotary_embedding_dim = 0
+        self.neox_rotary_style = neox_rotary_style
         #if self.position_embedding_type.is_rope():
-        self.rotary_embedding_dim = hidden_size // num_attention_heads
+        if self.position_embedding_type == PositionEmbeddingType.rope:
+            self.rotary_embedding_dim = int(self.attention_head_size *
+                                            rotary_embedding_percentage)
+            # TODO: Once we add RotaryEmbedding outside GPTAttention plugin,
+            #       we need to set it up here
 
         self.quant_mode = quant_mode
         self.dtype = dtype
@@ -102,7 +109,7 @@ class SmoothQuantAttention(Module):
             hidden_size,
             hidden_size * 3 if not multi_query_mode 
             else hidden_size + 2 * self.num_kv_heads * tp_size * self.attention_head_size,
-            bias=bias,
+            bias=True,
             dtype=dtype,
             tp_group=tp_group,
             tp_size=tp_size,
@@ -120,20 +127,21 @@ class SmoothQuantAttention(Module):
         )
         
         # copy from model.py QWenAttention
-        self.use_dynamic_ntk = use_dynamic_ntk
-        self.use_logn_attn = use_logn_attn
+        # for input_length < 2048, logn and ntk is useless
+        # self.use_dynamic_ntk = use_dynamic_ntk
+        # self.use_logn_attn = use_logn_attn
 
-        logn_array = np.array([
-            math.log(i, seq_length) if i > seq_length else 1
-            for i in range(1, 32768)
-            ],
-            dtype=np.float16
-        ).reshape(1, -1, 1, 1)
-        self.logn_tensor = Parameter(
-            value=logn_array,
-            dtype=self.dtype,
-            shape=[1, 32767, 1, 1],
-        ) 
+        # logn_array = np.array([
+        #     math.log(i, seq_length) if i > seq_length else 1
+        #     for i in range(1, 32768)
+        #     ],
+        #     dtype=np.float16
+        # ).reshape(1, -1, 1, 1)
+        # self.logn_tensor = Parameter(
+        #     value=logn_array,
+        #     dtype=self.dtype,
+        #     shape=[1, 32767, 1, 1],
+        # ) 
 
     def forward(
         self,
@@ -156,88 +164,88 @@ class SmoothQuantAttention(Module):
             max_input_length = hidden_states.max_row_length
             hidden_states = hidden_states.data
             is_input_ragged_tensor = True
-        if default_net().plugin_config.gpt_attention_plugin:
+        if default_net().plugin_config.smooth_quant_gemm_plugin:
             qkv = self.qkv(hidden_states)
-            # copy from model.py QWenAttention
-            # query, key, value = qkv.split(self.split_size, dim=2)
-            query, key, value = split(qkv, self.split_size, dim=2)
-            # query = self._split_heads(query, self.num_heads, self.head_dim)
-            query = query.view(
-                concat([
-                    shape(qkv, 0),
-                    shape(qkv, 1),
-                    self.num_attention_heads,
-                    self.attention_head_size
-                ]))
-            # key = self._split_heads(key, self.num_heads, self.head_dim)
-            key = key.view(
-                concat([
-                    shape(qkv, 0),
-                    shape(qkv, 1),
-                    self.num_attention_heads,
-                    self.attention_head_size
-                ]))
-            # value = self._split_heads(value, self.num_heads, self.head_dim)
-            value = value.view(
-                concat([
-                    shape(qkv, 0),
-                    shape(qkv, 1),
-                    self.num_attention_heads,
-                    self.attention_head_size
-                ]))
-
-            zero = cast(constant(
-                np.ascontiguousarray(
-                    np.zeros(
-                        [1, 1, 1, 1],
-                        dtype=np.float16 if self.dtype == trt.float16 else np.float32
-                    )
-                )
-            ), dtype=trt.float32)
-            def _rotate_half(x128):
-                x64_part0, x64_part1 = x128.split(64, dim=-1)
-
-                x64_part1_negtive = zero - x64_part1
-
-                y64 = concat([x64_part1_negtive, x64_part0], dim=3)
-                return y64
-
-            def apply_rotary_pos_emb(t, freqs):
-                cos1, sin1 = freqs
-                t_ = t.cast(trt.float32)
-                t_rotate = _rotate_half(t_)
-                y128 = t_ * cos1 + t_rotate * sin1
-                # y128 = y128.view(shape(x))
-                y128 = y128.cast(t.dtype)
-                return y128
-            q_pos_emb, k_pos_emb = rotary_pos_emb
-            query = apply_rotary_pos_emb(query, q_pos_emb)
-            key = apply_rotary_pos_emb(key, k_pos_emb)
-
-            kv_orig_quant_scale = self.kv_orig_quant_scale.value \
-                if self.quant_mode.has_int8_kv_cache() else None
-            kv_quant_orig_scale = self.kv_quant_orig_scale.value \
-                if self.quant_mode.has_int8_kv_cache() else None
-
-            # implement in trt
-            seq_start = slice(shape(key), [1], [1]) - slice(shape(query), [1], [1])
-            seq_end = slice(shape(key), [1], [1])
-            logn_shape = self.logn_tensor.value.shape
-            logn_tensor = slice(
-                input=self.logn_tensor.value,
-                starts=concat([0, seq_start, 0, 0]),
-                sizes=concat([logn_shape[0], seq_end - seq_start, logn_shape[2], logn_shape[3]]),
-            )
-            query = query * expand_dims_like(logn_tensor, query)
-
-            qkv = concat([query, key, value], dim=2)
-            qkv = qkv.view(
-                concat([shape(qkv, 0),
-                        shape(qkv, 1),
-                        self.hidden_size * 3])
-            )
         else:
-            raise ValueError("gpt_attention_plugin is not set")
+            raise ValueError("smooth_quant_gemm_plugin is not set")
+        # copy from model.py QWenAttention
+        # query, key, value = qkv.split(self.split_size, dim=2)
+        query, key, value = split(qkv, self.split_size, dim=2)
+        # query = self._split_heads(query, self.num_heads, self.head_dim)
+        query = query.view(
+            concat([
+                shape(qkv, 0),
+                shape(qkv, 1),
+                self.num_attention_heads,
+                self.attention_head_size
+            ]))
+        # key = self._split_heads(key, self.num_heads, self.head_dim)
+        key = key.view(
+            concat([
+                shape(qkv, 0),
+                shape(qkv, 1),
+                self.num_attention_heads,
+                self.attention_head_size
+            ]))
+        # value = self._split_heads(value, self.num_heads, self.head_dim)
+        value = value.view(
+            concat([
+                shape(qkv, 0),
+                shape(qkv, 1),
+                self.num_attention_heads,
+                self.attention_head_size
+            ]))
+
+        zero = cast(constant(
+            np.ascontiguousarray(
+                np.zeros(
+                    [1, 1, 1, 1],
+                    dtype=np.float16 if self.dtype == trt.float16 else np.float32
+                )
+            )
+        ), dtype=trt.float32)
+        def _rotate_half(x128):
+            x64_part0, x64_part1 = x128.split(64, dim=-1)
+
+            x64_part1_negtive = zero - x64_part1
+
+            y64 = concat([x64_part1_negtive, x64_part0], dim=3)
+            return y64
+
+        def apply_rotary_pos_emb(t, freqs):
+            cos1, sin1 = freqs
+            t_ = t.cast(trt.float32)
+            t_rotate = _rotate_half(t_)
+            y128 = t_ * cos1 + t_rotate * sin1
+            # y128 = y128.view(shape(x))
+            y128 = y128.cast(t.dtype)
+            return y128
+        q_pos_emb, k_pos_emb = rotary_pos_emb
+        query = apply_rotary_pos_emb(query, q_pos_emb)
+        key = apply_rotary_pos_emb(key, k_pos_emb)
+
+        kv_orig_quant_scale = self.kv_orig_quant_scale.value \
+            if self.quant_mode.has_int8_kv_cache() else None
+        kv_quant_orig_scale = self.kv_quant_orig_scale.value \
+            if self.quant_mode.has_int8_kv_cache() else None
+
+        # implement in trt
+        # seq_start = slice(shape(key), [1], [1]) - slice(shape(query), [1], [1])
+        # seq_end = slice(shape(key), [1], [1])
+        # logn_shape = self.logn_tensor.value.shape
+        # logn_tensor = slice(
+        #     input=self.logn_tensor.value,
+        #     starts=concat([0, seq_start, 0, 0]),
+        #     sizes=concat([logn_shape[0], seq_end - seq_start, logn_shape[2], logn_shape[3]]),
+        # )
+        # query = query * expand_dims_like(logn_tensor, query)
+
+        qkv = concat([query, key, value], dim=2)
+        qkv = qkv.view(
+            concat([shape(qkv, 0),
+                    shape(qkv, 1),
+                    self.hidden_size * 3])
+        )
         if default_net().plugin_config.gpt_attention_plugin:
             assert sequence_length is not None
             assert past_key_value_length is not None
@@ -271,7 +279,97 @@ class SmoothQuantAttention(Module):
                 host_request_types=host_request_types,
             )
         else:
-            raise Exception("gpt_attention_plugin is not set")
+            assert self.paged_kv_cache == False
+
+            def transpose_for_scores(x):
+                new_x_shape = concat([
+                    shape(x, 0),
+                    shape(x, 1), self.num_attention_heads,
+                    self.attention_head_size
+                ])
+                return x.view(new_x_shape).permute([0, 2, 1, 3])
+
+            query, key, value = split(qkv, self.hidden_size, dim=2)
+            query = transpose_for_scores(query)
+            key = transpose_for_scores(key)
+            value = transpose_for_scores(value)
+
+            if past_key_value is not None:
+
+                def dequantize_tensor(x, scale):
+                    # Cast from int8 to dtype
+                    casted_x = cast(x, self.dtype)
+                    return casted_x * scale
+
+                if self.quant_mode.has_int8_kv_cache():
+                    past_key_value = dequantize_tensor(
+                        past_key_value, self.kv_dequantization_scale.value)
+
+                # past_key_value [bs, 2, num_heads, max_seq_len, head_dim]
+                past_key, past_value = split(past_key_value, 1, dim=1)
+
+                key_shape = concat([
+                    shape(past_key, 0),
+                    shape(past_key, 2),
+                    shape(past_key, 3),
+                    shape(past_key, 4)
+                ])
+                past_key = past_key.view(key_shape, zero_is_placeholder=False)
+                past_value = past_value.view(key_shape,
+                                             zero_is_placeholder=False)
+                key = concat([past_key, key], dim=2)
+                value = concat([past_value, value], dim=2)
+
+            def merge_caches():
+                key_inflated_shape = concat([
+                    shape(key, 0), 1,
+                    shape(key, 1),
+                    shape(key, 2),
+                    shape(key, 3)
+                ])
+                inflated_key = key.view(key_inflated_shape,
+                                        zero_is_placeholder=False)
+                inflated_value = value.view(key_inflated_shape,
+                                            zero_is_placeholder=False)
+                past_key_value = concat([inflated_key, inflated_value], dim=1)
+                return past_key_value
+
+            if self.attention_mask_type == AttentionMaskType.causal:
+                query_length = shape(query, 2)
+                key_length = shape(key, 2)
+                starts = concat([0, 0, key_length - query_length, 0])
+                sizes = concat([1, 1, query_length, key_length])
+                buffer = constant(
+                    np.expand_dims(
+                        np.tril(
+                            np.ones(
+                                (self.max_position_embeddings,
+                                 self.max_position_embeddings))).astype(bool),
+                        (0, 1)))
+                causal_mask = slice(buffer, starts, sizes)
+
+            key = key.permute([0, 1, 3, 2])
+            with precision('float32'):
+                attention_scores = matmul(cast(query, 'float32'),
+                                          cast(key, 'float32'))
+
+                if self.attention_mask_type == AttentionMaskType.causal:
+                    attention_scores = where(causal_mask, attention_scores,
+                                             -10000.0)
+
+                attention_scores = attention_scores / self.norm_factor
+                attention_probs = softmax(attention_scores, dim=-1)
+
+            context = matmul(attention_probs, value).permute([0, 2, 1, 3])
+            context = context.view(
+                concat([shape(context, 0),
+                        shape(context, 1), self.hidden_size]))
+
+            past_key_value = merge_caches()
+
+            if use_cache and self.quant_mode.has_int8_kv_cache():
+                past_key_value = quantize_tensor(
+                    past_key_value, self.kv_quantization_scale.value)
 
         if self.quant_mode.has_act_and_weight_quant():
             if self.quant_mode.has_act_static_scaling():
@@ -527,6 +625,7 @@ def smooth_quantize(model, quant_mode, rmsnorm_quantization_plugin_dtype, custom
             apply_query_key_layer_scaling=layer.apply_query_key_layer_scaling,
             dtype=layer.dtype,
             attention_mask_type=layer.attention_mask_type,
+            bias=False,
             position_embedding_type=layer.position_embedding_type,
             tp_group=layer.tp_group,
             tp_size=layer.tp_size,

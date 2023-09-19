@@ -6,6 +6,7 @@ import argparse
 import configparser
 import dataclasses
 import os
+import json
 from pathlib import Path
 
 import torch
@@ -13,7 +14,7 @@ import torch.multiprocessing as multiprocessing
 from smoothquant import capture_activation_range, smooth_gemm, smooth_gemm_mlp
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM  # transformers-4.10.0-py3
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, GenerationConfig
 # for debug
 from utils.convert import split_and_save_weight
 from tensorrt_llm._utils import str_dtype_to_torch, torch_to_numpy
@@ -220,21 +221,44 @@ def hf_qwen_converter(args: ProgArgs):
         trust_remote_code=True,
         torch_dtype=str_dtype_to_torch(args.storage_type),
     ).half() # if you gpu memory is not enough, you can set .half() to .float()
+    model.generation_config = GenerationConfig.from_pretrained(
+        args.in_file,
+        trust_remote_code=True
+    )
     act_range = {}
     if args.smoothquant is not None or args.calibrate_kv_cache:
         os.environ["TOKENIZERS_PARALLELISM"] = os.environ.get(
             "TOKENIZERS_PARALLELISM", "false")
         from datasets import load_dataset
-        dataset = load_dataset("lambada",
-                               split="validation",
-                               cache_dir=args.dataset_cache_dir)
+        # copy from summarize.py
+        dataset_cnn = load_dataset(
+            "ccdv/cnn_dailymail",
+            '3.0.0'
+        )
+        dataset = dataset_cnn["test"]
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.in_file,
+            legacy=False,
+            padding_side='left',
+            trust_remote_code=True,
+        )
+        gen_config_path = os.path.join(args.in_file, 'generation_config.json')
+        with open(gen_config_path, 'r') as f:
+            gen_config = json.load(f)
+        chat_format = gen_config['chat_format']
+        max_input_len = default_config.max_input_len
+        # pad_id = tokenizer.encode(tokenizer.pad_token, add_special_tokens=False)[0]
+        # end_id = tokenizer.encode(tokenizer.eos_token, add_special_tokens=False)[0]
+        tokenizer.pad_token_id = tokenizer.im_end_id
+        # use this prompt to make chat model do summarize
+        system_prompt = "You are a useful assistant, please directly output the corresponding summary according to the article entered by the user."
         act_range = capture_activation_range(
             model, 
-            AutoTokenizer.from_pretrained(
-                args.in_file,
-                trust_remote_code=True,
-            ),
-            dataset
+            tokenizer,
+            dataset,
+            system_prompt=system_prompt,
+            chat_format=chat_format,
+            max_input_len=max_input_len,
         )
         if args.smoothquant is not None:
             smooth_qwen_model(model, act_range, args.smoothquant)

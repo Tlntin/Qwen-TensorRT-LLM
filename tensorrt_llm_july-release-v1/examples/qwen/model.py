@@ -587,7 +587,7 @@ class QWenBlock(Module):
         input_lengths = hidden_states.row_lengths
         max_input_length = hidden_states.max_row_length
         hidden_states = self.ln_1(hidden_states.data)
-
+        # self.register_network_output("ln_1", identity_op(hidden_states))
         attention_output = self.attention(
             RaggedTensor.from_row_lengths(hidden_states, input_lengths,
                                           max_input_length),
@@ -599,16 +599,20 @@ class QWenBlock(Module):
             cache_indirection=cache_indirection,
             use_cache=use_cache,
         )
-
         if use_cache:
             attention_output, presents = attention_output
 
+        # self.register_network_output("attention_output", identity_op(attention_output.data))
         hidden_states = residual + attention_output.data
 
         residual = hidden_states
+
+        # self.register_network_output("ln_2_input", identity_op(hidden_states))
         hidden_states = self.ln_2(hidden_states)
+        # self.register_network_output("ln_2_output", identity_op(hidden_states))
 
         hidden_states = self.mlp(hidden_states)
+        # self.register_network_output("mlp_output", identity_op(hidden_states))
 
         hidden_states = residual + hidden_states
         hidden_states = RaggedTensor.from_row_lengths(

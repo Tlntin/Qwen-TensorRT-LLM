@@ -279,6 +279,14 @@ class QWenForCausalLMGenerationSession(GenerationSession):
                 torch.cuda.synchronize()
                 if step == 0:
                     print(debug_buffer.keys())
+                    for key in debug_buffer.keys():
+                        if key.startswith("layers."):
+                            print(
+                                f"{key} shape, mean, sum",
+                                debug_buffer[key].shape,
+                                debug_buffer[key].mean(),
+                                debug_buffer[key].sum(),
+                            )
 
             if step == 0 and scfg.num_beams > 1:
 
@@ -928,7 +936,6 @@ def generate(
         serialize_path, remove_input_padding, 
         tokenizer, eos_token_id, pad_token_id
     ) = get_model(tokenizer_dir, engine_dir, log_level)
-    print(f'Loading engine from {serialize_path}')
     with open(serialize_path, 'rb') as f:
         engine_buffer = f.read()
     decoder = QWenForCausalLMGenerationSession(
