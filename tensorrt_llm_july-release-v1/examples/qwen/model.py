@@ -224,17 +224,17 @@ class QWenAttention(Module):
         # ]
         # self.logn_tensor = torch.tensor(logn_list)[None, :, None, None]
         # trt implementation move to QWenModel
-        logn_array = np.array([
-            math.log(i, seq_length) if i > seq_length else 1
-            for i in range(1, 32768)
-            ],
-            dtype=np.float16
-        ).reshape(1, -1, 1, 1)
-        self.logn_tensor = Parameter(
-            value=logn_array,
-            dtype=self.dtype,
-            shape=[1, 32767, 1, 1],
-        )  
+        # logn_array = np.array([
+        #     math.log(i, seq_length) if i > seq_length else 1
+        #     for i in range(1, 32768)
+        #     ],
+        #     dtype=np.float16
+        # ).reshape(1, -1, 1, 1)
+        # self.logn_tensor = Parameter(
+        #     value=logn_array,
+        #     dtype=self.dtype,
+        #     shape=[1, 32767, 1, 1],
+        # )  
         # self.attn_dropout = nn.Dropout(config.attn_dropout_prob)
 
     # def _split_heads(self, tensor, num_heads, attn_head_size):
@@ -273,7 +273,10 @@ class QWenAttention(Module):
         hidden_states = hidden_states.data
         qkv = self.qkv(hidden_states)
 
-        # torch implementation
+        """
+        # 2023.09.19
+        - because rope compute in gpt attention plugin is more efficient than trt layer,
+        - so we move rope compute to gpt attention plugin
         query, key, value = qkv.split(self.split_size, dim=2)
 
         # query = self._split_heads(query, self.num_heads, self.head_dim)
@@ -344,8 +347,6 @@ class QWenAttention(Module):
         #     key = torch.cat((past_key, key), dim=1)
         #     value = torch.cat((past_value, value), dim=1)
 
-        kv_orig_quant_scale = self.kv_orig_quant_scale.value if self.use_int8_kv_cache else None
-        kv_quant_orig_scale = self.kv_quant_orig_scale.value if self.use_int8_kv_cache else None
 
         # implement in tensor
         # if self.use_logn_attn and not self.training:
@@ -417,6 +418,10 @@ class QWenAttention(Module):
         #     else:
         #         outputs += (attn_weight,)
 
+        """
+        kv_orig_quant_scale = self.kv_orig_quant_scale.value if self.use_int8_kv_cache else None
+        kv_quant_orig_scale = self.kv_quant_orig_scale.value if self.use_int8_kv_cache else None
+
         # return outputs
         context, past_key_value = gpt_attention(
             qkv,
@@ -430,7 +435,7 @@ class QWenAttention(Module):
             self.num_attention_heads,
             self.attention_head_size,
             self.q_scaling,
-            0, # self.rotary_embedding_dim,
+            self.rotary_embedding_dim, # when we use it 0, we will not use rotary embedding in plugin
             self.neox_rotary_style,
             self.multi_block_mode,
             self.multi_query_mode,

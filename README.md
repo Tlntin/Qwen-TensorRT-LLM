@@ -284,7 +284,7 @@
     - 至此，在trt-llm上支持qwen模型的基础工作已经做完
 
 ##### 开发中的亮点
-1. 完整支持原版的logn和ntk（这俩参数是用于增强模型长输入的生成效果，这里的长输入指的是输入长度大于2048小于8192）。不过由于trt-llm的某些bug，导致输入长度>2048时，实际输出会很短甚至为空，详见[issue](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/90)。
+1. 完整支持原版的logn和ntk（这俩参数是用于增强模型长输入的生成效果，这里的长输入指的是输入长度大于2048小于8192）。不过由于trt-llm的某些bug，导致输入长度>2048时，实际输出会很短甚至为空，详见[issue](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/90)，所以加上rope放gpt attention plugin里面计算更快，所以我们logn注释掉了。
 2. 支持`RotaryEmbedding`，并且在input_len > 2048时开启ntk相关计算。
 3. 支持自带的`gpt_attention_plugin`与`gemm_plugin`两个plugin，同时将`layernorm_plugin`魔改成`rmsnorm_plugin`以支持smooth_quant量化技术。
 4. 同时支持qwen base和chat模型
@@ -393,6 +393,7 @@
     what():  [TensorRT-LLM Error][int8gemm Runner] Failed to run cutlass int8 gemm. Error: Error Internal
     ```
 17. 直觉告诉我们策略选择器能运行的代码，到插件运行阶段确又失败应该是某个参数过大导致了重复运行，所以我们调整了里面和运行阶段有关的两个参数`warmup`和`runs`，经过多次编译，运行单元测试，发现3和10是比较合适的数字，可以产生较长的日志（说明能运行较长时间）。但是最终单元测试还是未能通过，后面我们还是试了一下smooth quant编译，结果发现可以。所以这个单元测试可能并不适合24G显存的A10来运行，或许是给A100跑的呢，相关变更可以通过[该commit](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/commit/0667e03b726a18a9a52e8242ddaf517f90c0e16f)查看，此时smooth_quant可以编译与运行，但是结果并不对，需要进一步校准代码。
+18. 我们重新跑了gpt2的示例代码，并且发现按照readme的操作做smooth quant，我们发现，当开启gpt attention plugin比不开效果更好，这样就可以说明gpt attention plugin是支持int8 smooth quant的。我们的qwen比和gpt用了同一个attention plugin，所以如果能把rope计算放到plugin里面，那么自然SmoothAttention结构就能完全对齐了。后面我们测试了trt-llm版，fp16模式下，把外部的rope注释，将rotary_embedding_dim从0重新设置为`self.rotary_embedding_dim,`，然后我们重新build以及run然后加上summarize，完全是ok的，rouge分数和之前一样，但是summarize总计用时明显减少了3-4秒。保险起见，我们又测试新rope计算下的int8/int4 wight only，测试结果表明
 
 ### 优化效果
 
@@ -409,23 +410,23 @@ HuggingFace (dtype: bf16 | total latency: 99.70530200004578 sec)
   rougeL : 19.198723845033232
   rougeLsum : 22.37342869203733
 
-TensorRT-LLM (dtype: fp16 | total latency: 73.86007595062256 sec)
+TensorRT-LLM (dtype: fp16 | total latency: 70.68618655204773 sec)
   rouge1 : 28.24200534394352
   rouge2 : 9.385498589891833
   rougeL : 19.22414575248309
   rougeLsum : 22.408209721264484
 
-TensorRT-LLM (dtype: int8 (weight only) | total latency: 48.43972039222717 sec)
-  rouge1 : 29.731668873583533
-  rouge2 : 10.353891207345667
-  rougeL : 20.10478449235491
-  rougeLsum : 23.55666137261072
+TensorRT-LLM (dtype: int8 (weight only) | total latency: 45.96261024475098 sec)
+  rouge1 : 29.40729169624385
+  rouge2 : 10.226448500880512
+  rougeL : 19.8951718521485
+  rougeLsum : 23.218727152508027
 
-TensorRT-LLM (dtype: int4 (weight only) | total latency: 35.63924956321716 sec)
-  rouge1 : 29.533080483794283
-  rouge2 : 10.748989074452952
-  rougeL : 19.7774466999517
-  rougeLsum : 23.959476739209514
+TensorRT-LLM (dtype: int4 (weight only) | total latency: 33.62176060676575 sec)
+  rouge1 : 29.737523789256326
+  rouge2 : 11.12480662569741
+  rougeL : 20.010690925962344
+  rougeLsum : 24.04248574675328
 
 ```
 
