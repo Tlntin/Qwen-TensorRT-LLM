@@ -81,18 +81,18 @@
    - 对于24G显存用户，可以直接编译fp16。
 
     ```bash
-    python3 build.py --use_gpt_attention_plugin=float16 --use_gemm_plugin=float16
+    python3 build.py
     ```
 
     - 对于16G显存用户，可以试试int8 (weight only)。
 
     ```bash
-    python3 build.py --use_weight_only --weight_only_precision=int8 --use_gpt_attention_plugin=float16 --use_gemm_plugin=float16
+    python3 build.py --use_weight_only --weight_only_precision=int8
     ```
 
     - 对于12G显存用户，可以试试int4 (weight only)
     ```bash
-    python3 build.py --use_weight_only --weight_only_precision=int4 --use_gpt_attention_plugin=float16 --use_gemm_plugin=float16
+    python3 build.py --use_weight_only --weight_only_precision=int4
     ```
 
 10. 试运行（可选）编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。

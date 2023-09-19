@@ -166,14 +166,14 @@ def parse_arguments():
         '--use_gpt_attention_plugin',
         nargs='?',
         type=str,
-        default=None,
+        default="float16",
         choices=['float16', 'bfloat16', 'float32', None]
     )
     parser.add_argument(
         '--use_gemm_plugin',
         nargs='?',
         type=str,
-        default=None,
+        default="float16",
         choices=['float16', 'bfloat16', 'float32', None]
     )
     parser.add_argument('--parallel_build', default=False, action='store_true')
@@ -284,7 +284,9 @@ def parse_arguments():
         args.hidden_act = "silu"
         args.kv_channels = hf_config.kv_channels
         args.rotary_emb_base = hf_config.rotary_emb_base
-    # assert args.use_gpt_attention_plugin is not None, "QWen must use gpt attention plugin"
+    assert args.use_gpt_attention_plugin is not None, "QWen must use gpt attention plugin"
+    if not args.use_gemm_plugin:
+        print("wanring QWen should use gemm plugin")
     if args.n_kv_head is not None and args.n_kv_head != args.n_head:
         assert args.n_kv_head == args.world_size, \
         "The current implementation of GQA requires the number of K/V heads to match the number of GPUs." \
@@ -330,10 +332,6 @@ def build_rank_engine(builder: Builder,
         for custom_plugin_path in custom_plugin_paths:
             ctypes.cdll.LoadLibrary(custom_plugin_path)
     if args.use_smooth_quant:
-        assert args.use_gpt_attention_plugin in [None, False], \
-            print("use_gpt_attention_plugin can't be set when using smooth quantize")
-        assert args.use_gemm_plugin in [None, False], \
-            print("use_gemm_plugin can't be set when using smooth quantize")
         if not args.per_token:
             print("warning per_channel should be set when using smooth quantize")
         if not args.per_channel:
@@ -346,28 +344,15 @@ def build_rank_engine(builder: Builder,
         )
         print("load smooth quantize ok")
     elif args.use_weight_only and args.weight_only_precision == 'int8':
-        assert args.use_gpt_attention_plugin, \
-            print("use_gpt_attention_plugin must be set when using weight only int8")
-        if not args.use_gemm_plugin:
-            print("warning gemm plugin should be set when using weight only int8")
         tensorrt_llm_qwen = weight_only_quantize(
             tensorrt_llm_qwen,
             QuantMode.use_weight_only()
         )
     elif args.use_weight_only and args.weight_only_precision == 'int4':
-        assert args.use_gpt_attention_plugin, \
-            print("use_gpt_attention_plugin must be set when using weight only int4")
-        if not args.use_gemm_plugin:
-            print("warning gemm plugin should be set when using weight only int4")
         tensorrt_llm_qwen = weight_only_quantize(
             tensorrt_llm_qwen,
             QuantMode.use_weight_only(use_int4_weights=True)
         )
-    else:
-        assert args.use_gpt_attention_plugin, \
-            print("use_gpt_attention_plugin must be set")
-        if not args.use_gemm_plugin:
-            print("warning gemm plugin should be set")
 
     if args.hf_model_dir is not None and args.ft_dir_path is None:
         logger.info(f'Loading HF QWen ... from {args.hf_model_dir}')
