@@ -916,28 +916,48 @@ class QWenForCausalLM(QWenModel):
         tensor_parallel=1,
         tensor_parallel_group=None,
         multi_query_mode=False,
+        quant_mode=QuantMode(0),
         custom_plugin_paths=None,
     ):
         if isinstance(dtype, str):
-            self.kv_dtype = str_dtype_to_trt(dtype)
+            self._kv_dtype = str_dtype_to_trt(dtype)
         else:
             assert isinstance(dtype, trt.DataType)
-            self.kv_dtype = dtype
+            self._kv_dtype = dtype
+        self._dtype = self._kv_dtype
+        if quant_mode.has_int8_kv_cache():
+            self._kv_dtype = str_dtype_to_trt('int8')
+        self.quant_mode = quant_mode
+
+        # set custom plugin path
         if custom_plugin_paths is None:
             custom_plugin_paths = []
         self.custom_plugin_paths = custom_plugin_paths
-        self.num_layers = num_layers
-        self.num_heads = num_heads
-        self.hidden_size = hidden_size
-        self.vocab_size = vocab_size
-        self.tensor_parallel = tensor_parallel
+
+        self._num_layers = num_layers
+        self._num_heads = num_heads
+        self._hidden_size = hidden_size
+        self._vocab_size = vocab_size
+        self._tensor_parallel = tensor_parallel
+        self._tensor_parallel_group = tensor_parallel_group
         self._multi_query_mode = multi_query_mode
-        super().__init__(num_layers, num_heads, hidden_size, seq_length, 
-                         vocab_size, hidden_act, max_position_embeddings, dtype,
-                         mlp_hidden_size, neox_rotary_style, tensor_parallel,
-                         tensor_parallel_group, multi_query_mode, 
-                         custom_plugin_paths=custom_plugin_paths
-                        )
+        super().__init__(
+            num_layers=num_layers,
+            num_heads=num_heads,
+            hidden_size=hidden_size,
+            seq_length=seq_length, 
+            vocab_size=vocab_size,
+            hidden_act=hidden_act,
+            max_position_embeddings=max_position_embeddings,
+            dtype=dtype,
+            mlp_hidden_size=mlp_hidden_size,
+            neox_rotary_style=neox_rotary_style,
+            tensor_parallel=tensor_parallel,
+            tensor_parallel_group=tensor_parallel_group,
+            quant_mode=quant_mode,
+            multi_query_mode=multi_query_mode, 
+            custom_plugin_paths=custom_plugin_paths
+        )
         vocab_size_padded = pad_vocab_size(vocab_size, tensor_parallel)
         self.lm_head = ColumnLinear(hidden_size,
                                     vocab_size_padded,
@@ -972,11 +992,11 @@ class QWenForCausalLM(QWenModel):
 
         # [batch_size, hidden_size] -> [batch_size, vocab_size]
         lm_logits = self.lm_head(hidden_states)
-        lm_logits.mark_output('logits', self.kv_dtype)
+        lm_logits.mark_output('logits', self._kv_dtype)
 
         if use_cache:
             for i, present in enumerate(presents):
-                present.mark_output(f'present_key_value_{i}', self.kv_dtype)
+                present.mark_output(f'present_key_value_{i}', self._kv_dtype)
             return (lm_logits, presents)
 
         return lm_logits
@@ -990,8 +1010,8 @@ class QWenForCausalLM(QWenModel):
         '''
 
         # Prepare inputs
-        head_size = self.hidden_size // self.num_heads
-        num_heads = self.num_heads // self.tensor_parallel
+        head_size = self._hidden_size // self._num_heads
+        num_heads = self._num_heads // self._tensor_parallel
         num_heads_kv = 1 if self._multi_query_mode else num_heads
         max_len = max_input_len + max_new_tokens
         bb_range = [
@@ -1048,7 +1068,7 @@ class QWenForCausalLM(QWenModel):
                                       ('input_len', [inlen_range]),
                                   ]))
 
-        for i in range(self.num_layers):
+        for i in range(self._num_layers):
             kv_dim_range = OrderedDict([
                 ('batch_size', [bb_range]),
                 ('kv', [2]),
@@ -1057,7 +1077,7 @@ class QWenForCausalLM(QWenModel):
                 ('head_size', [head_size]),
             ])
             kv = Tensor(name=f'past_key_value_{i}',
-                        dtype=self.kv_dtype,
+                        dtype=self._kv_dtype,
                         shape=[-1, 2, num_heads_kv, -1, head_size],
                         dim_range=kv_dim_range)
             past_key_value.append(kv)

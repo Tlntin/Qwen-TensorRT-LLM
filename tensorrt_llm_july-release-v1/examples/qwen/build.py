@@ -234,6 +234,7 @@ def parse_arguments():
     )
     parser.add_argument(
         '--per_channel',
+        default=False,
         action="store_true",
         help=
         'By default, we use a single static scaling factor for the GEMM\'s result. '
@@ -241,6 +242,7 @@ def parse_arguments():
         'The latter is usually more accurate, but a little slower.')
     parser.add_argument(
         '--per_token',
+        default=False,
         action="store_true",
         help=
         'By default, we use a single static scaling factor to scale activations in the int8 range. '
@@ -329,6 +331,7 @@ def build_rank_engine(builder: Builder,
         mlp_hidden_size=args.inter_size,
         neox_rotary_style=True,
         multi_query_mode=multi_query_mode,
+        quant_mode=args.quant_mode,
         tensor_parallel=args.world_size,  # TP only
         tensor_parallel_group=list(range(args.world_size)),
         custom_plugin_paths=custom_plugin_paths

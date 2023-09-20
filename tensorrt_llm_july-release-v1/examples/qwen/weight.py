@@ -2,10 +2,10 @@ import time
 import configparser
 from pathlib import Path
 import os
+from tqdm import trange
 import numpy as np
 import torch
 import tensorrt_llm
-from tqdm import trange
 from tensorrt_llm._utils import str_dtype_to_torch, str_dtype_to_np, pad_vocab_size, torch_to_numpy
 from tensorrt_llm.quantization import QuantMode
 from model import QWenForCausalLM
@@ -34,10 +34,9 @@ def split(v, tp_size, idx, dim=0):
         return np.ascontiguousarray(np.split(v, tp_size)[idx])
     else:
         return np.ascontiguousarray(np.split(v, tp_size, axis=dim)[idx])
-    
+
 def parse_ft_config(ini_file):
     qwen_config = configparser.ConfigParser()
-    assert os.path.exists(ini_file), f"Config file {ini_file} does not exist."
     qwen_config.read(ini_file)
 
     vocab_size = qwen_config.getint('qwen', 'vocab_size')
@@ -109,6 +108,8 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             if shape is not None:
                 t = t.reshape(shape)
             return t
+        else:
+            print(f"Warning: {p} not found.")
         return None
 
     def set_smoothquant_scale_factors(
@@ -130,6 +131,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
 
         col_shape = shape if (per_channel or is_qkv) else [1, 1]
         if per_tok_dyn:
+            # print(f"{basename}scale_w_quant_orig.{suffix}")
             if pre_scale_weight is not None:
                 pre_scale_weight.value = np.array([1.0], dtype=np.float32)
             t = fromfile(dir_path, f"{basename}scale_w_quant_orig.{suffix}",
@@ -196,7 +198,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                                   [vocab_size, hidden_size])
     tensorrt_llm_qwen.lm_head.weight.value = np.ascontiguousarray(
             split(lm_head_weight, tensor_parallel, rank))
-    
+
     tensorrt_llm_qwen.ln_f.weight.value = fromfile(dir_path, 'ln_f.weight.bin')
 
     for i in trange(num_hidden_layers, desc="load weights"):
@@ -204,13 +206,13 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                           tensor_parallel) if not multi_query_mode else (
                               hidden_size // tensor_parallel +
                               (hidden_size // num_hidden_layers) * 2)
-        
+
         tensorrt_llm_qwen.layers[i].ln_1.weight.value = fromfile(
             dir_path, 'model.layers.' + str(i) + '.ln_1.weight.bin'
         )
-        
+
         dst = tensorrt_llm_qwen.layers[i].ln_2.weight
-        dst.value = fromfile( 
+        dst.value = fromfile(
             dir_path, 'model.layers.' + str(i) + '.ln_2.weight.bin')
 
         t = fromfile(
@@ -218,10 +220,12 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             [c_attn_out_dim, hidden_size],
             w_type
         )
+        #breakpoint()
         if t is not None:
             dst = tensorrt_llm_qwen.layers[i].attention.qkv.weight
             if use_smooth_quant:
-                dst.value = sq_trick(np.ascontiguousarray(t))
+                dst.value = sq_trick(
+                    np.ascontiguousarray(np.transpose(t, [0, 1])))
                 set_smoothquant_scale_factors(
                     tensorrt_llm_qwen.layers[i].attention.qkv,
                     tensorrt_llm_qwen.layers[i].ln_1.scale_to_int,
@@ -256,13 +260,17 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             'model.layers.' + str(i) + '.attention.dense.weight.' + suffix,
             [hidden_size // tensor_parallel, hidden_size], w_type)
         if use_smooth_quant:
-            dst.value = sq_trick(np.ascontiguousarray(t))
+            dst.value = sq_trick(np.ascontiguousarray(np.transpose(t, [0, 1])))
             dense_scale = getattr(tensorrt_llm_qwen.layers[i].attention,
                                   "quantization_scaling_factor", None)
             set_smoothquant_scale_factors(
                 tensorrt_llm_qwen.layers[i].attention.dense, dense_scale,
                 dir_path, 'model.layers.' + str(i) + '.attention.dense.',
-                [1, hidden_size], quant_per_token_dyn, quant_per_channel)
+                [1, hidden_size],
+                quant_per_token_dyn,
+                quant_per_channel,
+            )
+            
         elif use_weight_only:
             t = np.ascontiguousarray(np.transpose(t, [1, 0]))
             processed_torch_weights, torch_weight_scales = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
@@ -283,16 +291,17 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         )
         if use_smooth_quant:
             tensorrt_llm_qwen.layers[i].mlp.w1.weight.value = sq_trick(
-                np.ascontiguousarray(t))
+                np.ascontiguousarray(np.transpose(t, [0, 1])))
             set_smoothquant_scale_factors(
                 tensorrt_llm_qwen.layers[i].mlp.w1,
                 tensorrt_llm_qwen.layers[i].ln_2.scale_to_int,
                 dir_path,
                 'model.layers.' + str(i) + '.mlp.w1.',
-                [1, inter_size // tensor_parallel],
+                [1, inter_size // tensor_parallel//2],
                 quant_per_token_dyn,
                 quant_per_channel,
-                rank=rank)
+                rank=rank
+                )
         elif use_weight_only:
             dst = tensorrt_llm_qwen.layers[i].mlp.w1.weight
             t = np.ascontiguousarray(np.transpose(t, [1, 0]))
@@ -305,20 +314,23 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             scales.value = torch_weight_scales.numpy()
         else:
             tensorrt_llm_qwen.layers[i].mlp.w1.weight.value = np.ascontiguousarray(t)
-        
+
         t = fromfile(
             dir_path,
             'model.layers.' + str(i) + '.mlp.w2.weight.' + suffix,
             [inter_size // tensor_parallel//2, hidden_size], w_type)
         if use_smooth_quant:
             tensorrt_llm_qwen.layers[i].mlp.w2.weight.value = sq_trick(
-                np.ascontiguousarray(t))
+                np.ascontiguousarray(np.transpose(t, [0, 1])))
             proj_scale = getattr(tensorrt_llm_qwen.layers[i].mlp,
                                  "quantization_scaling_factor", None)
             set_smoothquant_scale_factors(
                 tensorrt_llm_qwen.layers[i].mlp.w2, proj_scale, dir_path,
-                'model.layers.' + str(i) + '.mlp.w2.', [1, hidden_size],
-                quant_per_token_dyn, quant_per_channel)
+                'model.layers.' + str(i) + '.mlp.w2.', [1, inter_size // tensor_parallel//2],
+                quant_per_token_dyn,
+                quant_per_channel,
+                rank=rank
+            )
         elif use_weight_only:
             dst = tensorrt_llm_qwen.layers[i].mlp.w2.weight
             t = np.ascontiguousarray(np.transpose(t, [1, 0]))
@@ -331,15 +343,16 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             scales.value = torch_weight_scales.numpy()
         else:
             tensorrt_llm_qwen.layers[i].mlp.w2.weight.value = np.ascontiguousarray(t)
-            
+
         t = fromfile(
             dir_path,
-            'model.layers.' + str(i) + '.mlp.c_proj.weight.' +  suffix,
-            [hidden_size, inter_size // tensor_parallel//2], w_type
+            'model.layers.' + str(i) + '.mlp.c_proj.weight.' + suffix,
+            [hidden_size, inter_size // tensor_parallel//2],
+            w_type
         )
         if use_smooth_quant:
             tensorrt_llm_qwen.layers[i].mlp.c_proj.weight.value = sq_trick(
-                np.ascontiguousarray(t))
+                np.ascontiguousarray(np.transpose(t, [0, 1])))
             proj_scale = getattr(tensorrt_llm_qwen.layers[i].mlp,
                                  "quantization_scaling_factor", None)
             set_smoothquant_scale_factors(
@@ -558,7 +571,6 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                     dst.value = np.ascontiguousarray(split_v)
             else:
                 print("unknow key: ", k)
-            
 
     tok = time.time()
     t = time.strftime('%H:%M:%S', time.gmtime(tok - tik))

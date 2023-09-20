@@ -1,5 +1,5 @@
 from typing import List, Optional, Sequence, Tuple, Union
-import os
+
 import numpy as np
 import tensorrt as trt
 import math
@@ -11,29 +11,25 @@ from tensorrt_llm._utils import str_dtype_to_trt, str_dtype_to_np
 from tensorrt_llm.parameter import Parameter
 from tensorrt_llm.quantization.mode import QuantMode
 from tensorrt_llm.quantization.layer import (
-    SmoothQuantColumnLinear, SmoothQuantRowLinear
+    SmoothQuantColumnLinear, smooth_quant_gemm, SmoothQuantRowLinear
 )
 from tensorrt_llm.layers.attention import AttentionMaskType, PositionEmbeddingType
 from tensorrt_llm.module import Module
-from tensorrt_llm.functional import (
-    ACT2FN, RaggedTensor, Tensor, cast, concat, constant, gpt_attention,
-    shape, slice, _create_tensor, expand_dims_like, split, matmul, softmax, where
-)
+from tensorrt_llm.functional import (ACT2FN, RaggedTensor, Tensor, allgather, allreduce,
+                          cast, concat, constant, gpt_attention, matmul, mul,
+                          shape, slice, softmax, split, expand_dims_like, where, _create_tensor)
 
 
-
-# copy from quantization/layer.py SmoothQuantAttention
-# but i add some layer to it, just like QWenAttention in model.py
 class SmoothQuantAttention(Module):
 
     def __init__(
         self,
         hidden_size,
         num_attention_heads,
-        max_position_embeddings, # 8192
-        seq_length, # 2048
-        num_kv_heads=None,
+        max_position_embeddings,
+        seq_length,
         num_layers=1,
+        num_kv_heads=None,
         apply_query_key_layer_scaling=False,
         attention_mask_type=AttentionMaskType.causal,
         bias=False,
@@ -267,7 +263,7 @@ class SmoothQuantAttention(Module):
                 max_input_length=max_input_length,
                 cache_indirection=cache_indirection,
                 num_heads=self.num_attention_heads,
-                head_size=self.num_kv_heads,
+                head_size=self.attention_head_size,
                 q_scaling=self.q_scaling,
                 rotary_embedding_dim=self.rotary_embedding_dim, # when we use it 0, we will not use rotary embedding in plugin
                 neox_rotary_style=self.neox_rotary_style,
@@ -390,9 +386,6 @@ class SmoothQuantAttention(Module):
 
         return context
 
-
-# copy from quantization/layer.py SmoothQuantMLP
-# but i add some layer to it
 class SmoothQuantMLP(Module):
 
     def __init__(self,
@@ -469,7 +462,6 @@ class SmoothQuantMLP(Module):
 
 
 # copy from quantization/functional.py smooth_quant_layer_norm
-# Todo: build a new plugin for rmsnorm
 def smooth_quant_rms_norm_op(
     input: Tensor,
     plugin_dtype: str,
@@ -640,7 +632,7 @@ def smooth_quantize(model, quant_mode, rmsnorm_quantization_plugin_dtype, custom
             ffn_hidden_size=layer.mlp_hidden_size // 2,
             hidden_act=layer.hidden_act,
             dtype=layer.dtype,
-            bias=False,
+            bias=layer.bias,
             tp_group=layer.tp_group,
             tp_size=layer.tp_size,
             quant_mode=quant_mode
