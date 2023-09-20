@@ -18,7 +18,7 @@
 （例如给出精度和加速比），简单给出关键的数字即可，在这里不必详细展开
 
 - 精度：fp16 基本和原版一样，int8 / int4(weight only) Rouge分数略有提高。总的来说，和原版基本相差不大。
-- 加速比：吞吐加速比最高**4.29**倍，生成加速比最高**5.24**倍。
+- 加速比：吞吐加速比最高**4.57**倍，生成加速比最高**5.56**倍。
 
 ##### 运行指南
 
@@ -402,7 +402,9 @@
 ##### 精度
 - 报告与原始模型进行精度对比测试的结果，验证精度达标（abs(rouge_diff) < 1）。
 - 测试平台：NVIDIA A10 (24G显存) | TensorRT 9.0.0.1
-- 最大输入长度：2048， 最大新增长度：2048，beam=batch=1
+- TRT_LLM engine编译时最大输入长度：2048， 最大新增长度：2048
+- HuggingFace版Qwen采用默认配置，未安装，未启用FlashAttention相关模块
+- 测试时：beam=batch=1，max_new_tokens=100
 - 测试结果（该结果由`tensorrt_llm_july-release-v1/examples/qwen/summarize.py`生成）：
 ```bash
 HuggingFace (dtype: bf16 | total latency: 99.70530200004578 sec)
@@ -435,7 +437,7 @@ TensorRT-LLM (dtype: int4 (weight only) | total latency: 31.928248405456543 sec)
 - 例如可以用图表展示不同batch size或sequence length下性能加速效果（考虑到可能模型可能比较大，可以只给batch size为1的数据）
 - 一般用原始模型作为baseline
 - 一般提供模型推理时间的加速比即可；若能提供压力测试下的吞吐提升则更好。
-- 测试平台：NVIDIA A10 (24G显存) | TensorRT 9.0.0.1
+- 测试平台：NVIDIA A10 (24G显存) | TensorRT 9.0.0.1 | tensorrt-llm 0.1.3
 - 测试结果（该结果由`tensorrt_llm_july-release-v1/examples/qwen/benchmark.py`生成）
 1. 最大输入长度：2048， 最大新增长度：2048，num-prompts=100, beam=1, seed=0
 
@@ -454,12 +456,12 @@ TensorRT-LLM (dtype: int4 (weight only) | total latency: 31.928248405456543 sec)
 | TensorRT-LLM | dtype: int8 (weight only) | 4              | 0.36                   | 198.46               | 3.00       | 3.28       |
 | TensorRT-LLM | dtype: int8 (weight only) | 5              | OOM                    | OOM                  | /          | /          |
 |              |                           |                |                        |                      |            |            |
-| TensorRT-LLM | dtype: int4 (weight only) | 1              | 0.43                   | 210.88               | 3.58       | 3.49       |
-| TensorRT-LLM | dtype: int4 (weight only) | 2              | 0.44                   | 223.55               | 3.67       | 3.70       |
-| TensorRT-LLM | dtype: int4 (weight only) | 3              | 0.46                   | 247.34               | 3.83       | 4.09       |
-| TensorRT-LLM | dtype: int4 (weight only) | 4              | **0.47**               | 252.80               | **3.92**   | 4.18       |
-| TensorRT-LLM | dtype: int4 (weight only) | 5              | 0.45                   | 246.13               | 3.75       | 4.07       |
-| TensorRT-LLM | dtype: int4 (weight only) | 6              | **0.47**               | **261.53**           | **3.92**   | **4.33**   |
+| TensorRT-LLM | dtype: int4 (weight only) | 1              | 0.49                   | 239.98               | 4.08       | 3.97       |
+| TensorRT-LLM | dtype: int4 (weight only) | 2              | 0.47                   | 242.10               | 3.92       | 4.00       |
+| TensorRT-LLM | dtype: int4 (weight only) | 3              | 0.50                   | 269.89               | 4.17       | 4.46       |
+| TensorRT-LLM | dtype: int4 (weight only) | 4              | 0.50                   | 273.29               | 4.17       | 4.52       |
+| TensorRT-LLM | dtype: int4 (weight only) | 5              | 0.49                   | 268.98               | 4.08       | 4.45       |
+| TensorRT-LLM | dtype: int4 (weight only) | 6              | **0.51**               | **283.53**           | **4.25**   | **4.69**   |
 | TensorRT-LLM | dtype: int4 (weight only) | 7              | OOM                    | OOM                  | /          | /          |
 
 2. 最大输入长度：1024， 最大新增长度：1024，num-prompts=100, beam=1, seed=0
@@ -491,19 +493,19 @@ TensorRT-LLM (dtype: int4 (weight only) | total latency: 31.928248405456543 sec)
 | TensorRT-LLM | dtype: int8 (weight only) | 11             | 0.45                 | 205.00               | 3.21       | 3.98       |
 | TensorRT-LLM | dtype: int8 (weight only) | 12             | OOM                  | OOM                  | /          | /          |
 |              |                           |                |                      |                      |            |            |
-| TensorRT-LLM | dtype: int4 (weight only) | 1              | 0.53                 | 193.57               | 3.79       | 3.76       |
-| TensorRT-LLM | dtype: int4 (weight only) | 2              | 0.49                 | 197.93               | 3.50       | 3.84       |
-| TensorRT-LLM | dtype: int4 (weight only) | 3              | 0.52                 | 220.01               | 3.71       | 4.27       |
-| TensorRT-LLM | dtype: int4 (weight only) | 4              | 0.52                 | 224.38               | 3.71       | 4.36       |
-| TensorRT-LLM | dtype: int4 (weight only) | 5              | 0.58                 | 253.80               | 4.14       | 4.93       |
-| TensorRT-LLM | dtype: int4 (weight only) | 6              | 0.56                 | 248.43               | 4.00       | 4.83       |
-| TensorRT-LLM | dtype: int4 (weight only) | 7              | 0.56                 | 248.66               | 4.00       | 4.83       |
-| TensorRT-LLM | dtype: int4 (weight only) | 8              | 0.58                 | 258.64               | 4.14       | 5.02       |
-| TensorRT-LLM | dtype: int4 (weight only) | 9              | 0.58                 | 259.04               | 4.14       | 5.03       |
-| TensorRT-LLM | dtype: int4 (weight only) | 10             | **0.60**             | **269.60**           | **4.29**   | **5.24**   |
-| TensorRT-LLM | dtype: int4 (weight only) | 11             | 0.54                 | 246.04               | 3.86       | 4.78       |
-| TensorRT-LLM | dtype: int4 (weight only) | 12             | 0.52                 | 236.83               | 3.71       | 4.60       |
-| TensorRT-LLM | dtype: int4 (weight only) | 13             | 0.54                 | 246.67               | 3.86       | 4.79       |
+| TensorRT-LLM | dtype: int4 (weight only) | 1              | 0.59                 | 217.27               | 4.21       | 4.22       |
+| TensorRT-LLM | dtype: int4 (weight only) | 2              | 0.54                 | 217.12               | 3.86       | 4.22       |
+| TensorRT-LLM | dtype: int4 (weight only) | 3              | 0.55                 | 235.90               | 3.93       | 4.58       |
+| TensorRT-LLM | dtype: int4 (weight only) | 4              | 0.55                 | 240.24               | 3.93       | 4.67       |
+| TensorRT-LLM | dtype: int4 (weight only) | 5              | 0.61                 | 267.75               | 4.36       | 5.20       |
+| TensorRT-LLM | dtype: int4 (weight only) | 6              | 0.61                 | 271.05               | 4.36       | 5.27       |
+| TensorRT-LLM | dtype: int4 (weight only) | 7              | 0.60                 | 271.51               | 4.29       | 5.27       |
+| TensorRT-LLM | dtype: int4 (weight only) | 8              | 0.60                 | 273.13               | 4.29       | 5.31       |
+| TensorRT-LLM | dtype: int4 (weight only) | 9              | 0.63                 | 279.14               | 4.5        | 5.42       |
+| TensorRT-LLM | dtype: int4 (weight only) | 10             | **0.64**             | **286.16**           | **4.57**   | **5.56**   |
+| TensorRT-LLM | dtype: int4 (weight only) | 11             | 0.58                 | 266.91               | 4.14       | 5.18       |
+| TensorRT-LLM | dtype: int4 (weight only) | 12             | 0.56                 | 254.73               | 4.00       | 4.95       |
+| TensorRT-LLM | dtype: int4 (weight only) | 13             | 0.56                 | 256.27               | 4.00       | 4.98       |
 | TensorRT-LLM | dtype: int4 (weight only) | 14             | OOM                  | OOM                  | /          | /          |
 
 请注意：

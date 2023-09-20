@@ -127,17 +127,23 @@ class RmsNorm(Module):
     """
     Copy from tensorrt_llm.functional, for reduce some warning;
     """
-    def __init__(self,
-                 normalized_shape,
-                 eps=1e-06,
-                 elementwise_affine=True,
-                 dtype=None):
+    def __init__(
+            self,
+            normalized_shape,
+            eps=1e-06,
+            elementwise_affine=True,
+            dtype=None,
+            custom_plugin_paths=None
+        ):
         super().__init__()
         if isinstance(normalized_shape, int):
             normalized_shape = (normalized_shape, )
         self.normalized_shape = tuple(normalized_shape)
         self.elementwise_affine = elementwise_affine
         self.dtype = dtype
+        if custom_plugin_paths is None:
+            custom_plugin_paths = []
+        self.custom_plugin_paths = custom_plugin_paths
         if self.elementwise_affine:
             self.weight = Parameter(shape=self.normalized_shape, dtype=dtype)
         else:
@@ -154,6 +160,7 @@ class RmsNorm(Module):
             normalized_shape=self.normalized_shape,
             weight=weight,
             eps=self.eps,
+            custom_plugin_paths=self.custom_plugin_paths
         )
 
 
@@ -597,8 +604,13 @@ class QWenBlock(Module):
                  bias=False,
                  multi_query_mode=False,
                  tp_group=None,
-                 tp_size=1):
+                 tp_size=1,
+                 custom_plugin_paths=None
+        ):
         super().__init__()
+        if custom_plugin_paths is None:
+            custom_plugin_paths = []
+        self.custom_plugin_paths = custom_plugin_paths
         self._layer_id = layer_id  # useful for debugging
         self.hidden_size = hidden_size
         self.seq_length = seq_length
@@ -619,7 +631,8 @@ class QWenBlock(Module):
 
         self.ln_1 = RmsNorm(
             normalized_shape=hidden_size,
-            dtype=dtype
+            dtype=dtype,
+            custom_plugin_paths=self.custom_plugin_paths
         )
 
         self.attention = QWenAttention(
@@ -636,7 +649,7 @@ class QWenBlock(Module):
             multi_query_mode=multi_query_mode,
             tp_group=self.tp_group,
             tp_size=self.tp_size,
-            use_int8_kv_cache=quant_mode.has_int8_kv_cache()
+            use_int8_kv_cache=quant_mode.has_int8_kv_cache(),
         )
         if not mlp_hidden_size:
             mlp_hidden_size = hidden_size * 4
@@ -650,7 +663,11 @@ class QWenBlock(Module):
             tp_group=tp_group,
             tp_size=tp_size
         )
-        self.ln_2 = RmsNorm(normalized_shape=hidden_size, dtype=dtype)
+        self.ln_2 = RmsNorm(
+            normalized_shape=hidden_size,
+            dtype=dtype,
+            custom_plugin_paths=custom_plugin_paths
+        )
 
     def forward(self,
         hidden_states: RaggedTensor,
@@ -792,8 +809,11 @@ class QWenModel(Module):
         bias=False,
         quant_mode=QuantMode(0),
         multi_query_mode=False,
+        custom_plugin_paths=None,
     ):
         super().__init__()
+        if custom_plugin_paths is None:
+            custom_plugin_paths = []
         self.vocab_embedding = Embedding(vocab_size, hidden_size, dtype=dtype)
         # copy from chatglm
         per_head_dim = hidden_size // num_heads
@@ -820,6 +840,7 @@ class QWenModel(Module):
                 multi_query_mode=multi_query_mode,
                 tp_group=tensor_parallel_group,
                 tp_size=tensor_parallel,
+                custom_plugin_paths=custom_plugin_paths
             )
             for i in range(num_layers)
         ])
@@ -894,13 +915,17 @@ class QWenForCausalLM(QWenModel):
         neox_rotary_style=True,
         tensor_parallel=1,
         tensor_parallel_group=None,
-        multi_query_mode=False
+        multi_query_mode=False,
+        custom_plugin_paths=None,
     ):
         if isinstance(dtype, str):
             self.kv_dtype = str_dtype_to_trt(dtype)
         else:
             assert isinstance(dtype, trt.DataType)
             self.kv_dtype = dtype
+        if custom_plugin_paths is None:
+            custom_plugin_paths = []
+        self.custom_plugin_paths = custom_plugin_paths
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.hidden_size = hidden_size
@@ -910,7 +935,9 @@ class QWenForCausalLM(QWenModel):
         super().__init__(num_layers, num_heads, hidden_size, seq_length, 
                          vocab_size, hidden_act, max_position_embeddings, dtype,
                          mlp_hidden_size, neox_rotary_style, tensor_parallel,
-                         tensor_parallel_group, multi_query_mode)
+                         tensor_parallel_group, multi_query_mode, 
+                         custom_plugin_paths=custom_plugin_paths
+                        )
         vocab_size_padded = pad_vocab_size(vocab_size, tensor_parallel)
         self.lm_head = ColumnLinear(hidden_size,
                                     vocab_size_padded,

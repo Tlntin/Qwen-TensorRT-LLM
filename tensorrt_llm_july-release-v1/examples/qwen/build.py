@@ -305,6 +305,16 @@ def build_rank_engine(builder: Builder,
        @return: The built engine.
     '''
     kv_dtype = str_dtype_to_trt(args.dtype)
+    # load custom plugins
+    custom_plugin_paths = [
+        plugin_path
+        for plugin_path in args.add_plugins.split(",")
+        if os.path.exists(plugin_path)
+    ] 
+    if len(custom_plugin_paths) > 0:
+        trt.init_libnvinfer_plugins(tensorrt_llm.logger, "")
+        for custom_plugin_path in custom_plugin_paths:
+            ctypes.cdll.LoadLibrary(custom_plugin_path)
 
     # Initialize Module
     tensorrt_llm_qwen = QWenForCausalLM_TRT(
@@ -320,17 +330,10 @@ def build_rank_engine(builder: Builder,
         neox_rotary_style=True,
         multi_query_mode=multi_query_mode,
         tensor_parallel=args.world_size,  # TP only
-        tensor_parallel_group=list(range(args.world_size)))
-    # load custom plugins
-    custom_plugin_paths = [
-        plugin_path
-        for plugin_path in args.add_plugins.split(",")
-        if os.path.exists(plugin_path)
-    ] 
-    if len(custom_plugin_paths) > 0:
-        trt.init_libnvinfer_plugins(tensorrt_llm.logger, "")
-        for custom_plugin_path in custom_plugin_paths:
-            ctypes.cdll.LoadLibrary(custom_plugin_path)
+        tensor_parallel_group=list(range(args.world_size)),
+        custom_plugin_paths=custom_plugin_paths
+    )
+    
     if args.use_smooth_quant:
         if not args.per_token:
             print("warning per_channel should be set when using smooth quantize")
