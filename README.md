@@ -286,11 +286,38 @@
 ##### 开发中的亮点
 1. 完整支持原版的logn和ntk（这俩参数是用于增强模型长输入的生成效果，这里的长输入指的是输入长度大于2048小于8192）。不过由于trt-llm的某些bug，导致输入长度>2048时，实际输出会很短甚至为空，详见[issue](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/90)，所以加上rope放gpt attention plugin里面计算更快，所以我们logn注释掉了。
 2. 支持`RotaryEmbedding`，并且在input_len > 2048时开启ntk相关计算。
-3. 支持自带的`gpt_attention_plugin`与`gemm_plugin`两个plugin，同时将`layernorm_plugin`魔改成`rmsnorm_plugin`以支持smooth_quant量化技术，并且实际测试RmsNorm Plugin也可以给fp16和int8/int4 (wight only)带来不错的提升。
-4. 同时支持qwen base和chat模型
-5. 支持fp16 / int8 (weight only) / int4 (weight only), 理论上最低只需要8G消费级显卡就能运行。
-6. 支持在终端对话和使用gradio构建的网页应用中对话，支持流式输出。
-7. 支持fastapi部署，支持sse协议来实现流式输出，同时兼容OpenAI的api请求。
+3. 支持自带的`gpt_attention_plugin`与`gemm_plugin`两个plugin。
+4. 新增支持rmsnorm plugin，在profile过程中发现原生的rmsnorm在底层是由5个op组成，kernel launch占比严重，并且中间数据传递也消耗时间，一次rmsnorm计算大概耗时0.022ms，因此通过cuda的方式实现了rmsnormplugin，减少kernellaunch，加快计算，最终优化后一次rmsnorm的计算时间降低到了0.0057ms。
+<p align="center">
+  <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./images/tensorrt_rmsnorm_op.jpeg">
+  <img src="./images/tensorrt_rmsnorm_op.jpeg" width="45%">
+  </picture>
+  <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./images/rmsnormplugin.jpeg">
+  <img src="./images/rmsnormplugin.jpeg" width="45%">
+  </picture>
+  <br>
+  <em> Performance comparison. </em>
+</p>
+5. 使用gpt attention plugin内置的rope计算方法，参考glm，开始也是在gpt attention plugin外面计算的rope，同样profile发现attention部分计算kernel较多，单次计算耗时大概在0.11ms，因此尝试使用gpt attention plugin内置的rope，优化后一次attention的计算大概在0.017ms。
+<p align="center">
+  <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./images/rope_outside.jpeg">
+  <img src="./images/rope_outside.jpeg" width="45%">
+  </picture>
+  <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./images/rope_inside.jpeg">
+  <img src="./images/rope_inside.jpeg" width="45%">
+  </picture>
+  <br>
+  <em> Performance comparison. </em>
+</p>
+6. 同时将`layernorm_plugin`魔改成`rmsnorm_plugin`以支持smooth_quant量化技术，并且实际测试RmsNorm Plugin也可以给fp16和int8/int4 (wight only)带来不错的提升。
+7. 同时支持qwen base和chat模型
+8. 支持fp16 / int8 (weight only) / int4 (weight only), 理论上最低只需要8G消费级显卡就能运行。
+9. 支持在终端对话和使用gradio构建的网页应用中对话，支持流式输出。
+10. 支持fastapi部署，支持sse协议来实现流式输出，同时兼容OpenAI的api请求。
 
 ### 开发与优化过程
 
@@ -352,15 +379,7 @@
 
 9. 在fp16对齐，并且run.py/summarize.py都正常后，我们就开始尝试实现weight only in8/int4，我们先直接运行 `--use_weight_only --weight_only_precision=int8`，编译成功后，再次运行run.py/summarize.py，发现都正常。int4也重复该操作，发现还是正常，说明weight only in8/int4适配成功。
 
-10. 适配完后，发现还有一个smooth_quant量化，可以降低显存，提高推理速度。不过问了导师，说目前只有gpt适配了，后续可能适配bloom和llama，所以我们参考了gpt的代码，新增了一个`hf_qwen_convert.py`文件，用于将huggingface的权重导出到FT(FastTransformer)格式的文件。同时我们将gpt/weight.py里面的`load_from_ft`拷贝到qwen/weight.py，并根据我们导出的权重文件修改进行了简单修改，然后再将build.py里面默认加载函数从`load_from_hf_qwen`换成 `load_from_ft`,不过当开发者没有导出FT权重的时候，还是会自动加载`load_from_hf_qwen`来生成engine。
-
-11. 在用了新的`load_from_ft`方法后，我们又运行了一次run.py和summarize.py，发现输出结果异常，经过对examples/gpt进行调试，发现qwen的attention权重和gpt的attention权重shape顺序略有不同。为了更好的对比差异，我们将`load_from_ft`的加载权重的代码粘贴到`load_from_hf_qwen`，然后一个个变量对比其shape以及value值，对比发现`load_from_hf_qwen`中，非weight_only量化，则权重直接赋值，否则需要多一个转置操作。经过一轮修改，`load_from_ft`的fp16终于正常。然后我们又顺便编译了weight_only的int8/int4，发现也同样正常。
-
-12. 回到smooth quant量化这里，参考example/gpt的smooth quant过程，我们在`hf_qwen_convert.py`里面同样加了`--smoothquant`选项。通过调试`example/gpt/hf_gpt_convert.py`文件，观察它的`smooth_gpt_model`函数的计算方法以及参数的shape，不过他它mlp只有一个fc1, 而我们的mlp有w1/w2和`c_proj`。并且gpt里面有`from smoothquant import capture_activation_range, smooth_gemm`和`from utils.convert import split_and_save_weight`，通过调试这些文件，我们写了自己的对应的函数，并且成功导出了和smooth quant密切相关的int8权重。
-
-13. 再次观察example/gpt的smooth quant过程，参考其build.py文件，发现里面有一个`from tensorrt_llm.models import smooth_quantize`过程，这个函数会将trt-llm原本的模型结构给替换掉，主要替换了layer_norm, attention, 和mlp部分。其中attention基本和我们的qwen一样，只是我们比他多了logn/apply rope/ntk三个，mlp也可以通过简单修改实现。但是关于gpt的layer_norm，我们用的是`RmsNorm`，所以这个部分的smooth quant,需要我们自己实现。
-
-14. RmsNorm相对LayerNorm来说，就是少了一个减均值操作，并且没有bias，所以我们先拷贝了一份layerNorm的kernel。
+10. weight only 量化完成后我们开始对模型结构进行分析，查看哪些操作在底层比较耗时，发现其中rmsnorm比较琐碎，kernellaunch以及kernel间交互耗时严重，所以提出使用cuda编写rmsnorm plugin，加速计算，RmsNorm相对LayerNorm来说，就是少了一个减均值操作，并且没有bias，所以我们先拷贝了一份layerNorm的kernel。
 
     - 拷贝操作。
 
@@ -371,7 +390,7 @@
     ```
 
     - 拷贝完后我们将里面的mean/bias去掉，并将layernorm关键词换成rmsnorm的关键词。同时我们发现layerNorm的.cu文件里面有个`USE_DIFF_OF_SQUARES`，这个值为Ture时是算方差，为False时算平均值。由于我们不需要平均值，所以这个数值常为True，所以我们将为True的部分保留，为Fasle的部位删除，并且删除了这个变量。
-    - 同理我们对plugins目录下面的layerNorm做了同样的操作。
+    - 同理我们对plugins目录下面的layerNormQuant做了同样的操作。
 
     ```bash
     cd tensorrt_llm_july-release-v1/cpp/tensorrt_llm/plugins
@@ -379,22 +398,34 @@
     cp layernormQuantizationPlugin/* rmsnormQuantizationPlugin/
     ```
 
-    - 同样和上面一样做替换，去bias，去mean，去`USE_DIFF_OF_SQUARES`（去除这个需要忽略大小写，有的是小写）
+    - 同样和上面一样做替换，去bias，去mean，去`USE_DIFF_OF_SQUARES`（去除这个需要忽略大小写，有的是小写），最终完成plugin的编写，并且精度验证没有问题。
 
-15. 参考[教程](https://www.http5.cn/index.php/archives/30/)，我们重新编译了TensorRT-LLM，并且加载了`RmsnormQuantization`插件，但是加载编译后报了一个和cublas相关的错误，错误提示：`terminate called after throwing an instance of 'std::runtime_error'  what():  [TensorRT-LLM Error][int8gemm Runner] Failed to initialize cutlass int8 gemm. Error: Error Internal`。通过多次排查，以及群友的提醒，我们发现这个不是我们plugin的问题，而是smooth_quant_gemm这个插件的问题。该问题可以通过下面的单元测试复现。
+11. 参考[教程](https://www.http5.cn/index.php/archives/30/)，我们重新编译了TensorRT-LLM，并且加载了自定义的`Rmsnorm`和`RmsnormQuantization`插件，运行测试，发现结果正常，rmsnormplugin是配成功。
+
+12. 在分析过程中同样发现attention计算过程涉及的kernel较多，并且咨询导师后明白gpt attention plugin也支持rope的计算，但是现在我们是放在外面做的计算导致附带了大量的kernel，因此我们把外面的rope计算流程删除，在gpt attebtion plugin中设置正确的rotary_embedding_dim参数，充分利用tensorrt本身的能力，测试后发现生成结果正确，说明qwen模型可以使用gpt attention plugin内置的rope计算方法，ope内置计算方法是配成功。
+
+13. 以上工作做完后我们做了统一测试，包括int8/int4 wight only，测试结果表明rouge分数基本和之前一样并且编译Engine速度大幅度提升，而且运行summarize的速度也进一步提高（大概加速1.5秒）。
+
+14. 适配完后，发现还有一个smooth_quant量化，可以降低显存，提高推理速度。不过问了导师，说目前只有gpt适配了，后续可能适配bloom和llama，所以我们参考了gpt的代码，新增了一个`hf_qwen_convert.py`文件，用于将huggingface的权重导出到FT(FastTransformer)格式的文件。同时我们将gpt/weight.py里面的`load_from_ft`拷贝到qwen/weight.py，并根据我们导出的权重文件修改进行了简单修改，然后再将build.py里面默认加载函数从`load_from_hf_qwen`换成 `load_from_ft`,不过当开发者没有导出FT权重的时候，还是会自动加载`load_from_hf_qwen`来生成engine。
+
+15. 在用了新的`load_from_ft`方法后，我们又运行了一次run.py和summarize.py，发现输出结果异常，经过对examples/gpt进行调试，发现qwen的attention权重和gpt的attention权重shape顺序略有不同。为了更好的对比差异，我们将`load_from_ft`的加载权重的代码粘贴到`load_from_hf_qwen`，然后一个个变量对比其shape以及value值，对比发现`load_from_hf_qwen`中，非weight_only量化，则权重直接赋值，否则需要多一个转置操作。经过一轮修改，`load_from_ft`的fp16终于正常。然后我们又顺便编译了weight_only的int8/int4，发现也同样正常。
+
+16. 回到smooth quant量化这里，参考example/gpt的smooth quant过程，我们在`hf_qwen_convert.py`里面同样加了`--smoothquant`选项。通过调试`example/gpt/hf_gpt_convert.py`文件，观察它的`smooth_gpt_model`函数的计算方法以及参数的shape，不过他它mlp只有一个fc1, 而我们的mlp有w1/w2和`c_proj`。并且gpt里面有`from smoothquant import capture_activation_range, smooth_gemm`和`from utils.convert import split_and_save_weight`，通过调试这些文件，我们写了自己的对应的函数，并且成功导出了和smooth quant密切相关的int8权重。
+
+17. 再次观察example/gpt的smooth quant过程，参考其build.py文件，发现里面有一个`from tensorrt_llm.models import smooth_quantize`过程，这个函数会将trt-llm原本的模型结构给替换掉，主要替换了layer_norm, attention, 和mlp部分。其中attention基本和我们的qwen一样，只是我们比他多了logn/apply rope/ntk三个，mlp也可以通过简单修改实现。但是关于gpt的layer_norm，我们用的是`RmsNorm`，还好，我们已经实现了`RmsnormQuantization`插件。
+
+18. 在代码中支持rmsnorm smoothquant的逻辑，编译后报了一个和cublas相关的错误，错误提示：`terminate called after throwing an instance of 'std::runtime_error'  what():  [TensorRT-LLM Error][int8gemm Runner] Failed to initialize cutlass int8 gemm. Error: Error Internal`。通过多次排查，以及群友的提醒，我们发现这个不是我们plugin的问题，而是smooth_quant_gemm这个插件的问题。该问题可以通过下面的单元测试复现。
 
     ```bash
     cd tensorrt_llm_july-release-v1/tests/quantization
     python -m unittest test_smooth_quant_gemm.py TestSmoothQuantGemm.test_matmul
     ```
-16. 通过[参考教程](https://www.http5.cn/index.php/archives/41/)我们重新编译了Debug版的TRT-LLM，并且可以在vscode中调试TRT-LLM代码。在debug中，我们发现了个别较大的shape存在共享显存分配过多而导致cublas初始化失败的问题。通过增加try/catch功能，我们跳过了失败的策略。然后再次跑test发现出现了下面的错误：
+19. 通过[参考教程](https://www.http5.cn/index.php/archives/41/)我们重新编译了Debug版的TRT-LLM，并且可以在vscode中调试TRT-LLM代码。在debug中，我们发现了个别较大的shape存在共享显存分配过多而导致cublas初始化失败的问题。通过增加try/catch功能，我们跳过了失败的策略。然后再次跑test发现出现了下面的错误：
     ```bash
     terminate called after throwing an instance of 'std::runtime_error'
     what():  [TensorRT-LLM Error][int8gemm Runner] Failed to run cutlass int8 gemm. Error: Error Internal
     ```
-17. 直觉告诉我们策略选择器能运行的代码，到插件运行阶段确又失败应该是某个参数过大导致了重复运行，所以我们调整了里面和运行阶段有关的两个参数`warmup`和`runs`，经过多次编译，运行单元测试，发现3和10是比较合适的数字，可以产生较长的日志（说明能运行较长时间）。但是最终单元测试还是未能通过，后面我们还是试了一下smooth quant编译，结果发现可以。所以这个单元测试可能并不适合24G显存的A10来运行，或许是给A100跑的呢，相关变更可以通过[该commit](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/commit/0667e03b726a18a9a52e8242ddaf517f90c0e16f)查看，此时smooth_quant可以编译与运行，但是结果并不对，需要进一步校准代码。
-18. 我们重新跑了gpt2的示例代码，并且发现按照readme的操作做smooth quant，我们发现，当开启gpt attention plugin比不开效果更好，这样就可以说明gpt attention plugin是支持int8 smooth quant的。我们的qwen比和gpt用了同一个attention plugin，所以如果能把rope计算放到plugin里面，那么自然SmoothAttention结构就能完全对齐了。后面我们测试了trt-llm版，fp16模式下，把外部的rope注释，将rotary_embedding_dim从0重新设置为`self.rotary_embedding_dim,`，然后我们重新build以及run然后加上summarize，完全是ok的，rouge分数和之前一样，但是summarize总计用时明显减少了3秒左右。保险起见，我们又测试新rope计算下的int8/int4 wight only，测试结果表明rouge分数基本和之前一样，并且推理时间均下降2-3秒。
-19. 在SmoothQuant过程中，我们用layerNorm魔改实现了RmsNorm，那么是否能在普通的fp16/int8 weight only/ int4 weight only中用rmsNorm plugin来代替普通的小算子，我们做了测试，测试结果发现完全可以，并且编译Engine速度大幅度提升，而且运行summarize的速度也进一步提高（大概加速1.5秒）。为了进一步RmsNorm Plugin和rope内置在gpt attention plugn里面的带来的收益，我们决定用Nsight System做更进一步的观察和分析。
+20. 直觉告诉我们策略选择器能运行的代码，到插件运行阶段确又失败应该是某个参数过大导致了重复运行，所以我们调整了里面和运行阶段有关的两个参数`warmup`和`runs`，经过多次编译，运行单元测试，发现3和10是比较合适的数字，可以产生较长的日志（说明能运行较长时间）。但是最终单元测试还是未能通过，后面我们还是试了一下smooth quant编译，结果发现可以。所以这个单元测试可能并不适合24G显存的A10来运行，或许是给A100跑的呢，相关变更可以通过[该commit](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/commit/0667e03b726a18a9a52e8242ddaf517f90c0e16f)查看，此时smooth_quant可以编译与运行，但是结果并不对，需要进一步校准代码。
 
 ### 优化效果
 
