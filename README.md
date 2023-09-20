@@ -290,14 +290,16 @@
 4. 新增支持rmsnorm plugin，在profile过程中发现原生的rmsnorm在底层是由5个op组成，kernel launch占比严重，并且中间数据传递也消耗时间，一次rmsnorm计算大概耗时0.022ms，因此通过cuda的方式实现了rmsnormplugin，减少kernellaunch，加快计算，最终优化后一次rmsnorm的计算时间降低到了0.0057ms。
 
 <p align="center">
-  <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./images/tensorrt_rmsnorm_op.jpeg">
-  <img src="./images/tensorrt_rmsnorm_op.jpeg" width="65%">
-  </picture>
-  <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./images/rmsnormplugin.jpeg">
-  <img src="./images/rmsnormplugin.jpeg" width="65%">
-  </picture>
+  <div style="display: flex; flex-direction: column; align-items: center;">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="./images/tensorrt_rmsnorm_op.jpeg">
+      <img src="./images/tensorrt_rmsnorm_op.jpeg" width="65%">
+    </picture>
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="./images/rmsnormplugin.jpeg">
+      <img src="./images/rmsnormplugin.jpeg" width="65%">
+    </picture>
+  </div>
   <br>
   <em> RmsnormPlugin performance comparison. </em>
 </p>
@@ -305,16 +307,18 @@
 5. 使用gpt attention plugin内置的rope计算方法，参考glm，开始也是在gpt attention plugin外面计算的rope，同样profile发现attention部分计算kernel较多，单次计算耗时大概在0.11ms，因此尝试使用gpt attention plugin内置的rope，优化后一次attention的计算大概在0.017ms。
 
 <p align="center">
-  <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./images/rope_outside.jpeg">
-  <img src="./images/rope_outside.jpeg" width="65%">
-  </picture>
-  <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./images/rope_inside.jpeg">
-  <img src="./images/rope_inside.jpeg" width="65%">
-  </picture>
+  <div style="display: flex; flex-direction: column; align-items: center;">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="./images/rope_outside.jpeg">
+      <img src="./images/rope_outside.jpeg" width="65%">
+    </picture>
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="./images/rope_inside.jpeg">
+      <img src="./images/rope_inside.jpeg" width="65%">
+    </picture>
+  </div>
   <br>
-  <em> Rope performance comparison. </em>
+  <em> RmsnormPlugin performance comparison. </em>
 </p>
 
 6. 同时将`layernorm_plugin`魔改成`rmsnorm_plugin`以支持smooth_quant量化技术，并且实际测试RmsNorm Plugin也可以给fp16和int8/int4 (wight only)带来不错的提升。
