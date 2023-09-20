@@ -5,7 +5,7 @@ from typing import Union, Optional, Tuple
 import tensorrt as trt
 import numpy as np
 from tensorrt_llm._common import default_net, default_trtnet, precision
-from tensorrt_llm._utils import pad_vocab_size, str_dtype_to_trt
+from tensorrt_llm._utils import pad_vocab_size, str_dtype_to_trt, str_dtype_to_np
 from tensorrt_llm.functional import (
     ACT2FN, RaggedTensor, Tensor, assertion, expand_mask, gather_last_token_logits,
     shape, concat, constant, gpt_attention, slice, expand_dims_like, cast, pow,
@@ -64,6 +64,65 @@ def rms_norm(input: Tensor,
     return y
 
 
+def rms_norm_op(
+    input: Tensor,
+    plugin_dtype: str,
+    normalized_shape: Union[int, Tuple[int]],
+    weight: Optional[Tensor] = None,
+    eps: float = 1e-05,
+    custom_plugin_paths = None,
+) -> Tensor:
+    if isinstance(normalized_shape, int):
+        normalized_shape = [normalized_shape]
+    if custom_plugin_paths is None:
+        custom_plugin_paths = []
+    # create plugin
+    if len(custom_plugin_paths) > 0:
+        plugin_creator = trt.get_plugin_registry().get_plugin_creator(
+            'RmsNorm', '1'
+        )
+    else:
+        plugin_creator = trt.get_plugin_registry().get_plugin_creator(
+            'RmsNorm', '1', TRT_LLM_PLUGIN_NAMESPACE)
+    assert plugin_creator is not None
+
+    eps = trt.PluginField(
+        "eps",
+        np.array(eps, dtype=np.float32),
+        trt.PluginFieldType.FLOAT32
+    )
+
+    type_id = trt.PluginField(
+        "type_id", np.array([int(str_dtype_to_trt(plugin_dtype))], np.int32),
+        trt.PluginFieldType.INT32)
+    plugin_filed_collections = trt.PluginFieldCollection(
+        [eps, type_id]
+    )
+    rmsnorm_plugin = plugin_creator.create_plugin(
+        "rmsnorm_quantization", plugin_filed_collections
+    )
+    
+    if weight is None:
+        weight = constant(
+            np.ones(normalized_shape, dtype=str_dtype_to_np(plugin_dtype)))
+    inputs = [input.trt_tensor, weight.trt_tensor]
+    layer = default_trtnet().add_plugin_v2(inputs, rmsnorm_plugin)
+    return _create_tensor(layer.get_output(0), layer)
+
+
+def trt_dtype_to_str(dtype: trt.DataType) -> str:
+    _str_to_trt_dtype_dict = dict(float16=trt.float16,
+                              float32=trt.float32,
+                              int32=trt.int32,
+                              int8=trt.int8,
+                              bool=trt.bool,
+                              bfloat16=trt.bfloat16,
+                              fp8=trt.fp8)
+    trt_to_str_dtype_dict = {v: k for k, v in _str_to_trt_dtype_dict.items()}
+    return trt_to_str_dtype_dict[dtype]
+
+
+
 class RmsNorm(Module):
     """
     Copy from tensorrt_llm.functional, for reduce some warning;
@@ -78,6 +137,7 @@ class RmsNorm(Module):
             normalized_shape = (normalized_shape, )
         self.normalized_shape = tuple(normalized_shape)
         self.elementwise_affine = elementwise_affine
+        self.dtype = dtype
         if self.elementwise_affine:
             self.weight = Parameter(shape=self.normalized_shape, dtype=dtype)
         else:
@@ -87,7 +147,14 @@ class RmsNorm(Module):
 
     def forward(self, x):
         weight = None if self.weight is None else self.weight.value
-        return rms_norm(x, self.normalized_shape, weight, self.eps)
+        # return rms_norm(x, self.normalized_shape, weight, self.eps)
+        return rms_norm_op(
+            x,
+            plugin_dtype=trt_dtype_to_str(self.dtype),
+            normalized_shape=self.normalized_shape,
+            weight=weight,
+            eps=self.eps,
+        )
 
 
 class QWenAttention(Module):
