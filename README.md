@@ -305,7 +305,9 @@
     </picture>
   </div>
   <br>
+  <p align="center">
   <em> RmsnormPlugin performance comparison. </em>
+  </p>
 </p>
 
 5. 使用gpt attention plugin内置的rope计算方法，参考glm，开始也是在gpt attention plugin外面计算的rope，同样profile发现attention部分计算kernel较多，单次计算耗时大概在0.11ms，因此尝试使用gpt attention plugin内置的rope，优化后一次attention的计算大概在0.017ms。
@@ -326,7 +328,9 @@
     </picture>
   </div>
   <br>
+  <p align="center">
   <em> RmsnormPlugin performance comparison. </em>
+  </p>
 </p>
 
 6. 同时将`layernorm_plugin`魔改成`rmsnorm_plugin`以支持smooth_quant量化技术，并且实际测试RmsNorm Plugin也可以给fp16和int8/int4 (wight only)带来不错的提升。
