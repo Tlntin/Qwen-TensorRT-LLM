@@ -293,11 +293,15 @@
   <div style="display: flex; flex-direction: column; align-items: center;">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="./images/tensorrt_rmsnorm_op.jpeg">
-      <img src="./images/tensorrt_rmsnorm_op.jpeg" width="65%">
+      <p align="center">
+      <img src="./images/tensorrt_rmsnorm_op.jpeg" width="80%">
+      </p>
     </picture>
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="./images/rmsnormplugin.jpeg">
-      <img src="./images/rmsnormplugin.jpeg" width="65%">
+      <p align="center">
+      <img src="./images/rmsnormplugin.jpeg" width="80%">
+      </p>
     </picture>
   </div>
   <br>
@@ -310,11 +314,15 @@
   <div style="display: flex; flex-direction: column; align-items: center;">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="./images/rope_outside.jpeg">
-      <img src="./images/rope_outside.jpeg" width="65%">
+      <p align="center">
+      <img src="./images/rope_outside.jpeg" width="80%">
+      </p>
     </picture>
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="./images/rope_inside.jpeg">
-      <img src="./images/rope_inside.jpeg" width="65%">
+      <p align="center">
+      <img src="./images/rope_inside.jpeg" width="80%">
+      </p>
     </picture>
   </div>
   <br>
