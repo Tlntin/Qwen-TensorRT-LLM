@@ -18,23 +18,21 @@ from utils.utils import make_context
 
 
 @torch.no_grad()
-def apply_smoothing(scales,
-                    gemm_weights,
-                    layernorm_weights=None,
-                    layernorm_bias=None,
-                    dtype=torch.float32,
-                    layernorm_1p=False):
+def apply_smoothing(
+    scales,
+    gemm_weights,
+    rmsnorm_weights=None,
+    dtype=torch.float32,
+    rmsnorm_1p=False
+):
     if not isinstance(gemm_weights, list):
         gemm_weights = [gemm_weights]
 
-    if layernorm_weights is not None:
-        assert layernorm_weights.numel() == scales.numel()
-        layernorm_weights.div_(scales).to(dtype)
-    if layernorm_bias is not None:
-        assert layernorm_bias.numel() == scales.numel()
-        layernorm_bias.div_(scales).to(dtype)
-    if layernorm_1p:
-        layernorm_weights += (1 / scales) - 1
+    if rmsnorm_weights is not None:
+        assert rmsnorm_weights.numel() == scales.numel()
+        rmsnorm_weights.div_(scales).to(dtype)
+    if rmsnorm_1p:
+        rmsnorm_weights += (1 / scales) - 1
 
     for gemm in gemm_weights:
         gemm.mul_(scales.view(1, -1)).to(dtype)
@@ -43,8 +41,7 @@ def apply_smoothing(scales,
 @torch.no_grad()
 def smooth_gemm(gemm_weights,
                 act_scales,
-                layernorm_weights=None,
-                layernorm_bias=None,
+                rmsnorm_weights=None,
                 alpha=0.5,
                 weight_scales=None):
     if not isinstance(gemm_weights, list):
@@ -64,8 +61,7 @@ def smooth_gemm(gemm_weights,
     scales = (act_scales.to(gemm_weights[0].device).to(float).pow(alpha) /
               weight_scales.pow(1 - alpha)).clamp(min=1e-5)
 
-    apply_smoothing(scales, gemm_weights, layernorm_weights, layernorm_bias,
-                    orig_dtype)
+    apply_smoothing(scales, gemm_weights, rmsnorm_weights, orig_dtype)
 
     return scales
 
@@ -75,8 +71,7 @@ def smooth_gemm_mlp(
     w1_weights,
     w2_weights,
     act_scales,
-    layernorm_weights=None,
-    layernorm_bias=None,
+    rmsnorm_weights=None,
     alpha=0.5,
     weight_scales=None
 ):
@@ -105,8 +100,7 @@ def smooth_gemm_mlp(
     scales = (act_scales.to(gemm_weights[0].device).to(float).pow(alpha) /
               weight_scales.pow(1 - alpha)).clamp(min=1e-5)
 
-    apply_smoothing(scales, w1_weights + w2_weights, layernorm_weights,
-                    layernorm_bias, orig_dtype)
+    apply_smoothing(scales, w1_weights + w2_weights, rmsnorm_weights, orig_dtype)
 
     return scales
 
@@ -170,7 +164,7 @@ def capture_activation_range(
 
         if act_scales[name]["w"] is None:
             act_scales[name]["w"] = m.weight.abs().clip(1e-8,
-                                                        None).max(dim=0)[0]
+                                                        None).max(dim=1)[0]
 
     hooks = []
     for name, m in model.named_modules():
@@ -196,7 +190,7 @@ def capture_activation_range(
         line_encoded = torch.from_numpy(
             np.array(input_id_list, dtype=np.int32)
         ).type(torch.int32).unsqueeze(0)
-        line_encoded = line_encoded.cuda()
+        line_encoded = line_encoded.to(device)
         # input_ids = tokenizer(dataset[i]["text"],
         #                       return_tensors="pt",
         #                       max_length=seq_len,

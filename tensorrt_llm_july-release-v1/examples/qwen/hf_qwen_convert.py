@@ -82,7 +82,7 @@ class ProgArgs:
             "--smoothquant",
             "-sq",
             type=float,
-            default=None,
+            default=0.5,
             help="Set the α parameter (see https://arxiv.org/pdf/2211.10438.pdf)"
             " to Smoothquant the model, and output int8 weights."
             " A good first try is 0.5. Must be in [0, 1]")
@@ -135,23 +135,12 @@ def smooth_qwen_model(model, scales, alpha):
             module.mlp.w2.weight,
             scales[mlp_w1_name]["x"],
             module.ln_2.weight,
-            None,
             alpha=alpha
         )
         scales[mlp_w1_name]["x"] = scales[mlp_w1_name]["x"] / smoother2
         scales[mlp_w2_name]["x"] = scales[mlp_w2_name]["x"] / smoother2
-        scales[mlp_w1_name]["w"] = module.mlp.w1.weight.abs().max(dim=0)[0]
-        scales[mlp_w2_name]["w"] = module.mlp.w2.weight.abs().max(dim=0)[0]
-
-        # mlp c_proj
-        layer_name = name + ".mlp.c_proj"
-        smoother3 = smooth_gemm(
-            module.mlp.c_proj.weight,
-            scales[layer_name]["x"],
-            alpha=alpha
-        )
-        scales[layer_name]["x"] = scales[layer_name]["x"] / smoother3
-        scales[layer_name]["w"] = module.mlp.c_proj.weight.abs().max(dim=0)[0]
+        scales[mlp_w1_name]["w"] = module.mlp.w1.weight.abs().max(dim=1)[0]
+        scales[mlp_w2_name]["w"] = module.mlp.w2.weight.abs().max(dim=1)[0]
 
 
 # SantaCoder separates Q projection from KV projection
@@ -162,7 +151,7 @@ def concat_qkv_weight_bias(q, hf_key, hf_model):
 
 # StarCoder uses nn.Linear for these following ops whose weight matrix is transposed compared to transformer.Conv1D
 def transpose_weights(hf_name, param):
-    weight_to_transpose = ["c_attn", "c_proj", "c_fc"]
+    weight_to_transpose = ["attn.c_attn", "attn.c_proj", "mlp.c_proj", "mlp.w1", "mlp.w2"]
     if any([k in hf_name for k in weight_to_transpose]):
         if len(param.shape) == 2:
             param = param.transpose(0, 1)
@@ -305,9 +294,7 @@ def hf_qwen_converter(args: ProgArgs):
         if "weight" not in name and "bias" not in name:
             continue
         ft_name = qwen_to_ft_name(name)
-
-        if args.model == "starcoder":
-            param = transpose_weights(name, param)
+        param = transpose_weights(name, param)
         if ft_name in global_ft_weights:
             torch_to_numpy(param.to(storage_type).cpu()).tofile(
                 saved_dir / f"{ft_name}.bin")

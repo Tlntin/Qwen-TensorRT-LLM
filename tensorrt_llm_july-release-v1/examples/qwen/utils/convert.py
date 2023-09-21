@@ -167,8 +167,7 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
     if "ln_1.weight" in key or "ln_1.bias" in key or \
             "attention.dense.bias" in key or \
             "ln_2.weight" in key or "ln_2.bias" in key or \
-            "mlp.w1.bias" in key or "mlp.w2.bias" in key or \
-            "mlp.c_proj.bias" in key:
+            "mlp.c_proj.bias" in key or "ln_f.weight" in key:
         # "final_layernorm.weight" in key or "final_layernorm.bias" in key:
 
         # shared weights, only need to convert the weights of rank 0
@@ -188,11 +187,11 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
             write_int8(vals_i8, saved_dir, base_key, cat_dim, tp_rank,
                        split_factor)
 
-    elif "mlp.w1.weight" in key or "mlp.w2.weight" in key:
+    elif "mlp.w1.weight" in key or "mlp.w2.weight" in key or "mlp.w1.bias" in key or "mlp.w2.bias" in key:
         if split_gated_activation:
-            splits = [np.split(val, 2, axis=0) for val in vals]
+            splits = [np.split(val, 2, axis=-1) for val in vals]
             vals, gates = list(zip(*splits))
-        cat_dim = 0
+        cat_dim = -1
         val = np.concatenate(vals, axis=cat_dim)
         split_vals = np.split(val, split_factor, axis=cat_dim)
         save_split(split_vals, saved_dir, key, tp_rank, split_factor)
@@ -237,9 +236,9 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
         save_split(split_vals, saved_dir, key, tp_rank, split_factor)
 
     elif "attention.qkv.weight" in key:
-        hidden_dim = vals[0].shape[-1]
+        hidden_dim = vals[0].shape[0]
         if local_dim is None:
-            local_dim = vals[0].shape[0] // 3
+            local_dim = vals[0].shape[-1] // 3
         if multi_query_mode:
             val = vals[0]
             # out_feature = local_dim + 2 * head_size; assumes local_dim equals to hidden_dim
