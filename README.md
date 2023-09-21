@@ -7,7 +7,6 @@
     - [百度网盘](https://pan.baidu.com/s/1Ra4mvQcRCbkzkReFYhk3Vw?pwd=6fxh) 提取码: 6fxh 
     - [Mega网盘](https://mega.nz/folder/d3YH2SaJ#QSoyfqSXBmNKlpyro6lvVA)
     - [123pan](https://www.123pan.com/s/oEqDVv-LFik.html) 提取码:JAUb
-    - 123pan直链: `https://vip.123pan.cn/1811989133/trt2023%E7%9B%B8%E5%85%B3/qwen_7b_chat.tar.gz`, 下载解压即可
 
 - 选题类型：2+4（注：2指的是TRT-LLM实现新模型。4指的是在新模型上启用了TRT-LLM现有feature）
 
