@@ -284,7 +284,7 @@
     - 至此，在trt-llm上支持qwen模型的基础工作已经做完
 
 ##### 开发中的亮点
-1. 完整支持原版的logn和ntk（这俩参数是用于增强模型长输入的生成效果，这里的长输入指的是输入长度大于2048小于8192）。不过由于trt-llm的某些bug，导致输入长度>2048时，实际输出会很短甚至为空，详见[issue](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/90)，所以加上rope放gpt attention plugin里面计算更快，所以我们logn注释掉了。
+1. 完整支持原版的logn和ntk（这俩参数是用于增强模型长输入的生成效果，这里的长输入指的是输入长度大于2048小于8192）。不过由于trt-llm的某些bug，导致输入长度>2048时，实际输出会很短甚至为空，详见[issue](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/90)，加上rope放gpt attention plugin里面计算更快，所以我们logn注释掉了。
 2. 支持`RotaryEmbedding`，并且在input_len > 2048时开启ntk相关计算。
 3. 支持自带的`gpt_attention_plugin`与`gemm_plugin`两个plugin。
 4. 新增支持rmsnorm plugin，在profile过程中发现原生的rmsnorm在底层是由5个op组成，kernel launch占比严重，并且中间数据传递也消耗时间，一次rmsnorm计算大概耗时0.022ms，因此通过cuda的方式实现了rmsnormplugin，减少kernellaunch，加快计算，最终优化后一次rmsnorm的计算时间降低到了0.0057ms。
