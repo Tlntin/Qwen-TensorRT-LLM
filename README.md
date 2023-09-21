@@ -499,6 +499,8 @@ TensorRT-LLM beam 0 result
 - 一般用原始模型作为baseline
 - 一般提供模型推理时间的加速比即可；若能提供压力测试下的吞吐提升则更好。
 - 测试平台：NVIDIA A10 (24G显存) | TensorRT 9.0.0.1 | tensorrt-llm 0.1.3
+- HuggingFace版Qwen采用默认配置，未安装，未启用FlashAttention相关模块
+- 注：int8 smooth quant编译时打开了`--per_token --per_channel`选项
 - 测试结果（该结果由`tensorrt_llm_july-release-v1/examples/qwen/benchmark.py`生成）
 1. 最大输入长度：2048， 最大新增长度：2048，num-prompts=100, beam=1, seed=0
 
@@ -524,6 +526,12 @@ TensorRT-LLM beam 0 result
 | TensorRT-LLM | dtype: int4 (weight only) | 5              | 0.49                   | 268.98               | 4.08       | 4.45       |
 | TensorRT-LLM | dtype: int4 (weight only) | 6              | **0.51**               | **283.53**           | **4.25**   | **4.69**   |
 | TensorRT-LLM | dtype: int4 (weight only) | 7              | OOM                    | OOM                  | /          | /          |
+|              |                            |                |                        |                      |            |            |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 1              | 0.29                   | 146.98               | 2.42       | 2.43       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 2              | 0.35                   | 184.63               | 2.92       | 3.05       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 3              | 0.38                   | 209.48               | 3.17       | 3.47       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 4              | 0.42                   | 227.64               | 3.5        | 3.77       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 5              | OOM                    | OOM                  | /          | /          |
 
 2. 最大输入长度：1024， 最大新增长度：1024，num-prompts=100, beam=1, seed=0
 
@@ -568,6 +576,19 @@ TensorRT-LLM beam 0 result
 | TensorRT-LLM | dtype: int4 (weight only) | 12             | 0.56                 | 254.73               | 4.00       | 4.95       |
 | TensorRT-LLM | dtype: int4 (weight only) | 13             | 0.56                 | 256.27               | 4.00       | 4.98       |
 | TensorRT-LLM | dtype: int4 (weight only) | 14             | OOM                  | OOM                  | /          | /          |
+|              |                            |                |                      |                      |            |            |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 1              | 0.36                 | 134.10               | 2.57       | 2.6        |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 2              | 0.40                 | 161.98               | 2.86       | 3.15       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 3              | 0.45                 | 185.56               | 3.21       | 3.6        |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 4              | 0.50                 | 214.51               | 3.57       | 4.17       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 5              | 0.56                 | 240.23               | 4.00       | 4.67       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 6              | 0.53                 | 229.17               | 3.79       | 4.45       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 7              | 0.53                 | 234.73               | 4.56       | 4.56       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 8              | 0.55                 | 245.52               | 3.93       | 4.77       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 9              | 0.56                 | 248.33               | 4.00       | 4.82       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 10             | 0.58                 | 258.25               | 4.14       | 5.02       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 11             | 0.55                 | 245.96               | 3.93       | 4.78       |
+| TensorRT-LLM | dtype: int8 (smooth quant) | 12             | OOM                  | OOM                  | /          | /          |
 
 请注意：
 
