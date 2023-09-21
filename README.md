@@ -420,9 +420,9 @@
 
     - 同样和上面一样做替换，去bias，去mean，去`USE_DIFF_OF_SQUARES`（去除这个需要忽略大小写，有的是小写），最终完成plugin的编写，并且精度验证没有问题。
 
-11. 参考[教程](https://www.http5.cn/index.php/archives/30/)，我们重新编译了TensorRT-LLM，并且加载了自定义的`Rmsnorm`和`RmsnormQuantization`插件，运行测试，发现结果正常，rmsnormplugin是配成功。
+11. 参考[教程](https://www.http5.cn/index.php/archives/30/)，我们重新编译了TensorRT-LLM，并且加载了自定义的`Rmsnorm`和`RmsnormQuantization`插件，运行测试，发现结果正常，rmsnormplugin适配成功。
 
-12. 在分析过程中同样发现attention计算过程涉及的kernel较多，并且咨询导师后明白gpt attention plugin也支持rope的计算，但是现在我们是放在外面做的计算导致附带了大量的kernel，因此我们把外面的rope计算流程删除，在gpt attebtion plugin中设置正确的rotary_embedding_dim参数，充分利用tensorrt本身的能力，测试后发现生成结果正确，说明qwen模型可以使用gpt attention plugin内置的rope计算方法，ope内置计算方法是配成功。
+12. 在分析过程中同样发现attention计算过程涉及的kernel较多，并且咨询导师后明白gpt attention plugin也支持rope的计算，但是现在我们是放在外面做的计算导致附带了大量的kernel，因此我们把外面的rope计算流程删除，在gpt attebtion plugin中设置正确的rotary_embedding_dim参数，充分利用tensorrt本身的能力，测试后发现生成结果正确，说明qwen模型可以使用gpt attention plugin内置的rope计算方法，rope内置计算方法适配成功。
 
 13. 以上工作做完后我们做了统一测试，包括int8/int4 wight only，测试结果表明rouge分数基本和之前一样并且编译Engine速度大幅度提升，而且运行summarize的速度也进一步提高（大概加速1.5秒）。
 
