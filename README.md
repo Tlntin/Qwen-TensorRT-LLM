@@ -181,19 +181,20 @@
     python3 hf_qwen_convert.py --smoothquant=0.5
     ```
 
-3. 编译前需要编译一下整个项目，这样后面才能加载新增的rmsnorm插件。参考该[教程](https://www.http5.cn/index.php/archives/30/)。
+3. 构建TRT Engine前需要编译一下整个项目，这样后面才能加载新增的rmsnorm插件。参考该[教程](https://www.http5.cn/index.php/archives/30/)。
 
 
-4. 开始编译trt_engine(未完待续)
+4. 开始编译trt_engine
     - 普通版
     ```bash
     python3 build.py --use_smooth_quan
     ```
 
-    - 升级版（理论上速度更快一些）
+    - 升级版（理论上运行速度更快，推理效果更好，强烈推荐）
     ```bash
     python3 build.py --use_smooth_quan --per_token --per_channel
     ```
+5. 编译完成，run/summarize/benchmark等等都和上面的是一样的了。
 
 ### 主要开发工作
 
@@ -306,7 +307,7 @@
   </div>
   <br>
   <p align="center">
-  <em> RmsnormPlugin performance comparison. </em>
+  <em> RmsnormPlugin performance comparison (test on fp16) </em>
   </p>
 </p>
 
@@ -329,15 +330,16 @@
   </div>
   <br>
   <p align="center">
-  <em> RmsnormPlugin performance comparison. </em>
+  <em> RmsnormPlugin performance comparison (test on fp16) </em>
   </p>
 </p>
 
 6. 同时将`layernorm_plugin`魔改成`rmsnorm_plugin`以支持smooth_quant量化技术，并且实际测试RmsNorm Plugin也可以给fp16和int8/int4 (wight only)带来不错的提升。
 7. 同时支持qwen base和chat模型
 8. 支持fp16 / int8 (weight only) / int4 (weight only), 理论上最低只需要8G消费级显卡就能运行。
-9. 支持在终端对话和使用gradio构建的网页应用中对话，支持流式输出。
-10. 支持fastapi部署，支持sse协议来实现流式输出，同时兼容OpenAI的api请求。
+9. 支持Smooth Quant int8量化。
+10. 支持在终端对话和使用gradio构建的网页应用中对话，支持流式输出。
+11. 支持fastapi部署，支持sse协议来实现流式输出，同时兼容OpenAI的api请求。
 
 ### 开发与优化过程
 
@@ -446,6 +448,7 @@
     what():  [TensorRT-LLM Error][int8gemm Runner] Failed to run cutlass int8 gemm. Error: Error Internal
     ```
 20. 直觉告诉我们策略选择器能运行的代码，到插件运行阶段确又失败应该是某个参数过大导致了重复运行，所以我们调整了里面和运行阶段有关的两个参数`warmup`和`runs`，经过多次编译，运行单元测试，发现3和10是比较合适的数字，可以产生较长的日志（说明能运行较长时间）。但是最终单元测试还是未能通过，后面我们还是试了一下smooth quant编译，结果发现可以。所以这个单元测试可能并不适合24G显存的A10来运行，或许是给A100跑的呢，相关变更可以通过[该commit](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/commit/0667e03b726a18a9a52e8242ddaf517f90c0e16f)查看，此时smooth_quant可以编译与运行，但是结果并不对，需要进一步校准代码。
+21. 通过逐行对比gpt2的smooth quant过程，我们发现需要smooth的几个layer的weight shape中，qwen和gpt是转置关系。所以导致我们在`capture_activation_range`和`smooth_qwen_model`这两个函数中，关于`w`的维度要和gpt不一样，gpt是dim=0,我们得改成dim=1。同时在`split_and_save_weight`这个函数调用前，需要将上面几个特殊layer利用`transpose_weights`函数将其转成gpt的格式，这样我们就可以复用对应的smooth quant int8的相关函数`generate_int8`和`write_int8`了。同时我们再次debug了weight.py,确保形状类型和gpt完全一样。重新build smooth quant的 engene后，我们发现run/smmarize均完全正常。
 
 ### 优化效果
 
@@ -481,6 +484,13 @@ TensorRT-LLM (dtype: int4 (weight only) | total latency: 31.928248405456543 sec)
   rouge2 : 11.030115146230957
   rougeL : 19.995706951778946
   rougeLsum : 23.94860303628307
+
+TensorRT-LLM ( dtype: int8 (smooth quant) | total latency: 40.39580488204956 sec)
+TensorRT-LLM beam 0 result
+  rouge1 : 29.825214246965757
+  rouge2 : 11.180882972127817
+  rougeL : 21.42468892994786
+  rougeLsum : 24.66149284270628
 
 ```
 
