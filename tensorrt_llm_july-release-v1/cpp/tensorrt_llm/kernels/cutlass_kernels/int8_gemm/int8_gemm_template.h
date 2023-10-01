@@ -451,6 +451,7 @@ tkc::CutlassGemmConfig CutlassInt8GemmRunner<T>::profileGemm(tk::QuantOption qua
         std::ostringstream msg;
         msg << "it seem can't found any good config.";
         TLLM_LOG_ERROR(msg.str());
+        throw std::runtime_error(msg.str());
     }
 }
 

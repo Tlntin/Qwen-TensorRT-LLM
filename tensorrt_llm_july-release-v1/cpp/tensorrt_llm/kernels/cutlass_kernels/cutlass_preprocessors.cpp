@@ -254,7 +254,7 @@ void subbyte_transpose_impl(
     // allows GCC to emit vector instructions.
     TLLM_CHECK_WITH_INFO(!(col_bytes_trans % VECTOR_WIDTH) && !(col_bytes % VECTOR_WIDTH),
         fmtstr("Number of bytes for rows and cols must be a multiple of %d. However, num_rows_bytes = %ld and "
-               "num_col_bytes = %d.",
+               "num_col_bytes = %ld.",
             VECTOR_WIDTH, col_bytes_trans, col_bytes));
 
     const int num_m_tiles = (num_rows + M_TILE_L1 - 1) / M_TILE_L1;
@@ -493,7 +493,7 @@ void interleave_column_major_tensor(int8_t* interleaved_quantized_tensor, const 
     const int rows_per_tile = details.rows_per_column_tile;
 
     TLLM_CHECK_WITH_INFO(!(num_rows % elts_in_int32),
-        fmtstr("The number of rows must be a multiple of %d but the number of rows is %d.", elts_in_int32, num_rows));
+        fmtstr("The number of rows must be a multiple of %d but the number of rows is %ld.", elts_in_int32, num_rows));
 
     TLLM_CHECK_WITH_INFO(!(num_cols % rows_per_tile),
         fmtstr("The number of columns must be a multiple of %d but the number of columns is %ld", rows_per_tile,
@@ -503,7 +503,7 @@ void interleave_column_major_tensor(int8_t* interleaved_quantized_tensor, const 
     uint32_t* output_byte_ptr = reinterpret_cast<uint32_t*>(interleaved_quantized_tensor);
 
     TLLM_CHECK_WITH_INFO(!(num_cols % rows_per_tile),
-        fmtstr("The number of columns must be a multiple of %d but the number of columns is %d.", rows_per_tile,
+        fmtstr("The number of columns must be a multiple of %d but the number of columns is %ld.", rows_per_tile,
             num_cols));
 
     const int num_vec_rows = num_rows / elts_in_int32;
