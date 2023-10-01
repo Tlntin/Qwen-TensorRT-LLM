@@ -3,10 +3,12 @@
 - 介绍本工作是 [NVIDIA TensorRT Hackathon 2023](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023) 的参赛题目，本项目将使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。
 - 原始模型：Qwen-7B-Chat
 - 原始模型URL：[Qwen-7B-Chat 🤗](https://huggingface.co/Qwen/Qwen-7B-Chat) [Qwen-7B-Chat Github](https://github.com/QwenLM/Qwen-7B) 
-- 注：Hugggingface的Qwen-7B-Chat貌似下架了，需要的可以用网盘下载。
+- 注：Hugggingface的Qwen-7B-Chat V1.0貌似下架了，需要的可以用网盘下载。
     - [百度网盘](https://pan.baidu.com/s/1Ra4mvQcRCbkzkReFYhk3Vw?pwd=6fxh) 提取码: 6fxh 
     - [Mega网盘](https://mega.nz/folder/d3YH2SaJ#QSoyfqSXBmNKlpyro6lvVA)
     - [123pan](https://www.123pan.com/s/oEqDVv-LFik.html) 提取码:JAUb
+- 注：2023-09-25 Huggingface的Qwen-7B-Chat再次上架，不过这次上架的是V1.1版，其seq_length从2048变成了8192，其他倒是没啥变化。
+- 注：2023-09-25 Huggingface的Qwen-14-Chat上架，不过这次上架的是V1.1版，经测试trt-llm代码完美运行，只需要改一下default_config.py的文件路径就可以运行。
 
 - 选题类型：2+4（注：2指的是TRT-LLM实现新模型。4指的是在新模型上启用了TRT-LLM现有feature）
 
@@ -24,7 +26,7 @@
 1. 准备工作
    - 有一个英伟达显卡，建议12G显存以上，推荐24G（注：12G显存可以用int4, 16G显存可以用int8, 24G显存可以用fp16）。
    - 需要Linux系统，WSL或许也可以试试。
-   - 已经安装了docker，并且安装了nvidia-docker
+   - 已经安装了docker，并且安装了nvidia-docker，[安装指南](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
    - 需要较大的磁盘空间，最少50G以上，推荐100G。
    - 需要较大的CPU内存，最少32G，推荐64G以上。
 
@@ -39,12 +41,19 @@
     ```bash
     docker pull registry.cn-hangzhou.aliyuncs.com/trt-hackathon/trt-hackathon:final_v1
     ```
+    - 注：该镜像为比赛专用镜像，目前已经下架，需要使用的该镜像的用户可以直接用docker来编译。
+    - 注：Docker编译时用的TensorRT是9.0.1.4和比赛镜像里面的9.0.0.2略有差异，不过应该不影响。
+    - 编译方法：
+    ```bash
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/secure/9.0.1/tars/TensorRT-9.0.1.4.Linux.x86_64-gnu.cuda-12.2.tar.gz
+    docker build . -t registry.cn-hangzhou.aliyuncs.com/trt-hackathon/trt-hackathon:final_v1
+    ```
 
 4. 进入项目目录，然后创建并启动容器，同时将本地代码路径映射到`/root/workspace/trt2023`路径
 
     ```bash
     cd Qwen-7B-Chat-TensorRT-LLM
-
+    
     docker run --gpus all \
       --name trt2023 \
       -d \
@@ -55,7 +64,8 @@
       -v ${PWD}:/root/workspace/trt2023 \
       registry.cn-hangzhou.aliyuncs.com/trt-hackathon/trt-hackathon:final_v1 sleep 8640000
     ```
-    - 由于本项目采用了RmsNorm和SmoothQuantRmsNorm两个Plugin来加速编译和推理，所以需要重新编译该项目源码，并重新安装trt_llm，参考[教程](https://www.http5.cn/index.php/archives/30/)
+    - 由于本项目采用了RmsNorm和SmoothQuantRmsNorm两个Plugin来加速编译和推理，而比赛镜像原版里面的trt-llm并没有包含这俩plugin，所以需要重新编译该项目源码，并重新安装trt_llm，参考[教程](https://www.http5.cn/index.php/archives/30/)
+    - 如果你是直接用上面的命令编译的docker镜像，则RmsNorm和SmoothQuantRmsNorm两个Plugin已经内置在里面了，不需要再重新编译了。
 
 5. 下载模型`QWen-7B-Chat`模型（可以参考总述部分），然后将文件夹重命名为`qwen_7b_chat`，最后放到`tensorrt_llm_july-release-v1/examples/qwen/`路径下即可。
 6. 安装根目录的提供的Python依赖，然后再进入qwen路径
@@ -65,7 +75,7 @@
     cd tensorrt_llm_july-release-v1/examples/qwen/
     ```
 
-7. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式
+7. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式（非必选，不convert直接build也是可以的，两种方式都兼容，直接build更省空间，但是不支持smooth quant）
 
     ```bash
     python3 hf_qwen_convert.py
@@ -156,6 +166,20 @@
     ```bash
     python3 web_demo.py
     ```
+    - 默认配置的web_demo.py如下：
+    ```python
+    demo.queue().launch(share=True, inbrowser=True)
+    ```
+    - 如果是服务器运行，建议改成这样
+    ```python
+    demo.queue().launch(server_name="0.0.0.0", share=False, inbrowser=False) 
+    ```
+    - web_demo参数说明
+        - `share=True`: 代表将网站穿透到公网，会自动用一个随机的临时公网域名，有效期3天，不过这个选项可能不太安全，有可能造成服务器被攻击，不建议打开。
+        - `inbrowser=True`: 部署服务后，自动打开浏览器，如果是本机，可以打开。如果是服务器，不建议打开，因为服务器也没有谷歌浏览器给你打开。
+        - `server_name="0.0.0.0"`: 允许任意ip访问，适合服务器，然后你只需要输入`http://[你的ip]: 7860`就能看到网页了，如果不开这个选择，默认只能部署的那台机器才能访问。
+        - `share=False`：仅局域网/或者公网ip访问，不会生成公网域名。
+        - `inbrowser=False`： 部署后不打开浏览器，适合服务器。
 
 15. 部署api，并调用api进行对话（可选）。
 

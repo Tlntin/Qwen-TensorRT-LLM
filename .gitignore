@@ -193,3 +193,4 @@ cython_debug/
 #.idea/
 kineto/
 .vscode/
+*.tar.gz
