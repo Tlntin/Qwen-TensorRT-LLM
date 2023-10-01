@@ -75,7 +75,7 @@
     cd tensorrt_llm_july-release-v1/examples/qwen/
     ```
 
-7. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式（非必选，不convert直接build也是可以的，两种方式都兼容，直接build更省空间，但是不支持smooth quant）
+7. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式（非必选，不convert直接build也是可以的，两种方式都兼容，直接build更省空间，但是不支持smooth quant; 运行该代码默认是需要加载cuda版huggingface模型再转换，所以低于24G显存的显卡建议跳过这步。）
 
     ```bash
     python3 hf_qwen_convert.py
@@ -83,7 +83,7 @@
 
 8. 修改编译参数（可选）
 
-    - 默认编译参数，包括batch_size, max_input_len, max_new_tokens都存放在`default_config.py`中
+    - 默认编译参数，包括batch_size, max_input_len, max_new_tokens, seq_length都存放在`default_config.py`中
     - 对于24G显存用户，直接编译即可，默认是fp16数据类型，max_batch_size=2
     - 对于低显存用户，可以降低max_batch_size=1，或者继续降低max_input_len, max_new_tokens
 

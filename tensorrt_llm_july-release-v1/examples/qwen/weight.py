@@ -391,7 +391,6 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                        hf_qwen,
                        rank=0,
                        tensor_parallel=1,
-                       seq_length=2048,
                        max_position_embeddings=8192,
                        rotary_emb_base=10000,
                        kv_channels=128,
@@ -463,7 +462,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
             if layer_idx is None:
                 continue
             idx = int(layer_idx)
-            if idx >= tensorrt_llm_qwen.num_layers:
+            if idx >= tensorrt_llm_qwen._num_layers:
                 continue
             if 'ln_1.weight' in k:
                 tensorrt_llm_qwen.layers[idx].ln_1.weight.value = v

@@ -24,6 +24,11 @@ class DefaultConfig:
     # Maximum number of generate new tokens.
     max_new_tokens = 2048
 
+    # Maximum sequence length.
+    # for Qwen-7B-Chat V1.0, the seq_length is 2048
+    # for Qwen-7B-Chat V1.1, the seq_length is 8192
+    # for Qwen-14B-Chat, the seq_length is 8192
+    seq_length = 2048
 
     # Top p for sampling.
     top_p = 0.5

@@ -323,7 +323,7 @@ def build_rank_engine(builder: Builder,
         num_layers=args.n_layer,
         num_heads=args.n_head,
         hidden_size=args.n_embd,
-        seq_length=2048,
+        seq_length=default_config.seq_length,
         vocab_size=args.vocab_size,
         hidden_act=args.hidden_act,
         max_position_embeddings=args.n_positions,
@@ -360,7 +360,8 @@ def build_rank_engine(builder: Builder,
             QuantMode.use_weight_only(use_int4_weights=True)
         )
 
-    if args.hf_model_dir is not None and args.ft_dir_path is None:
+    if args.hf_model_dir is not None and \
+        (args.ft_dir_path is None or not os.path.exists(args.ft_dir_path)):
         logger.info(f'Loading HF QWen ... from {args.hf_model_dir}')
         tik = time.time()
         hf_qwen = AutoModelForCausalLM.from_pretrained(
@@ -381,7 +382,6 @@ def build_rank_engine(builder: Builder,
             rank,
             args.world_size,
             max_position_embeddings=args.n_positions,
-            seq_length=args.max_input_len,
             kv_channels=args.kv_channels,
             rotary_emb_base=args.rotary_emb_base,
             dtype=args.dtype,
