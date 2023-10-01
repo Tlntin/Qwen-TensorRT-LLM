@@ -8,7 +8,7 @@
     - [Mega网盘](https://mega.nz/folder/d3YH2SaJ#QSoyfqSXBmNKlpyro6lvVA)
     - [123pan](https://www.123pan.com/s/oEqDVv-LFik.html) 提取码:JAUb
 - 注：2023-09-25 Huggingface的Qwen-7B-Chat再次上架，不过这次上架的是V1.1版，其seq_length从2048变成了8192，其他倒是没啥变化。
-- 注：2023-09-25 Huggingface的Qwen-14-Chat上架，不过这次上架的是V1.1版，经测试trt-llm代码完美运行，只需要改一下default_config.py的文件路径就可以运行。
+- 注：2023-09-25 Huggingface的Qwen-14-Chat上架，经测试trt-llm代码完美运行，只需要改一下default_config.py的文件路径就可以运行。
 
 - 选题类型：2+4（注：2指的是TRT-LLM实现新模型。4指的是在新模型上启用了TRT-LLM现有feature）
 
