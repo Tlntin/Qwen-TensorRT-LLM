@@ -6,16 +6,16 @@ import math
 from tensorrt_llm.functional import ACT2FN
 from tensorrt_llm.quantization.functional import quantize_per_token, quantize_tensor
 from tensorrt_llm._common import default_net, default_trtnet, precision
-from tensorrt_llm.plugin import  _TRT_LLM_PLUGIN_NAMESPACE as TRT_LLM_PLUGIN_NAMESPACE
+from tensorrt_llm.plugin import  TRT_LLM_PLUGIN_NAMESPACE
 from tensorrt_llm._utils import str_dtype_to_trt, str_dtype_to_np
 from tensorrt_llm.parameter import Parameter
 from tensorrt_llm.quantization.mode import QuantMode
-from tensorrt_llm.quantization.layer import (
+from tensorrt_llm.quantization.layers import (
     SmoothQuantColumnLinear, smooth_quant_gemm, SmoothQuantRowLinear
 )
 from tensorrt_llm.layers.attention import AttentionMaskType, PositionEmbeddingType
 from tensorrt_llm.module import Module
-from tensorrt_llm.functional import (ACT2FN, RaggedTensor, Tensor, allgather, allreduce,
+from tensorrt_llm.functional import (ACT2FN, Tensor, allgather, allreduce,
                           cast, concat, constant, gpt_attention, matmul, mul,
                           shape, slice, softmax, split, expand_dims_like, where, _create_tensor)
 
@@ -34,7 +34,7 @@ class SmoothQuantAttention(Module):
         attention_mask_type=AttentionMaskType.causal,
         bias=False,
         dtype=None,
-        position_embedding_type=PositionEmbeddingType.rope,
+        position_embedding_type=PositionEmbeddingType.rope_gpt_neox,
         neox_rotary_style=False,
         tp_group=None,
         tp_size=1,
@@ -141,7 +141,7 @@ class SmoothQuantAttention(Module):
 
     def forward(
         self,
-        hidden_states: Union[Tensor, RaggedTensor],
+        hidden_states: Union[Tensor, Tensor],
         rotary_pos_emb,
         past_key_value,
         sequence_length,
@@ -155,11 +155,7 @@ class SmoothQuantAttention(Module):
     ):
         # TODO(nkorobov) add in-flight batching to SmoothQuant
         is_input_ragged_tensor = False
-        if isinstance(hidden_states, RaggedTensor):
-            input_lengths = hidden_states.row_lengths
-            max_input_length = hidden_states.max_row_length
-            hidden_states = hidden_states.data
-            is_input_ragged_tensor = True
+        assert isinstance(hidden_states, Tensor)
         if default_net().plugin_config.smooth_quant_gemm_plugin:
             qkv = self.qkv(hidden_states)
         else:
@@ -257,10 +253,8 @@ class SmoothQuantAttention(Module):
                 tensor=qkv,
                 past_key_value=past_key_value,
                 sequence_length=sequence_length,
-                past_key_value_length=past_key_value_length,
+                past_key_value_lengths=past_key_value_length,
                 masked_tokens=masked_tokens,
-                input_lengths=input_lengths,
-                max_input_length=max_input_length,
                 cache_indirection=cache_indirection,
                 num_heads=self.num_attention_heads,
                 head_size=self.attention_head_size,
@@ -377,9 +371,6 @@ class SmoothQuantAttention(Module):
                 context = quantize_per_token(context)
 
         context = self.dense(context)
-        if is_input_ragged_tensor:
-            context = RaggedTensor.from_row_lengths(context, input_lengths,
-                                                    max_input_length)
 
         if use_cache:
             return (context, past_key_value)

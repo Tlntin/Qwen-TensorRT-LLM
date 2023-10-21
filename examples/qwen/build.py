@@ -18,6 +18,7 @@ from tensorrt_llm.logger import logger
 from tensorrt_llm.models import weight_only_quantize
 from tensorrt_llm.network import net_guard
 from tensorrt_llm.quantization import QuantMode
+from tensorrt_llm.mapping import Mapping
 from weight import load_from_hf_qwen, load_from_ft
 from utils.quantization import smooth_quantize
 from default_config import default_config
@@ -113,6 +114,8 @@ def parse_arguments():
         default=1,
         help='world size, only support tensor parallelism now'
     )
+    parser.add_argument('--tp_size', type=int, default=1)
+    parser.add_argument('--pp_size', type=int, default=1)
     parser.add_argument(
         '--hf_model_dir',
         type=str,
@@ -162,6 +165,8 @@ def parse_arguments():
     parser.add_argument('--max_input_len', type=int, default=default_config.max_input_len)
     parser.add_argument('--max_new_tokens', type=int, default=default_config.max_new_tokens)
     parser.add_argument('--max_beam_width', type=int, default=1)
+    parser.add_argument('--rotary_base', type=float, default=10000.0)
+    parser.add_argument('--rotary_scaling', nargs=2, type=str, default=None)
     parser.add_argument(
         '--use_gpt_attention_plugin',
         nargs='?',
@@ -204,6 +209,22 @@ def parse_arguments():
         'Use the SmoothQuant method to quantize activations and weights for the various GEMMs.'
         'See --per_channel and --per_token for finer-grained quantization options.'
     )
+    parser.add_argument(
+        '--per_channel',
+        default=False,
+        action="store_true",
+        help=
+        'By default, we use a single static scaling factor for the GEMM\'s result. '
+        'per_channel instead uses a different static scaling factor for each channel. '
+        'The latter is usually more accurate, but a little slower.')
+    parser.add_argument(
+        '--per_token',
+        default=False,
+        action="store_true",
+        help=
+        'By default, we use a single static scaling factor to scale activations in the int8 range. '
+        'per_token chooses at run time, and for each token, a custom scaling factor. '
+        'The latter is usually more accurate, but a little slower.')
 
     parser.add_argument(
         "--add_plugins",
@@ -233,21 +254,24 @@ def parse_arguments():
         'You must also use --use_weight_only for that argument to have an impact.'
     )
     parser.add_argument(
-        '--per_channel',
-        default=False,
+        '--use_inflight_batching',
         action="store_true",
-        help=
-        'By default, we use a single static scaling factor for the GEMM\'s result. '
-        'per_channel instead uses a different static scaling factor for each channel. '
-        'The latter is usually more accurate, but a little slower.')
+        default=False,
+        help="Activates inflight batching mode of gptAttentionPlugin.")
     parser.add_argument(
-        '--per_token',
-        default=False,
+        '--paged_kv_cache',
         action="store_true",
+        default=False,
         help=
-        'By default, we use a single static scaling factor to scale activations in the int8 range. '
-        'per_token chooses at run time, and for each token, a custom scaling factor. '
-        'The latter is usually more accurate, but a little slower.')
+        'By default we use contiguous KV cache. By setting this flag you enable paged KV cache'
+    )
+    parser.add_argument(
+        '--tokens_per_block',
+        type=int,
+        default=64,
+        help='Number of tokens per block in paged KV cache'
+    )
+    
     parser.add_argument(
         '--int8_kv_cache',
         default=False,
@@ -255,7 +279,73 @@ def parse_arguments():
         help=
         'By default, we use dtype for KV cache. int8_kv_cache chooses int8 quantization for KV'
     )
+    parser.add_argument(
+        '--use_parallel_embedding',
+        action="store_true",
+        default=False,
+        help=
+        'By default embedding parallelism is disabled. By setting this flag, embedding parallelism is enabled'
+    )
+    parser.add_argument(
+        '--embedding_sharding_dim',
+        type=int,
+        default=1,  # Meta does TP on hidden dim
+        choices=[0, 1],
+        help=
+        'By default the embedding lookup table is sharded along vocab dimension (embedding_sharding_dim=0). '
+        'To shard it along hidden dimension, set embedding_sharding_dim=1'
+        'Note: embedding sharing is only enabled when embedding_sharding_dim = 0'
+    )
+    parser.add_argument(
+        '--enable_fp8',
+        default=False,
+        action='store_true',
+        help='Use FP8 Linear layer for Attention QKV/Dense and MLP.')
+    parser.add_argument(
+        '--fp8_kv_cache',
+        default=False,
+        action="store_true",
+        help=
+        'By default, we use dtype for KV cache. fp8_kv_cache chooses int8 quantization for KV'
+    )
+    parser.add_argument(
+        '--strongly_typed',
+        default=False,
+        action="store_true",
+        help=
+        'This option is introduced with trt 9.1.0.1+ and will reduce the building time significantly for fp8.'
+    )
+    parser.add_argument(
+        '--use_custom_all_reduce',
+        action='store_true',
+        help=
+        'Activates latency-optimized algorithm for all-reduce instead of NCCL.')
+
     args = parser.parse_args()
+    assert not (
+        args.use_smooth_quant and args.use_weight_only
+    ), "You cannot enable both SmoothQuant and INT8 weight-only together."
+
+    if not args.remove_input_padding:
+        if args.use_gpt_attention_plugin:
+            logger.warning(
+                f"It is recommended to specify --remove_input_padding when using GPT attention plugin"
+            )
+
+    if args.use_inflight_batching:
+        if not args.use_gpt_attention_plugin:
+            args.use_gpt_attention_plugin = 'float16'
+            logger.info(
+                f"Using GPT attention plugin for inflight batching mode. Setting to default '{args.use_gpt_attention_plugin}'"
+            )
+        if not args.remove_input_padding:
+            args.remove_input_padding = True
+            logger.info(
+                "Using remove input padding for inflight batching mode.")
+        if not args.paged_kv_cache:
+            args.paged_kv_cache = True
+            logger.info("Using paged KV cache for inflight batching mode.")
+
     if args.use_smooth_quant:
         args.quant_mode = QuantMode.use_smooth_quant(args.per_token,
                                                      args.per_channel)
@@ -307,6 +397,10 @@ def build_rank_engine(builder: Builder,
        @return: The built engine.
     '''
     kv_dtype = str_dtype_to_trt(args.dtype)
+    mapping = Mapping(world_size=args.world_size,
+                      rank=rank,
+                      tp_size=args.tp_size,
+                      pp_size=args.pp_size)
     # load custom plugins
     custom_plugin_paths = [
         plugin_path
@@ -322,6 +416,7 @@ def build_rank_engine(builder: Builder,
     tensorrt_llm_qwen = QWenForCausalLM_TRT(
         num_layers=args.n_layer,
         num_heads=args.n_head,
+        num_kv_heads=args.n_kv_head,
         hidden_size=args.n_embd,
         seq_length=default_config.seq_length,
         vocab_size=args.vocab_size,
@@ -330,10 +425,12 @@ def build_rank_engine(builder: Builder,
         dtype=kv_dtype,
         mlp_hidden_size=args.inter_size,
         neox_rotary_style=True,
-        multi_query_mode=multi_query_mode,
+        mapping=mapping,
+        rotary_base=args.rotary_base,
+        rotary_scaling=args.rotary_scaling,
+        use_parallel_embedding=args.use_parallel_embedding,
+        embedding_sharding_dim=args.embedding_sharding_dim,
         quant_mode=args.quant_mode,
-        tensor_parallel=args.world_size,  # TP only
-        tensor_parallel_group=list(range(args.world_size)),
         custom_plugin_paths=custom_plugin_paths
     )
     
@@ -424,9 +521,13 @@ def build_rank_engine(builder: Builder,
         network.plugin_config.set_quantize_tensor_plugin()
         network.plugin_config.set_quantize_per_token_plugin()
     if args.world_size > 1:
-        network.plugin_config.set_nccl_plugin(args.dtype)
+        network.plugin_config.set_nccl_plugin(args.dtype,
+                                              args.use_custom_all_reduce)
     if args.remove_input_padding:
         network.plugin_config.enable_remove_input_padding()
+    
+    if args.paged_kv_cache:
+        network.plugin_config.enable_paged_kv_cache(args.tokens_per_block)
 
     with net_guard(network):
         # Prepare
@@ -478,11 +579,14 @@ def build(rank, args):
         # skip other ranks if parallel_build is enabled
         if args.parallel_build and cur_rank != rank:
             continue
+        int8_trt_flag = args.quant_mode.has_act_and_weight_quant() or (
+            not args.paged_kv_cache and args.quant_mode.has_int8_kv_cache())
         builder_config = builder.create_builder_config(
             name=MODEL_NAME,
             precision=args.dtype,
             timing_cache=args.timing_cache if cache is None else cache,
-            tensor_parallel=args.world_size,  # TP only
+            tensor_parallel=args.tp_size,
+            pipeline_parallel=args.pp_size,
             parallel_build=args.parallel_build,
             num_layers=args.n_layer,
             num_heads=args.n_head,
@@ -493,9 +597,12 @@ def build(rank, args):
             max_batch_size=args.max_batch_size,
             max_input_len=args.max_input_len,
             max_output_len=args.max_new_tokens,
-            int8=args.quant_mode.has_act_and_weight_quant(),
-            opt_level=args.builder_opt,
-            multi_query_mode=multi_query_mode)
+            int8=int8_trt_flag,
+            fp8=args.quant_mode.has_fp8_qdq(),
+            quant_mode=args.quant_mode,
+            strongly_typed=args.strongly_typed,
+            opt_level=args.builder_opt
+        )
         engine_name = get_engine_name(MODEL_NAME, args.dtype, args.world_size,
                                       cur_rank)
         engine = build_rank_engine(builder, builder_config, engine_name,

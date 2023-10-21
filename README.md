@@ -34,39 +34,33 @@
 
     ```bash
     git clone https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM.git
-    ```
-
-3. 拉取docker镜像。
-
-    ```bash
-    docker pull registry.cn-hangzhou.aliyuncs.com/trt-hackathon/trt-hackathon:final_v1
-    ```
-    - 注：该镜像为比赛专用镜像，目前已经下架，需要使用的该镜像的用户可以直接用docker来编译。
-    - 注：Docker编译时用的TensorRT是9.0.1.4和比赛镜像里面的9.0.0.2略有差异，不过应该不影响。
-    - 编译方法：
-    ```bash
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/secure/9.0.1/tars/TensorRT-9.0.1.4.Linux.x86_64-gnu.cuda-12.2.tar.gz
-    docker build . -t registry.cn-hangzhou.aliyuncs.com/trt-hackathon/trt-hackathon:final_v1
-    ```
-
-4. 进入项目目录，然后创建并启动容器，同时将本地代码路径映射到`/root/workspace/trt2023`路径
-
-    ```bash
     cd Qwen-7B-Chat-TensorRT-LLM
+    git lfs install
+    git lfs pull
+    git submodule update --init --recursive
+    ```
+
+3.  编译docker镜像：
+
+    ```bash
+    cd docker
+    make release_build
+    ```
     
+4. 进入项目目录，然后创建并启动容器，同时将本地`examples/qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径
+
+    ```bash
     docker run --gpus all \
-      --name trt2023 \
+      --name trt_llm \
       -d \
       --ipc=host \
       --ulimit memlock=-1 \
       --restart=always \
       --ulimit stack=67108864 \
-      -v ${PWD}:/root/workspace/trt2023 \
-      registry.cn-hangzhou.aliyuncs.com/trt-hackathon/trt-hackathon:final_v1 sleep 8640000
+      -v ${PWD}/examples/qwen:/app/tensorrt_llm/examples/qwen \
+      tensorrt_llm/release sleep 8640000
     ```
-    - 由于本项目采用了RmsNorm和SmoothQuantRmsNorm两个Plugin来加速编译和推理，而比赛镜像原版里面的trt-llm并没有包含这俩plugin，所以需要重新编译该项目源码，并重新安装trt_llm，参考[教程](https://www.http5.cn/index.php/archives/30/)
-    - 如果你是直接用上面的命令编译的docker镜像，则RmsNorm和SmoothQuantRmsNorm两个Plugin已经内置在里面了，不需要再重新编译了。
-
+    
 5. 下载模型`QWen-7B-Chat`模型（可以参考总述部分），然后将文件夹重命名为`qwen_7b_chat`，最后放到`tensorrt_llm_july-release-v1/examples/qwen/`路径下即可。
 6. 安装根目录的提供的Python依赖，然后再进入qwen路径
 

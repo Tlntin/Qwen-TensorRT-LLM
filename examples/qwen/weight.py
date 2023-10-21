@@ -434,17 +434,17 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
 
     torch_dtype = str_dtype_to_torch(dtype)
     # set for rope embedding
-    inv_freq = 1.0 / (rotary_emb_base ** (
-        torch.arange(0, kv_channels, 2).float() / kv_channels)
-    )
-    value_table = torch.matmul(
-        torch.arange(max_position_embeddings).float().reshape(-1, 1),
-        torch.concat([inv_freq, inv_freq], dim=0).reshape(1, -1)
-    ).reshape(max_position_embeddings, len(inv_freq) * 2)
-    cos_weight = torch.cos(value_table).float()
-    sin_weight = torch.sin(value_table).float()
-    tensorrt_llm_qwen.rope.position_embedding_cos.weight.value = torch_to_numpy(cos_weight)
-    tensorrt_llm_qwen.rope.position_embedding_sin.weight.value = torch_to_numpy(sin_weight)
+    # inv_freq = 1.0 / (rotary_emb_base ** (
+    #     torch.arange(0, kv_channels, 2).float() / kv_channels)
+    # )
+    # value_table = torch.matmul(
+    #     torch.arange(max_position_embeddings).float().reshape(-1, 1),
+    #     torch.concat([inv_freq, inv_freq], dim=0).reshape(1, -1)
+    # ).reshape(max_position_embeddings, len(inv_freq) * 2)
+    # cos_weight = torch.cos(value_table).float()
+    # sin_weight = torch.sin(value_table).float()
+    # tensorrt_llm_qwen.rope.position_embedding_cos.weight.value = torch_to_numpy(cos_weight)
+    # tensorrt_llm_qwen.rope.position_embedding_sin.weight.value = torch_to_numpy(sin_weight)
     for k, v in model_params.items():
         if isinstance(v, list):
             v = [torch_to_numpy(vv.to(torch_dtype).detach().cpu()) for vv in v]
@@ -462,7 +462,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
             if layer_idx is None:
                 continue
             idx = int(layer_idx)
-            if idx >= tensorrt_llm_qwen._num_layers:
+            if idx >= tensorrt_llm_qwen.num_layers:
                 continue
             if 'ln_1.weight' in k:
                 tensorrt_llm_qwen.layers[idx].ln_1.weight.value = v
