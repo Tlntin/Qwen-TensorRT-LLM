@@ -1,18 +1,15 @@
-# 运行下面命令将清华源设置为默认源
-# pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-# 用于跑summarize.py测评
-datasets
-nltk
-rouge_score
-tiktoken
-transformers_stream_generator
-# evaluate
-# 用于跑web_demo
-gradio
-mdtex2html
-# 用于创建api, 支持流式输出
-sse_starlette
-# 用于请求api，支持异步请求
-aiohttp_sse_client
-# 用于跑兼容openai的api，支持异步请求和同步请求
-openai
+build
+torch
+transformers==4.31.0
+diffusers==0.15.0
+accelerate==0.20.3
+colored
+polygraphy
+onnx>=1.12.0
+mpi4py
+tensorrt>=8.6.0
+numpy
+cuda-python==12.2.0
+sentencepiece>=0.1.99
+wheel
+lark
