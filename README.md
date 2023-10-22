@@ -1,23 +1,32 @@
 ### 总述
-- 介绍本工作是 [NVIDIA TensorRT Hackathon 2023](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023) 的参赛题目，本项目将使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。
-- 原始模型：Qwen-7B-Chat
-- 原始模型URL：[Qwen-7B-Chat 🤗](https://huggingface.co/Qwen/Qwen-7B-Chat) [Qwen-7B-Chat Github](https://github.com/QwenLM/Qwen-7B) 
-- 注：Hugggingface的Qwen-7B-Chat V1.0貌似下架了，需要的可以用网盘下载。
-    - [百度网盘](https://pan.baidu.com/s/1Ra4mvQcRCbkzkReFYhk3Vw?pwd=6fxh) 提取码: 6fxh 
-    - [Mega网盘](https://mega.nz/folder/d3YH2SaJ#QSoyfqSXBmNKlpyro6lvVA)
-    - [123pan](https://www.123pan.com/s/oEqDVv-LFik.html) 提取码:JAUb
-- 注：2023-09-25 Huggingface的Qwen-7B-Chat再次上架，不过这次上架的是V1.1版，其seq_length从2048变成了8192，其他倒是没啥变化。
-- 注：2023-09-25 Huggingface的Qwen-14-Chat上架，经测试trt-llm代码完美运行，只需要改一下default_config.py的文件路径就可以运行。
-
-- 选题类型：2+4（注：2指的是TRT-LLM实现新模型。4指的是在新模型上启用了TRT-LLM现有feature）
+<details>
+  <summary>点击这里展开/折叠内容</summary>
+  <ul>
+    <li>介绍本工作是 <a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023">NVIDIA TensorRT Hackathon 2023</a> 的参赛题目，本项目将使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。</li>
+    <li>原始模型：Qwen-7B-Chat</li>
+    <li>原始模型URL：
+      <ul>
+        <li><a href="https://huggingface.co/Qwen/Qwen-7B-Chat">Qwen-7B-Chat 🤗</a></li>
+        <li><a href="https://github.com/QwenLM/Qwen-7B">Qwen-7B-Chat Github</a></li>
+      </ul>
+    </li>
+    <li>注：Hugggingface的Qwen-7B-Chat V1.0貌似下架了，需要的可以用网盘下载。
+      <ul>
+        <li><a href="https://pan.baidu.com/s/1Ra4mvQcRCbkzkReFYhk3Vw?pwd=6fxh">百度网盘</a> 提取码: 6fxh</li>
+        <li><a href="https://mega.nz/folder/d3YH2SaJ#QSoyfqSXBmNKlpyro6lvVA">Mega网盘</a></li>
+        <li><a href="https://www.123pan.com/s/oEqDVv-LFik.html">123pan</a> 提取码: JAUb</li>
+      </ul>
+    </li>
+    <li>注：2023-09-25 Huggingface的Qwen-7B-Chat再次上架，不过这次上架的是V1.1版，其seq_length从2048变成了8192，其他倒是没啥变化。</li>
+    <li>注：2023-09-25 Huggingface的Qwen-14-Chat上架，经测试trt-llm代码完美运行，只需要改一下default_config.py的文件路径就可以运行。</li>
+    <li>选题类型：2+4（注：2指的是TRT-LLM实现新模型。4指的是在新模型上启用了TRT-LLM现有feature）</li>
+  </ul>
+</details>
 
 
 ### 主要贡献
 
-请简练地概括项目的主要贡献，使读者可以快速理解并复现你的工作，包括：
 ##### 优化效果
-（例如给出精度和加速比），简单给出关键的数字即可，在这里不必详细展开
-
 - 精度：fp16 基本和原版一样，int8(weight only) / int4(weight only) /int8(smooth quant) Rouge分数略有提高。总的来说，和原版基本相差不大。
 - 加速比：吞吐加速比最高**4.57**倍，生成加速比最高**5.56**倍。
 
@@ -215,9 +224,6 @@
 5. 编译完成，run/summarize/benchmark等等都和上面的是一样的了。
 
 ### 主要开发工作
-
-- 请在这一节里总结你的工作难点与亮点。
-- 如果使用 TensorRT-LLM 进行优化，描述以下方面可供选手参考：如果搭建了新模型， 请介绍模型结构有无特别之处，在模型的搭建过程中使用了什么算子，有没有通过plugin支持的新算子。如果支持新feature，请介绍这个feature具体需要修改哪些模块才能实现。如果优化已有模型，请介绍模型性能瓶颈以及解决方法。另外还可以包含工程实现以及debug过程中的难点。
 
 ##### 开发工作的难点
 
@@ -622,28 +628,35 @@ TensorRT-LLM beam 0 result
  - 已提交，待复核的bug：[Bug3](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/90)
 
 ### 送分题答案 | [操作步骤](SEND_POINT_README.md)
-1. 第一题。
-- 题目内容：
-```text
-请在报告中写出 /root/workspace/tensorrt_llm_july-release-v1/examples/gpt/README 里面 “Single node, single GPU” 部分如下命令的输出（10分）模型为gpt2-medium
+<details><summary>点击这里展开/折叠内容</summary>
+<ol>
+<li>第一题。</li>
+</ol>
+<ul>
+<li>题目内容：</li>
+</ul>
+<pre><code class="language-text">请在报告中写出 /root/workspace/tensorrt_llm_july-release-v1/examples/gpt/README 里面 “Single node, single GPU” 部分如下命令的输出（10分）模型为gpt2-medium
 python3 run.py --max_output_len=8
-```
-- 输出结果
-```bash
-Input: Born in north-east France, Soyer trained as a
+</code></pre>
+<ul>
+<li>输出结果</li>
+</ul>
+<pre><code class="language-bash">Input: Born in north-east France, Soyer trained as a
 Output:  chef and eventually became a chef at a
-```
-
-2. 第二题
-- 题目内容
-```text
-请在报告中写出 /root/workspace/tensorrt_llm_july-release-v1/examples/gpt/README 里面 “Summarization using the GPT model” 部分如下命令的rouge 分数（10分）模型为gpt2-medium
+</code></pre>
+<ol start="2">
+<li>第二题。</li>
+</ol>
+<ul>
+<li>题目内容</li>
+</ul>
+<pre><code class="language-text">请在报告中写出 /root/workspace/tensorrt_llm_july-release-v1/examples/gpt/README 里面 “Summarization using the GPT model” 部分如下命令的rouge 分数（10分）模型为gpt2-medium
 python3 summarize.py --engine_dirtrt_engine/gpt2/fp16/1-gpu --test_hf --batch_size1 --test_trt_llm --hf_model_location=gpt2 --check_accuracy --tensorrt_llm_rouge1_threshold=14
-```
-
-- 输出结果
-```bash
-TensorRT-LLM (total latency: 3.0498504638671875 sec)
+</code></pre>
+<ol start="2">
+<li>输出结果</li>
+</ol>
+<pre><code class="language-bash">TensorRT-LLM (total latency: 3.0498504638671875 sec)
 TensorRT-LLM beam 0 result
   rouge1 : 21.869322054781037
   rouge2 : 6.258925475911645
@@ -655,5 +668,5 @@ HF beam 0 result
   rouge2 : 6.127009262128831
   rougeL : 16.982143879321
   rougeLsum : 19.04670077160925
-```
-
+</code></pre>
+</details>
