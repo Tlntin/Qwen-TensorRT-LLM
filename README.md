@@ -182,7 +182,6 @@
     ```bash
     python3 web_demo.py
     ```
-    - 运行效果：https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956
     - 默认配置的web_demo.py如下：
     ```python
     demo.queue().launch(share=False, inbrowser=True)
@@ -197,8 +196,9 @@
         - `server_name="0.0.0.0"`: 允许任意ip访问，适合服务器，然后你只需要输入`http://[你的ip]: 7860`就能看到网页了，如果不开这个选择，默认只能部署的那台机器才能访问。
         - `share=False`：仅局域网/或者公网ip访问，不会生成公网域名。
         - `inbrowser=False`： 部署后不打开浏览器，适合服务器。
+16. web_demo运行效果（在RTX 4080, qwen-7b-chat, int4 weight only)
 
-
+https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956
 
 
 ##### 运行指南（Smooth Quant篇）
