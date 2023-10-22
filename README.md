@@ -70,7 +70,7 @@
       tensorrt_llm/release sleep 8640000
     ```
     
-5. 下载模型`QWen-7B-Chat`模型（可以参考总述部分），然后将文件夹重命名为`qwen_7b_chat`，最后放到`tensorrt_llm_july-release-v1/examples/qwen/`路径下即可。
+5. 下载模型`QWen-7B-Chat`模型（可以参考总述部分），然后将文件夹重命名为`qwen_7b_chat`，最后放到`examples/qwen/`路径下即可。
 6. 进入qwen路径，安装提供的Python依赖
 
     ```bash
@@ -182,6 +182,7 @@
     ```bash
     python3 web_demo.py
     ```
+    - 运行效果：https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956
     - 默认配置的web_demo.py如下：
     ```python
     demo.queue().launch(share=False, inbrowser=True)
