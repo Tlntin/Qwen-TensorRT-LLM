@@ -11,6 +11,8 @@ from transformers import AutoModelForCausalLM, GenerationConfig
 # from qwen_7b_chat.tokenization_qwen import QWenTokenizer as AutoTokenizer
 # for release
 from transformers import AutoTokenizer
+from tensorrt_llm.quantization import QuantMode
+from tensorrt_llm.runtime import ModelConfig
 
 import tensorrt_llm
 import tensorrt_llm.profiler as profiler
@@ -25,29 +27,48 @@ now_dir = os.path.dirname(os.path.abspath(__file__))
 
 
 def TRT_QWen(args, config):
+    use_gpt_attention_plugin = config['plugin_config']['gpt_attention_plugin']
+    remove_input_padding = config['plugin_config']['remove_input_padding']
     dtype = config['builder_config']['precision']
-    world_size = config['builder_config']['tensor_parallel']
+    tp_size = config['builder_config']['tensor_parallel']
+    pp_size = config['builder_config']['pipeline_parallel']
+    world_size = tp_size * pp_size
     assert world_size == tensorrt_llm.mpi_world_size(), \
         f'Engine world size ({world_size}) != Runtime world size ({tensorrt_llm.mpi_world_size()})'
-
-    world_size = config['builder_config']['tensor_parallel']
     num_heads = config['builder_config']['num_heads'] // world_size
     hidden_size = config['builder_config']['hidden_size'] // world_size
     vocab_size = config['builder_config']['vocab_size']
     num_layers = config['builder_config']['num_layers']
-    use_gpt_attention_plugin = bool(
-        config['plugin_config']['gpt_attention_plugin'])
-    remove_input_padding = config['plugin_config']['remove_input_padding']
-    multi_query_mode = config['builder_config']['multi_query_mode']
+    num_kv_heads = config['builder_config'].get('num_kv_heads', num_heads)
+    paged_kv_cache = config['plugin_config']['paged_kv_cache']
+    tokens_per_block = config['plugin_config']['tokens_per_block']
+    quant_mode = QuantMode(config['builder_config']['quant_mode'])
+    if config['builder_config'].get('multi_query_mode', False):
+        tensorrt_llm.logger.warning(
+            "`multi_query_mode` config is deprecated. Please rebuild the engine."
+        )
+        num_kv_heads = 1
+    num_kv_heads = (num_kv_heads + tp_size - 1) // tp_size
+    use_custom_all_reduce = config['plugin_config'].get('use_custom_all_reduce',
+                                                        False)
 
-    model_config = tensorrt_llm.runtime.ModelConfig(
+    runtime_rank = tensorrt_llm.mpi_rank()
+    runtime_mapping = tensorrt_llm.Mapping(world_size, runtime_rank)
+    torch.cuda.set_device(runtime_rank % runtime_mapping.gpus_per_node)
+
+    model_config = ModelConfig(
+        num_heads=num_heads,
+        num_kv_heads=num_kv_heads,
+        hidden_size=hidden_size,
         vocab_size=vocab_size,
         num_layers=num_layers,
-        num_heads=num_heads,
-        hidden_size=hidden_size,
         gpt_attention_plugin=use_gpt_attention_plugin,
-        multi_query_mode=multi_query_mode,
-        remove_input_padding=remove_input_padding
+        paged_kv_cache=paged_kv_cache,
+        tokens_per_block=tokens_per_block,
+        remove_input_padding=remove_input_padding,
+        dtype=dtype,
+        quant_mode=quant_mode,
+        use_custom_all_reduce=use_custom_all_reduce
     )
 
     runtime_rank = tensorrt_llm.mpi_rank()
@@ -207,15 +228,15 @@ def main(args):
         with torch.no_grad():
             tensorrt_llm_qwen.setup(
                 batch_size,
-                max_input_length=max_length,
+                max_context_length=max_length,
                 max_new_tokens=min(max_new_tokens, max_output_len - max_length),
             )
 
             if tensorrt_llm_qwen.remove_input_padding:
-                output_ids, end_step = tensorrt_llm_qwen.decode_batch(
+                output_ids = tensorrt_llm_qwen.decode_batch(
                     line_encoded, sampling_config)
             else:
-                output_ids, end_step = tensorrt_llm_qwen.decode(
+                output_ids = tensorrt_llm_qwen.decode(
                     line_encoded,
                     input_lengths,
                     sampling_config,
@@ -229,7 +250,7 @@ def main(args):
                 output_ids[
                     batch_idx,
                     :,
-                    input_lengths[batch_idx]:input_lengths[batch_idx] + end_step
+                    input_lengths[batch_idx]:
                 ],
                 skip_special_tokens=True
             )
@@ -237,7 +258,7 @@ def main(args):
         ]
         return (
             output_beams_list,
-            output_ids[:, :, max_length: max_length + end_step].tolist()
+            output_ids[:, :, max_length: ].tolist()
         )
     
 

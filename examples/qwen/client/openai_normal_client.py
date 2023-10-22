@@ -23,4 +23,6 @@ while True:
         stream=False,
     )
     message = completion.choices[0].message
-    print('ChatBot: {}'.format(message["content"]))
+    response_text = message["content"]
+    print('ChatBot: {}'.format(response_text))
+    messages.append({"role": "assistant", "content": response_text})

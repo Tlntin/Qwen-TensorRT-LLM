@@ -1,40 +1,24 @@
 import os
 import gradio as gr
 import mdtex2html
-from run import QWenForCausalLMGenerationSession
-from run import get_model
-from cli_chat import parse_arguments
 from default_config import default_config
+
+import openai
+openai.api_base = "http://localhost:8000/v1"
+openai.api_key = ""
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
 
-args = parse_arguments()
-(
-    model_config, sampling_config, runtime_mapping, runtime_rank,
-    serialize_path, remove_input_padding, 
-    tokenizer, eos_token_id, pad_token_id
-) = get_model(args.tokenizer_dir, args.engine_dir, args.log_level)
-
-with open(serialize_path, 'rb') as f:
-    engine_buffer = f.read()
-decoder = QWenForCausalLMGenerationSession(
-    model_config,
-    engine_buffer,
-    runtime_mapping,
-)
-
 
 """Override Chatbot.postprocess"""
-
-
 def postprocess(self, y):
     if y is None:
         return []
     for i, (message, response) in enumerate(y):
-        y[i] = (
+        y[i] = [
             None if message is None else mdtex2html.convert((message)),
             None if response is None else mdtex2html.convert(response),
-        )
+        ]
     return y
 
 
@@ -73,21 +57,33 @@ def parse_text(text):
     text = "".join(lines)
     return text
 
-
-def predict(input_text, chatbot, max_input_length, max_generate_length, history):
+def predict(input_text, chatbot, top_p, temperature, max_generate_length, history):
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+    ]
+    for (message, response) in history:
+        messages.append({"role": "user", "content": message})
+        messages.append({"role": "assistant", "content": response})
+    messages.append({"role": "user", "content": input_text})
     chatbot.append((parse_text(input_text), ""))
     history.append((input_text, ""))
-    for response in decoder.chat_stream(
-        tokenizer=tokenizer,
-        sampling_config=sampling_config,
-        input_text=input_text,
-        history=history,
-        max_input_length=max_input_length,
-        max_new_tokens=max_generate_length,
-    ):
-        chatbot[-1] = (parse_text(input_text), parse_text(response[0]))
-        history[-1] = (input_text, response[0])
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        top_p=top_p,
+        temperature=temperature,
+        n=1,
+        max_tokens=max_generate_length,
+        stream=True,
+    )
+    response_text = ""
+    for event in response:
+        event_text = event['choices'][0]['delta'].get("content", "")  # extract the text
+        response_text += event_text
+        chatbot[-1] = (parse_text(input_text), parse_text(response_text))
+        history[-1] = (input_text, response_text)
         yield chatbot, history
+    messages.append({"role": "assistant", "content": response_text})
 
 
 def reset_user_input():
@@ -105,18 +101,30 @@ with gr.Blocks() as demo:
     with gr.Row():
         with gr.Column(scale=4):
             with gr.Column(scale=12):
-                user_input = gr.Textbox(show_label=False, placeholder="Input...", lines=10).style(
-                    container=False)
+                user_input = gr.Textbox(
+                    show_label=False,
+                    placeholder="Input...",
+                    lines=10,
+                    container=False
+                )
             with gr.Column(min_width=32, scale=1):
                 submitBtn = gr.Button("Submit", variant="primary")
         with gr.Column(scale=1):
             emptyBtn = gr.Button("Clear History")
-            max_input_length = gr.Slider(
-                0,
-                default_config.max_input_len,
-                value=default_config.max_input_len // 2,
-                step=1.0,
-                label="Maximum input length",
+            top_p = gr.Slider(
+                minimum=0,
+                maximum=1,
+                value=0.5,
+                step=0.1,
+                label="top-p",
+                interactive=True
+            )
+            temperature = gr.Slider(
+                minimum=0,
+                maximum=1,
+                value=0,
+                step=0.1,
+                label="temperature",
                 interactive=True
             )
             max_generate_length = gr.Slider(
@@ -129,10 +137,15 @@ with gr.Blocks() as demo:
 
     history = gr.State([])
 
-    submitBtn.click(predict, [user_input, chatbot, max_input_length, max_generate_length, history], [chatbot, history],
-                    show_progress=True)
+    submitBtn.click(
+        predict, # call function
+        [user_input, chatbot, top_p, temperature, max_generate_length, history], # inputs
+        [chatbot, history], # outputs
+        show_progress=True,
+    )
+    # reset input
     submitBtn.click(reset_user_input, [], [user_input])
 
     emptyBtn.click(reset_state, outputs=[chatbot, history], show_progress=True)
 
-demo.queue().launch(share=True, inbrowser=True)
+demo.queue().launch(share=False, inbrowser=True)

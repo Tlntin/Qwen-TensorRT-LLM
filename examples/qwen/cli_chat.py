@@ -50,7 +50,7 @@ if __name__ == "__main__":
     print("欢迎使用Qwen聊天机器人，输入exit退出，输入clear清空历史记录")
     while True:
         input_text = input("Input: ")
-        if input_text == 'exit':
+        if input_text in ["exit", "quit", "exit()", "quit()"]:
             break
         if input_text == 'clear':
             history = []

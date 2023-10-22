@@ -23,8 +23,11 @@ while True:
         stream=True,
     )
     print("ChatBot：", end='', flush=True)
+    response_text = ""
     for event in response:
         event_text = event['choices'][0]['delta'].get("content", "")  # extract the text
+        response_text += event_text
         print(event_text, end='', flush=True)
+    messages.append({"role": "assistant", "content": response_text})
     print("")
 

@@ -12,9 +12,9 @@ import torch
 from transformers import AutoTokenizer
 import tensorrt_llm
 from tensorrt_llm.runtime import (
-    ModelConfig, SamplingConfig, GenerationSession, GenerationSequence,
+    ModelConfig, SamplingConfig, GenerationSession
 )
-from tensorrt_llm.runtime.generation import _tile_beam_width, Mapping
+from tensorrt_llm.runtime.generation import Mapping
 from build import get_engine_name  # isort:skip
 from utils.utils import make_context
 from default_config import default_config
@@ -122,16 +122,16 @@ class QWenForCausalLMGenerationSession(GenerationSession):
         # setup batch_size, max_input_length, max_output_len
         self.setup(
             batch_size=input_lengths.size(0),
-            max_input_length=max_input_length,
+            max_context_length=max_input_length,
             max_new_tokens=max_new_tokens
         )
-        output_ids, end_step = self.decode(
+        output_ids = self.decode(
             input_ids, input_lengths, sampling_config
         )
         with torch.no_grad():
             torch.cuda.synchronize()
             if runtime_rank == 0:
-                outputs = output_ids[:, 0, :max_input_length + end_step]
+                outputs = output_ids[:, 0, :]
                 return outputs
     
     def chat(
@@ -163,18 +163,18 @@ class QWenForCausalLMGenerationSession(GenerationSession):
         # setup batch_size, max_input_length, max_output_len
         self.setup(
             batch_size=input_lengths.size(0),
-            max_input_length=max_input_length,
+            max_context_length=max_input_length,
             max_new_tokens=max_new_tokens
         )
-        output_ids, end_step = self.decode(
-            input_ids, input_lengths, sampling_config
+        output_ids = self.decode(
+            input_ids, input_lengths, sampling_config, streaming=False,
         )
         with torch.no_grad():
             torch.cuda.synchronize()
             if runtime_rank == 0:
                 output_texts = [
                     tokenizer.decode(
-                        output_ids[i, 0, input_lengths[i]: input_lengths[i] + end_step],
+                        output_ids[i, 0, input_lengths[i]: ],
                         skip_special_tokens=True
                     )
                     for i in range(output_ids.size(0))
@@ -210,18 +210,18 @@ class QWenForCausalLMGenerationSession(GenerationSession):
             )
         self.setup(
             batch_size=input_lengths.size(0),
-            max_input_length=max_input_length,
+            max_context_length=max_input_length,
             max_new_tokens=max_new_tokens
         )
         with torch.no_grad():
-            for (output_ids, end_step) in self.steam_decode(
-                input_ids, input_lengths, sampling_config
+            for output_ids in self.decode(
+                input_ids, input_lengths, sampling_config, streaming=True,
             ):
                 torch.cuda.synchronize()
                 if runtime_rank == 0:
                     output_texts = [
                     tokenizer.decode(
-                        output_ids[i, 0, input_lengths[i]: input_lengths[i] + end_step],
+                        output_ids[i, 0, input_lengths[i]:],
                             skip_special_tokens=True
                         ) 
                         for i in range(output_ids.size(0))
@@ -411,13 +411,21 @@ def generate(
     input_ids = None
     input_lengths = None
     if input_file is None:
-        input_ids = torch.cuda.IntTensor(input_tokens)
-        input_lengths = torch.cuda.IntTensor([input_ids.size(1)])
+        input_ids = torch.tensor(input_tokens, device="cuda", dtype=torch.int32)
+        input_lengths = torch.tensor(
+            [input_ids.size(1)], device="cuda", dtype=torch.int32
+        )
     else:
-        input_lengths = torch.cuda.IntTensor([len(x) for x in input_tokens])
+        input_lengths = torch.tensor(
+            [len(x) for x in input_tokens],
+            device="cuda",
+            dtype=torch.int32
+        )
         if remove_input_padding:
             input_ids = np.concatenate(input_tokens)
-            input_ids = torch.cuda.IntTensor(input_ids).unsqueeze(0)
+            input_ids = torch.tensor(
+                input_ids, device="cuda", dtype=torch.int32
+            ).unsqueeze(0)
         else:
             input_ids = torch.nested.to_padded_tensor(
                 torch.nested.nested_tensor(input_tokens, dtype=torch.int32),
@@ -434,7 +442,7 @@ def generate(
         max_new_tokens=max_new_tokens
     )
 
-    output_ids, end_step = decoder.decode(input_ids, input_lengths, sampling_config)
+    output_ids = decoder.decode(input_ids, input_lengths, sampling_config)
     torch.cuda.synchronize()
 
     if runtime_rank == 0:
@@ -444,10 +452,6 @@ def generate(
                 input_text = tokenizer.decode(inputs)
                 print(f'Input: \"{input_text}\"')
                 if num_beams <= 1:
-                    output_begin = max_input_length
-                    output_end = max_input_length + end_step
-                    outputs = output_ids[b][0][output_begin: output_end].tolist()
-                    output_text = tokenizer.decode(outputs)
                     # outputs = output_ids[b][0].tolist()
                     # output_text = _decode_chatml(
                     #     outputs,
@@ -457,15 +461,23 @@ def generate(
                     #     raw_text_len=len(input_text),
                     #     context_length=len(inputs)
                     # )
+                    outputs = output_ids[b][0, len(inputs): ].tolist()
+                    output_text = tokenizer.decode(outputs, skip_special_tokens=True)
                     print(f'Output: \"{output_text}\"')
                 else:
                     for beam in range(num_beams):
-                        output_begin = input_lengths[b]
-                        output_end = input_lengths[b] + end_step
-                        outputs = output_ids[b][beam][
-                            output_begin:output_end].tolist()
-                        output_text = tokenizer.decode(outputs)
-                        print(f'Output: \"{output_text}\"')
+                        # outputs = output_ids[b][beam].tolist()
+                        # output_text = _decode_chatml(
+                        #     outputs,
+                        #     stop_words=[],
+                        #     eod_token_ids=[tokenizer.im_start_id, tokenizer.im_end_id],
+                        #     tokenizer=tokenizer,
+                        #     raw_text_len=len(input_text),
+                        #     context_length=len(inputs)
+                        # )
+                        outputs = output_ids[b][beam, len(inputs): ].tolist()
+                        output_text = tokenizer.decode(outputs, skip_special_tokens=True)
+                        print(f'Output(beam: {beam}): \"{output_text}\"')
 
         output_ids = output_ids.reshape((-1, output_ids.size(2)))
 

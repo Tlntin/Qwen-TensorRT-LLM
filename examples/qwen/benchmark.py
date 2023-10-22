@@ -154,27 +154,24 @@ def run_trt_llm(
             sampling_config=sampling_config,
             max_new_tokens=min(max_new_tokens, global_max_output_len - input_ids.shape[1]),
         )
-        step_len = output_ids.shape[-1] - max_length
-        pure_output_ids = [
-            output_ids[i, input_lengths[i]: input_lengths[i] + step_len]
-            for i in range(len(batch))
-        ]
+        pure_output_ids = []
+        for i in range(len(batch)):
+            temp_ids = output_ids[i, input_lengths[i]:]
+            pure_ids = []
+            for i in range(len(temp_ids)):
+                if temp_ids[i] in [tokenizer.im_start_id, tokenizer.im_end_id]:
+                    pure_ids = temp_ids[:i + 1]
+                    break
+            if len(pure_ids) == 0:
+                pure_ids = temp_ids
+            pure_output_ids.append(pure_ids)
         # get the output text
         output_texts = [
             tokenizer.decode(out_ids, skip_special_tokens=True)
             for out_ids in pure_output_ids
         ]
         # get the total num of tokens
-        output_lengths = []
-        for out_ids in pure_output_ids:
-            early_stop = False
-            for i in range(len(out_ids)):
-                if out_ids[i] == pad_id:
-                    output_lengths.append(i + 1)
-                    early_stop = True
-                    break
-            if not early_stop:
-                output_lengths.append(len(out_ids))
+        output_lengths = [len(out_ids) for out_ids in pure_output_ids]
         assert len(output_lengths) == len(batch)
         for input_len, new_token_len in zip(input_lengths, output_lengths):
             total_num_tokens.append(input_len + new_token_len)
@@ -341,7 +338,7 @@ if __name__ == "__main__":
         "--backend",
         type=str,
         choices=["trt_llm", "hf"],
-        default="hf",
+        default="trt_llm",
     )
     parser.add_argument(
         "--dataset",
