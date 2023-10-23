@@ -210,12 +210,12 @@
 4. 开始编译trt_engine
     - 普通版
     ```bash
-    python3 build.py --use_smooth_quan
+    python3 build.py --use_smooth_quant
     ```
 
     - 升级版（理论上运行速度更快，推理效果更好，强烈推荐）
     ```bash
-    python3 build.py --use_smooth_quan --per_token --per_channel
+    python3 build.py --use_smooth_quant --per_token --per_channel
     ```
 5. 编译完成，run/summarize/benchmark等等都和上面的是一样的了。
 
