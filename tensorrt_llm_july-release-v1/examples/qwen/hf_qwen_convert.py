@@ -82,7 +82,7 @@ class ProgArgs:
             "--smoothquant",
             "-sq",
             type=float,
-            default=0.5,
+            default=None,
             help="Set the α parameter (see https://arxiv.org/pdf/2211.10438.pdf)"
             " to Smoothquant the model, and output int8 weights."
             " A good first try is 0.5. Must be in [0, 1]")
