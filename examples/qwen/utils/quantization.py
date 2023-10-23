@@ -11,7 +11,8 @@ from tensorrt_llm._utils import str_dtype_to_trt, str_dtype_to_np
 from tensorrt_llm.parameter import Parameter
 from tensorrt_llm.quantization.mode import QuantMode
 from tensorrt_llm.quantization.layers import (
-    SmoothQuantColumnLinear, smooth_quant_gemm, SmoothQuantRowLinear
+    SmoothQuantColumnLinear, smooth_quant_gemm, SmoothQuantRowLinear,
+    SmoothQuantRmsNorm,
 )
 from tensorrt_llm.layers.attention import AttentionMaskType, PositionEmbeddingType
 from tensorrt_llm.module import Module
@@ -19,31 +20,28 @@ from tensorrt_llm.functional import (ACT2FN, Tensor, allgather, allreduce,
                           cast, concat, constant, gpt_attention, matmul, mul,
                           shape, slice, softmax, split, expand_dims_like, where, _create_tensor)
 
-
+# copy from tensorrt_llm/models/layers.py SmoothQuantAttention
+# we need to set qkv bias to True
 class SmoothQuantAttention(Module):
 
     def __init__(
         self,
         hidden_size,
         num_attention_heads,
-        max_position_embeddings,
-        seq_length,
-        num_layers=1,
         num_kv_heads=None,
+        max_position_embeddings=1024,
+        num_layers=1,
         apply_query_key_layer_scaling=False,
-        attention_mask_type=AttentionMaskType.causal,
+        attention_mask_type=AttentionMaskType.padding,
         bias=False,
         dtype=None,
         position_embedding_type=PositionEmbeddingType.rope_gpt_neox,
-        neox_rotary_style=False,
         tp_group=None,
         tp_size=1,
+        tp_rank=0,
         multi_block_mode=False,
-        multi_query_mode=False,
+        scale_alibi_bias=False,
         paged_kv_cache=False,
-        use_dynamic_ntk=True,
-        use_logn_attn=True,
-        rotary_embedding_percentage=1.0,
         quant_mode=QuantMode(0)
     ):
         super().__init__()
@@ -54,8 +52,9 @@ class SmoothQuantAttention(Module):
             num_kv_heads + tp_size - 1
         ) // tp_size if num_kv_heads is not None else self.num_attention_heads
         self.hidden_size = hidden_size // tp_size
-        self.split_size = hidden_size
         self.max_position_embeddings = max_position_embeddings
+        self.tp_size = tp_size
+        self.tp_rank = tp_rank
 
         self.num_layers = num_layers
         self.apply_query_key_layer_scaling = apply_query_key_layer_scaling
@@ -64,20 +63,19 @@ class SmoothQuantAttention(Module):
         if self.apply_query_key_layer_scaling:
             self.norm_factor *= self.num_layers
             self.q_scaling *= self.num_layers
+        # Whether to scale ALiBi bias. Mathematically, it's equivalent to
+        # normalizing QK after adding bias.
+        #   - False, inv_sqrt_Dh * Q*K^T + alibi_bias
+        #   - True,  inv_sqrt_Dh * Q*K^T + inv_sqrt_Dh * alibi_bias
+        self.scale_alibi_bias = scale_alibi_bias
 
         self.position_embedding_type = position_embedding_type
         self.multi_block_mode = multi_block_mode
-        self.multi_query_mode = multi_query_mode
         self.paged_kv_cache = paged_kv_cache
 
         self.rotary_embedding_dim = 0
-        self.neox_rotary_style = neox_rotary_style
-        #if self.position_embedding_type.is_rope():
-        if self.position_embedding_type == PositionEmbeddingType.rope:
-            self.rotary_embedding_dim = int(self.attention_head_size *
-                                            rotary_embedding_percentage)
-            # TODO: Once we add RotaryEmbedding outside GPTAttention plugin,
-            #       we need to set it up here
+        if self.position_embedding_type.is_rope():
+            self.rotary_embedding_dim = hidden_size // num_attention_heads
 
         self.quant_mode = quant_mode
         self.dtype = dtype
@@ -103,8 +101,8 @@ class SmoothQuantAttention(Module):
 
         self.qkv = SmoothQuantColumnLinear(
             hidden_size,
-            hidden_size * 3 if not multi_query_mode 
-            else hidden_size + 2 * self.num_kv_heads * tp_size * self.attention_head_size,
+            hidden_size +
+            2 * self.num_kv_heads * tp_size * self.attention_head_size,
             bias=True,
             dtype=dtype,
             tp_group=tp_group,
@@ -112,164 +110,67 @@ class SmoothQuantAttention(Module):
             gather_output=False,
             quant_mode=qkv_quant_mode)
 
-        self.dense = SmoothQuantRowLinear(
-            hidden_size,
-            hidden_size,
-            bias=bias,
-            dtype=dtype,
-            tp_group=tp_group,
-            tp_size=tp_size,
-            quant_mode=quant_mode
-        )
-        
-        # copy from model.py QWenAttention
-        # for input_length < 2048, logn and ntk is useless
-        # self.use_dynamic_ntk = use_dynamic_ntk
-        # self.use_logn_attn = use_logn_attn
+        self.dense = SmoothQuantRowLinear(hidden_size,
+                                          hidden_size,
+                                          bias=bias,
+                                          dtype=dtype,
+                                          tp_group=tp_group,
+                                          tp_size=tp_size,
+                                          quant_mode=quant_mode)
 
-        # logn_array = np.array([
-        #     math.log(i, seq_length) if i > seq_length else 1
-        #     for i in range(1, 32768)
-        #     ],
-        #     dtype=np.float16
-        # ).reshape(1, -1, 1, 1)
-        # self.logn_tensor = Parameter(
-        #     value=logn_array,
-        #     dtype=self.dtype,
-        #     shape=[1, 32767, 1, 1],
-        # ) 
-
-    def forward(
-        self,
-        hidden_states: Union[Tensor, Tensor],
-        rotary_pos_emb,
-        past_key_value,
-        sequence_length,
-        past_key_value_length,
-        masked_tokens,
-        cache_indirection,
-        use_cache=False,
-        kv_cache_block_pointers=None,
-        host_input_lengths=None,
-        host_request_types=None,
-    ):
-        # TODO(nkorobov) add in-flight batching to SmoothQuant
-        is_input_ragged_tensor = False
-        assert isinstance(hidden_states, Tensor)
+    def forward(self,
+                hidden_states: Tensor,
+                attention_mask=None,
+                use_cache=False,
+                kv_cache_params=None,
+                attention_params=None,
+                workspace=None):
+        # TODO add in-flight batching to SmoothQuant
         if default_net().plugin_config.smooth_quant_gemm_plugin:
             qkv = self.qkv(hidden_states)
         else:
             raise ValueError("smooth_quant_gemm_plugin is not set")
-        """
-        # copy from model.py QWenAttention
-        # query, key, value = qkv.split(self.split_size, dim=2)
-        query, key, value = split(qkv, self.split_size, dim=2)
-        # query = self._split_heads(query, self.num_heads, self.head_dim)
-        query = query.view(
-            concat([
-                shape(qkv, 0),
-                shape(qkv, 1),
-                self.num_attention_heads,
-                self.attention_head_size
-            ]))
-        # key = self._split_heads(key, self.num_heads, self.head_dim)
-        key = key.view(
-            concat([
-                shape(qkv, 0),
-                shape(qkv, 1),
-                self.num_attention_heads,
-                self.attention_head_size
-            ]))
-        # value = self._split_heads(value, self.num_heads, self.head_dim)
-        value = value.view(
-            concat([
-                shape(qkv, 0),
-                shape(qkv, 1),
-                self.num_attention_heads,
-                self.attention_head_size
-            ]))
+        if not default_net().plugin_config.gpt_attention_plugin:
+            raise ValueError("gpt_attention_plugin is not set")
 
-        zero = cast(constant(
-            np.ascontiguousarray(
-                np.zeros(
-                    [1, 1, 1, 1],
-                    dtype=np.float16 if self.dtype == trt.float16 else np.float32
-                )
-            )
-        ), dtype=trt.float32)
-        def _rotate_half(x128):
-            x64_part0, x64_part1 = x128.split(64, dim=-1)
-
-            x64_part1_negtive = zero - x64_part1
-
-            y64 = concat([x64_part1_negtive, x64_part0], dim=3)
-            return y64
-
-        def apply_rotary_pos_emb(t, freqs):
-            cos1, sin1 = freqs
-            t_ = t.cast(trt.float32)
-            t_rotate = _rotate_half(t_)
-            y128 = t_ * cos1 + t_rotate * sin1
-            # y128 = y128.view(shape(x))
-            y128 = y128.cast(t.dtype)
-            return y128
-        q_pos_emb, k_pos_emb = rotary_pos_emb
-        query = apply_rotary_pos_emb(query, q_pos_emb)
-        key = apply_rotary_pos_emb(key, k_pos_emb)
-        # implement in trt
-        # seq_start = slice(shape(key), [1], [1]) - slice(shape(query), [1], [1])
-        # seq_end = slice(shape(key), [1], [1])
-        # logn_shape = self.logn_tensor.value.shape
-        # logn_tensor = slice(
-        #     input=self.logn_tensor.value,
-        #     starts=concat([0, seq_start, 0, 0]),
-        #     sizes=concat([logn_shape[0], seq_end - seq_start, logn_shape[2], logn_shape[3]]),
-        # )
-        # query = query * expand_dims_like(logn_tensor, query)
-
-        qkv = concat([query, key, value], dim=2)
-        qkv = qkv.view(
-            concat([shape(qkv, 0),
-                    shape(qkv, 1),
-                    self.hidden_size * 3])
-        )
-        """ 
-        kv_orig_quant_scale = self.kv_orig_quant_scale.value \
-            if self.quant_mode.has_int8_kv_cache() else None
-        kv_quant_orig_scale = self.kv_quant_orig_scale.value \
-            if self.quant_mode.has_int8_kv_cache() else None
-
-        
         if default_net().plugin_config.gpt_attention_plugin:
-            assert sequence_length is not None
-            assert past_key_value_length is not None
+
+            assert attention_params.is_valid(
+                default_net().plugin_config.gpt_attention_plugin,
+                default_net().plugin_config.remove_input_padding)
+            assert kv_cache_params.is_valid(
+                default_net().plugin_config.gpt_attention_plugin)
             assert self.attention_mask_type == AttentionMaskType.causal, \
                 'Plugin only support masked MHA.'
-            # assert host_request_types is not None
-            if default_net().plugin_config.remove_input_padding:
-                assert host_input_lengths is not None
-
+            kv_quant_scale = self.kv_orig_quant_scale.value if self.quant_mode.has_int8_kv_cache(
+            ) else None
+            kv_dequant_scale = self.kv_quant_orig_scale.value if self.quant_mode.has_int8_kv_cache(
+            ) else None
             context, past_key_value = gpt_attention(
                 tensor=qkv,
-                past_key_value=past_key_value,
-                sequence_length=sequence_length,
-                past_key_value_lengths=past_key_value_length,
-                masked_tokens=masked_tokens,
-                cache_indirection=cache_indirection,
+                past_key_value=kv_cache_params.get_first_past_key_value(),
+                sequence_length=attention_params.sequence_length,
+                host_past_key_value_lengths=kv_cache_params.
+                host_past_key_value_lengths,
+                context_lengths=attention_params.context_lengths,
+                cache_indirection=kv_cache_params.cache_indirection,
+                host_request_types=attention_params.host_request_types,
                 num_heads=self.num_attention_heads,
-                head_size=self.attention_head_size,
+                num_kv_heads=self.num_kv_heads,
+                hidden_size_per_head=self.attention_head_size,
                 q_scaling=self.q_scaling,
-                rotary_embedding_dim=self.rotary_embedding_dim, # when we use it 0, we will not use rotary embedding in plugin
-                neox_rotary_style=self.neox_rotary_style,
+                rotary_embedding_dim=self.rotary_embedding_dim,
+                position_embedding_type=self.position_embedding_type,
                 multi_block_mode=self.multi_block_mode,
-                multi_query_mode=self.multi_query_mode,
-                kv_orig_quant_scale=kv_orig_quant_scale,
-                kv_quant_orig_scale=kv_quant_orig_scale,
-                use_int8_kv_cache=self.quant_mode.has_int8_kv_cache(),
-                kv_cache_block_pointers=kv_cache_block_pointers,
-                host_input_lengths=host_input_lengths,
-                host_request_types=host_request_types,
-            )
+                kv_orig_quant_scale=kv_quant_scale,
+                kv_quant_orig_scale=kv_dequant_scale,
+                kv_cache_quant_mode=self.quant_mode,
+                max_context_length=attention_params.max_context_length,
+                tp_size=self.tp_size,
+                tp_rank=self.tp_rank,
+                kv_cache_block_pointers=kv_cache_params.
+                get_first_kv_cache_block_pointers(),
+                host_context_lengths=attention_params.host_context_lengths)
         else:
             assert self.paged_kv_cache == False
 
@@ -286,6 +187,7 @@ class SmoothQuantAttention(Module):
             key = transpose_for_scores(key)
             value = transpose_for_scores(value)
 
+            past_key_value = kv_cache_params.get_first_past_key_value()
             if past_key_value is not None:
 
                 def dequantize_tensor(x, scale):
@@ -363,14 +265,18 @@ class SmoothQuantAttention(Module):
                 past_key_value = quantize_tensor(
                     past_key_value, self.kv_quantization_scale.value)
 
+        context = context / self.dense.smoother.value
         if self.quant_mode.has_act_and_weight_quant():
             if self.quant_mode.has_act_static_scaling():
+                # Avoid quantiztion layers as it breaks int8 plugins
                 context = quantize_tensor(
                     context, self.quantization_scaling_factor.value)
             else:
+                # Quantize per token outputs tuple:
+                # quantized tensor and scaling factors per token
                 context = quantize_per_token(context)
 
-        context = self.dense(context)
+        context = self.dense(context, workspace)
 
         if use_cache:
             return (context, past_key_value)
@@ -437,6 +343,7 @@ class SmoothQuantMLP(Module):
         a1 = self.w1(hidden_states)
         a2 = self.w2(hidden_states)
         inter = a1 * ACT2FN[self.hidden_act](a2)
+        inter = inter / self.c_proj.smoother.value
         if self.quant_mode.has_act_and_weight_quant():
             if self.quant_mode.has_act_static_scaling():
                 # Avoid quantiztion layers as it breaks int8 plugins
@@ -605,14 +512,14 @@ def smooth_quantize(model, quant_mode, rmsnorm_quantization_plugin_dtype, custom
             layer.hidden_size,
             layer.num_attention_heads,
             max_position_embeddings=layer.max_position_embeddings,
-            seq_length=layer.seq_length,
+            # seq_length=layer.seq_length,
             num_layers=layer.num_layers,
             apply_query_key_layer_scaling=layer.apply_query_key_layer_scaling,
             attention_mask_type=layer.attention_mask_type,
             bias=layer.bias,
             dtype=layer.dtype,
             position_embedding_type=layer.position_embedding_type,
-            neox_rotary_style=layer.neox_rotary_style,
+            # neox_rotary_style=layer.neox_rotary_style,
             tp_group=layer.tp_group,
             tp_size=layer.tp_size,
             quant_mode=quant_mode

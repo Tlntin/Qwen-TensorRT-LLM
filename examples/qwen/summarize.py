@@ -309,8 +309,8 @@ def main(args):
                 max_input_length=max_input_len
             )
             line_encoded = torch.from_numpy(
-                np.array(input_id_list, dtype=np.int32)
-            ).type(torch.int32).unsqueeze(0)
+                np.array(input_id_list, dtype=np.int64)
+            ).type(torch.int64).unsqueeze(0)
 
         # line_encoded = line_encoded[:, -max_input_len:]
         line_encoded = line_encoded.cuda()

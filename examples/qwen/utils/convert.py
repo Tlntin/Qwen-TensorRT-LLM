@@ -155,14 +155,17 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
 
     save_int8 = int8_outputs == "all" or int8_outputs == "kv_cache_only"
 
-    if not isinstance(vals, list):
-        vals = [vals]
+    if not key.endswith(".smoother"):
+        if not isinstance(vals, list):
+            vals = [vals]
 
-    if config.get("transpose_weights", False) and vals[0].ndim == 2:
-        vals = [val.T for val in vals]
-    if "layernorm.weight" in key and config.get("apply_layernorm_1p", False):
-        vals = [val + 1.0 for val in vals]
-    vals = [torch_to_numpy(val.cpu().to(storage_type)) for val in vals]
+        if config.get("transpose_weights", False) and vals[0].ndim == 2:
+            vals = [val.T for val in vals]
+        if "layernorm.weight" in key and config.get("apply_layernorm_1p", False):
+            vals = [val + 1.0 for val in vals]
+        vals = [torch_to_numpy(val.cpu().to(storage_type)) for val in vals]
+    else:
+        vals = vals.cpu().numpy()
 
     if "ln_1.weight" in key or "ln_1.bias" in key or \
             "attention.dense.bias" in key or \
@@ -279,5 +282,8 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
     #       or "attention.key_value.weight" in key
     #       or "attention.key_value.bias" in key):
     #     pass
+    elif "attention.dense.smoother" in key or "mlp.c_proj.smoother" in key:
+        split_vals = np.split(vals, split_factor, axis=0)
+        save_split(split_vals, saved_dir, key, tp_rank, split_factor)
     else:
         print(f"[WARNING] {key} not handled by converter")

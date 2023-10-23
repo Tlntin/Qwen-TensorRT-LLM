@@ -17,7 +17,7 @@
         <li><a href="https://www.123pan.com/s/oEqDVv-LFik.html">123pan</a> 提取码: JAUb</li>
       </ul>
     </li>
-    <li>注：2023-09-25 Huggingface的Qwen-7B-Chat再次上架，不过这次上架的是V1.1版，其seq_length从2048变成了8192，其他倒是没啥变化。</li>
+    <li>注：2023-09-25 Huggingface的Qwen-7B-Chat再次上架，不过这次上架的是V1.1版，其seq_length从2048变成了8192，其他倒是没啥变化，同样可以完美运行。</li>
     <li>注：2023-09-25 Huggingface的Qwen-14-Chat上架，经测试trt-llm代码完美运行，只需要改一下default_config.py的文件路径就可以运行。</li>
     <li>选题类型：2+4（注：2指的是TRT-LLM实现新模型。4指的是在新模型上启用了TRT-LLM现有feature）</li>
   </ul>
@@ -42,7 +42,7 @@
 2. 拉取本项目代码
 
     ```bash
-    git clone https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM.git
+    git clone https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM.git -b release/0.5.0
     cd Qwen-7B-Chat-TensorRT-LLM
     git lfs install
     git lfs pull
@@ -209,20 +209,18 @@ https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f
     python3 hf_qwen_convert.py --smoothquant=0.5
     ```
 
-3. 构建TRT Engine前需要编译一下整个项目，这样后面才能加载新增的rmsnorm插件。参考该[教程](https://www.http5.cn/index.php/archives/30/)。
 
-
-4. 开始编译trt_engine
+3. 开始编译trt_engine
     - 普通版
     ```bash
-    python3 build.py --use_smooth_quan
+    python3 build.py --use_smooth_quant
     ```
 
     - 升级版（理论上运行速度更快，推理效果更好，强烈推荐）
     ```bash
-    python3 build.py --use_smooth_quan --per_token --per_channel
+    python3 build.py --use_smooth_quant --per_token --per_channel
     ```
-5. 编译完成，run/summarize/benchmark等等都和上面的是一样的了。
+4. 编译完成，run/summarize/benchmark等等都和上面的是一样的了。
 
 ### 主要开发工作
 

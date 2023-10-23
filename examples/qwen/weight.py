@@ -147,6 +147,11 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
             t = fromfile(dir_path, f"{basename}scale_y_quant_orig.bin", [1, 1],
                          np.float32)
             module.act_scale.value = t
+    def set_smoother(module, dir_path, base_name, shape, rank):
+        suffix = f"{rank}.bin"
+        t = fromfile(dir_path, f"{base_name}.smoother.{suffix}", shape,
+                     np.float32)
+        module.smoother.value = t
 
     # Determine the quantization mode.
     quant_mode = getattr(tensorrt_llm_qwen, "quant_mode", QuantMode(0))
@@ -176,17 +181,17 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
     #     tensorrt_llm_qwen.embedding.position_embedding.weight.value = (pe)
 
     # set for rope embedding
-    inv_freq = 1.0 / (rotary_emb_base ** (
-        torch.arange(0, kv_channels, 2).float() / kv_channels)
-    )
-    value_table = torch.matmul(
-        torch.arange(max_position_embeddings).float().reshape(-1, 1),
-        torch.concat([inv_freq, inv_freq], dim=0).reshape(1, -1)
-    ).reshape(max_position_embeddings, len(inv_freq) * 2)
-    cos_weight = torch.cos(value_table).float()
-    sin_weight = torch.sin(value_table).float()
-    tensorrt_llm_qwen.rope.position_embedding_cos.weight.value = torch_to_numpy(cos_weight)
-    tensorrt_llm_qwen.rope.position_embedding_sin.weight.value = torch_to_numpy(sin_weight)
+    # inv_freq = 1.0 / (rotary_emb_base ** (
+    #     torch.arange(0, kv_channels, 2).float() / kv_channels)
+    # )
+    # value_table = torch.matmul(
+    #     torch.arange(max_position_embeddings).float().reshape(-1, 1),
+    #     torch.concat([inv_freq, inv_freq], dim=0).reshape(1, -1)
+    # ).reshape(max_position_embeddings, len(inv_freq) * 2)
+    # cos_weight = torch.cos(value_table).float()
+    # sin_weight = torch.sin(value_table).float()
+    # tensorrt_llm_qwen.rope.position_embedding_cos.weight.value = torch_to_numpy(cos_weight)
+    # tensorrt_llm_qwen.rope.position_embedding_sin.weight.value = torch_to_numpy(sin_weight)
 
     # breakpoint()
     vocab_embedding_weight = fromfile(dir_path, 'vocab_embedding.weight.bin',
@@ -270,6 +275,12 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                 quant_per_token_dyn,
                 quant_per_channel,
             )
+            set_smoother(
+                tensorrt_llm_qwen.layers[i].attention.dense,
+                dir_path,
+                'model.layers.' + str(i) + '.attention.dense',
+                [1, hidden_size // tensor_parallel], rank
+            )
             
         elif use_weight_only:
             # t = np.ascontiguousarray(np.transpose(t, [1, 0]))
@@ -348,7 +359,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         t = fromfile(
             dir_path,
             'model.layers.' + str(i) + '.mlp.c_proj.weight.' + suffix,
-            [inter_size // tensor_parallel//2, hidden_size],
+            [inter_size // tensor_parallel // 2, hidden_size],
             w_type
         )
         if use_smooth_quant:
@@ -360,6 +371,12 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                 tensorrt_llm_qwen.layers[i].mlp.c_proj, proj_scale, dir_path,
                 'model.layers.' + str(i) + '.mlp.c_proj.', [1, hidden_size],
                 quant_per_token_dyn, quant_per_channel)
+            set_smoother(
+                tensorrt_llm_qwen.layers[i].mlp.c_proj,
+                dir_path,
+                'model.layers.' + str(i) + '.mlp.c_proj',
+                [1, inter_size // tensor_parallel // 2], rank
+            )
         elif use_weight_only:
             dst = tensorrt_llm_qwen.layers[i].mlp.c_proj.weight
             # t = np.ascontiguousarray(np.transpose(t, [1, 0]))

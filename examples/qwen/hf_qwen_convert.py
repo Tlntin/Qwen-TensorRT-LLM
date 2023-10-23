@@ -82,7 +82,7 @@ class ProgArgs:
             "--smoothquant",
             "-sq",
             type=float,
-            default=0.5,
+            default=None,
             help="Set the α parameter (see https://arxiv.org/pdf/2211.10438.pdf)"
             " to Smoothquant the model, and output int8 weights."
             " A good first try is 0.5. Must be in [0, 1]")
@@ -109,7 +109,7 @@ class ProgArgs:
 
 
 @torch.no_grad()
-def smooth_qwen_model(model, scales, alpha):
+def smooth_qwen_model(model, scales, alpha, qwen_smoother):
     # Smooth the activation and weights with smoother = $\diag{s}$
     for name, module in model.named_modules():
         # if not isinstance(module, QWenBlock):
@@ -127,6 +127,20 @@ def smooth_qwen_model(model, scales, alpha):
         scales[layer_name]["x"] = scales[layer_name]["x"] / smoother
         scales[layer_name]["w"] = module.attn.c_attn.weight.abs().max(dim=1)[0]
 
+
+        # attention dense
+        layer_name = name + ".attn.c_proj"
+        smoother3 = smooth_gemm(
+            module.attn.c_proj.weight,
+            scales[layer_name]["x"],
+            None,
+            alpha=alpha,
+        )
+        qwen_smoother[layer_name] = smoother3.float()
+
+        scales[layer_name]["x"] = scales[layer_name]["x"] / smoother3
+        scales[layer_name]["w"] = module.attn.c_proj.weight.abs().max(dim=1)[0]
+
         # mlp w1 / w2, because then use some input hidden_states as input, so we need to smooth it with same scale
         mlp_w1_name = name + ".mlp.w1"
         mlp_w2_name = name + ".mlp.w2"
@@ -141,6 +155,18 @@ def smooth_qwen_model(model, scales, alpha):
         scales[mlp_w2_name]["x"] = scales[mlp_w2_name]["x"] / smoother2
         scales[mlp_w1_name]["w"] = module.mlp.w1.weight.abs().max(dim=1)[0]
         scales[mlp_w2_name]["w"] = module.mlp.w2.weight.abs().max(dim=1)[0]
+
+        # mlp c_proj
+        layer_name = name + ".mlp.c_proj"
+        smoother4 = smooth_gemm(
+            module.mlp.c_proj.weight,
+            scales[layer_name]["x"],
+            None,
+            alpha=alpha
+        )
+        qwen_smoother[layer_name] = smoother4.float()
+        scales[layer_name]["x"] = scales[layer_name]["x"] / smoother4
+        scales[layer_name]["w"] = module.mlp.c_proj.weight.abs().max(dim=1)[0]
 
 
 # SantaCoder separates Q projection from KV projection
@@ -215,6 +241,7 @@ def hf_qwen_converter(args: ProgArgs):
         trust_remote_code=True
     )
     act_range = {}
+    qwen_smoother = {}
     if args.smoothquant is not None or args.calibrate_kv_cache:
         os.environ["TOKENIZERS_PARALLELISM"] = os.environ.get(
             "TOKENIZERS_PARALLELISM", "false")
@@ -250,7 +277,7 @@ def hf_qwen_converter(args: ProgArgs):
             max_input_len=max_input_len,
         )
         if args.smoothquant is not None:
-            smooth_qwen_model(model, act_range, args.smoothquant)
+            smooth_qwen_model(model, act_range, args.smoothquant, qwen_smoother)
 
     config = configparser.ConfigParser()
     config["qwen"] = {}
@@ -294,6 +321,28 @@ def hf_qwen_converter(args: ProgArgs):
         if "weight" not in name and "bias" not in name:
             continue
         ft_name = qwen_to_ft_name(name)
+        if name.replace(".weight", "") in qwen_smoother.keys():
+            smoother = qwen_smoother[name.replace(".weight", "")]
+            # smoother = smoother.detach().cpu().numpy()
+            starmap_arg = (
+                0,
+                saved_dir,
+                infer_tp,
+                f"{ft_name}.smoother".replace(".weight", ""),
+                smoother,
+                storage_type,
+                None,
+                {
+                     "int8_outputs": int8_outputs,
+                     "multi_query_mode": multi_query_mode,
+                     "local_dim": None,
+                 },
+            )
+            if args.processes > 1:
+                starmap_args.append(starmap_arg)
+            else:
+                split_and_save_weight(*starmap_arg)
+
         param = transpose_weights(name, param)
         if ft_name in global_ft_weights:
             torch_to_numpy(param.to(storage_type).cpu()).tofile(

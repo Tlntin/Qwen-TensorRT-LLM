@@ -381,7 +381,7 @@ class QWenAttention(Module):
             use_cache=False,
             kv_cache_params=None,
             attention_params=None,
-            all_reduce_workspace=None,
+            workspace=None,
     ):
         if not default_net().plugin_config.gpt_attention_plugin:
             raise ValueError(
@@ -566,7 +566,7 @@ class QWenAttention(Module):
             host_context_lengths=attention_params.host_context_lengths
         )
 
-        context = self.dense(context, workspace=all_reduce_workspace)
+        context = self.dense(context, workspace=workspace)
 
         if use_cache:
             return (context, past_key_value)
@@ -736,7 +736,7 @@ class QWenBlock(Module):
             use_cache=use_cache,
             kv_cache_params=kv_cache_params,
             attention_params=attention_params,
-            all_reduce_workspace=all_reduce_workspace,
+            workspace=all_reduce_workspace,
         )
         if use_cache:
             attention_output, presents = attention_output
