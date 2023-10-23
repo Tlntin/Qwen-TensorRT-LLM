@@ -1,4 +1,0 @@
-cpp/tensorrt_llm/batch_manager/aarch64-linux-gnu/libtensorrt_llm_batch_manager_static.a filter=lfs diff=lfs merge=lfs -text
-cpp/tensorrt_llm/batch_manager/aarch64-linux-gnu/libtensorrt_llm_batch_manager_static.pre_cxx11.a filter=lfs diff=lfs merge=lfs -text
-cpp/tensorrt_llm/batch_manager/x86_64-linux-gnu/libtensorrt_llm_batch_manager_static.a filter=lfs diff=lfs merge=lfs -text
-cpp/tensorrt_llm/batch_manager/x86_64-linux-gnu/libtensorrt_llm_batch_manager_static.pre_cxx11.a filter=lfs diff=lfs merge=lfs -text
