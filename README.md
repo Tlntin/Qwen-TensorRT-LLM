@@ -22,7 +22,12 @@
     <li>选题类型：2+4（注：2指的是TRT-LLM实现新模型。4指的是在新模型上启用了TRT-LLM现有feature）</li>
   </ul>
 </details>
+### 更新说明
 
+#### 2023/10/23更新
+
+1. 更新TensorRT-LLM底层，从2023年7月份比赛专用版更新到10月份发布的release/0.5.0版。
+2. 旧的比赛相关文件仍然保留在[main分支](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/tree/main)，如果需要深入学习建议用main分支，目前设定release/0.5.0为主分支。
 
 ### 主要贡献
 
@@ -49,14 +54,17 @@
     git submodule update --init --recursive
     ```
 
-3.  编译docker镜像：
+3.  由于现在还没有现成的TensorRT-LLM docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/release/0.5.0/docs/source/installation.md)，也可以直接用下面的命令直接编译：
 
     ```bash
-    cd docker
+    cd TensorRT-LLM/docker
     make release_build
+    
+    # 然后返回到项目路径
+    cd ../..
     ```
     
-4. 进入项目目录，然后创建并启动容器，同时将本地`examples/qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径
+4. 进入项目目录，然后创建并启动容器，同时将本地`qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径
 
     ```bash
     docker run --gpus all \
@@ -66,15 +74,15 @@
       --ulimit memlock=-1 \
       --restart=always \
       --ulimit stack=67108864 \
-      -v ${PWD}/examples/qwen:/app/tensorrt_llm/examples/qwen \
+      -v ${PWD}/qwen:/app/tensorrt_llm/examples/qwen \
       tensorrt_llm/release sleep 8640000
     ```
     
-5. 下载模型`QWen-7B-Chat`模型（可以参考总述部分），然后将文件夹重命名为`qwen_7b_chat`，最后放到`examples/qwen/`路径下即可。
-6. 进入qwen路径，安装提供的Python依赖
+5. 下载模型`QWen-7B-Chat`模型（可以参考总述部分），然后将文件夹重命名为`qwen_7b_chat`，最后放到`qwen/`路径下即可。
+6. 进入docker容器里面的qwen路径，安装提供的Python依赖
 
     ```bash
-    cd examples/qwen/
+    cd /app/tensorrt_llm/examples/qwen/
     pip install -r requirements.txt
     ```
 
@@ -171,7 +179,7 @@
     python3 api.py
     ```
 
-    - 另开一个终端，进入`tensorrt_llm_july-release-v1/examples/qwen/client`目录，里面有4个文件，分别代表不同的调用方式。
+    - 另开一个终端，进入`qwen/client`目录，里面有4个文件，分别代表不同的调用方式。
     - `async_client.py`，通过异步的方式调用api，通过SSE协议来支持流式输出。
     - `normal_client.py`，通过同步的方式调用api，为常规的HTTP协议，Post请求，不支持流式输出，请求一次需要等模型生成完所有文字后，才能返回。
     - `openai_normal_client.py`，通过`openai`模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。
@@ -373,17 +381,17 @@ https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f
 - 分步骤讲清楚开发过程
 - 最好能介绍为什么需要某个特别步骤，通过这个特别步骤解决了什么问题
   - 比如，通过Nsight Systems绘制timeline做了性能分析，发现attention时间占比高且有优化空间（贴图展示分析过程），所以决定要写plugin。然后介绍plugin的设计与实现，并在timeline上显示attention这一部分的性能改进。
-1. 跑一下`tensorrt_llm_july-release-v1/examples/gpt`的代码，了解一下trt-llm的基本流程。
+1. 跑一下`examples/gpt`的代码，了解一下trt-llm的基本流程。
 
 2. 读`QWen-7B-Chat`的Readme信息，基本了解它是一个`decoder only模型`，并且模型结构类llama。
 
-3. 将`tensorrt_llm_july-release-v1/examples/llama`复制一份，然后重命名为`tensorrt_llm_july-release-v1/examples/qwen`,将里面的模型带`llama`的全部替换为`qwen`。
+3. 将`examples/llama`复制一份，然后重命名为`examples/qwen`,将里面的模型带`llama`的全部替换为`qwen`。
 
 4. 运行`build.py`时，发现调用了`weight.py`，而llama项目里面的`weight.py`里面有一个`load_from_meta_llama`函数，函数里面有一个`tensorrt_llm.models.LLaMAForCausalLM`，里面定义了整个trt的模型结构。我们用vscode进入其中，将里面的`LLaMAForCausalLM`复制出来，然后新建了一个mode.py,将内容粘贴进去。同样，将里面的模型带`llama`的全部替换为`qwen`
 
 5. 然后我们就开始改本项目的`weight.py`的`load_from_meta_qwen`函数，将huggingface里面的权重名称和trt的权重名称逐步对齐。然后我们运行了一下build.py，发现可以编译通过，但是运行`run.py`结果不对。
 
-6. 我们通过肉眼观察模型结构，发现trt版少了一个`RotaryEmbedding`，这个该如何实现了？观察了一下`tensorrt_llm_july-release-v1/examples/`目录下面的其他项目，突然发现里面的`chatglm6b`有类似的结构，不过他却分成了`position_embedding_cos`和`position_embedding_sin`两个普通的embedding。我们大概知道它或许是一个新的实现方式，但是功能和原版一样。通过观察，我们发现其rope权重是在weight.py里面用numpy手搓直接导入的。导入代码如下：
+6. 我们通过肉眼观察模型结构，发现trt版少了一个`RotaryEmbedding`，这个该如何实现了？观察了一下`examples/`目录下面的其他项目，突然发现里面的`chatglm6b`有类似的结构，不过他却分成了`position_embedding_cos`和`position_embedding_sin`两个普通的embedding。我们大概知道它或许是一个新的实现方式，但是功能和原版一样。通过观察，我们发现其rope权重是在weight.py里面用numpy手搓直接导入的。导入代码如下：
 
    - chatglm6b/hf_chatglm6b_convert.py
 
@@ -429,7 +437,7 @@ https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f
     - 拷贝操作。
 
     ```bash
-    cd tensorrt_llm_july-release-v1/cpp/tensorrt_llm/kernels
+    cd cpp/tensorrt_llm/kernels
     cp layernormKernels.cu rmsnormKernels.cu
     cp layernormKernels.h rmsnormKernels.h
     ```
@@ -438,7 +446,7 @@ https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f
     - 同理我们对plugins目录下面的layerNormQuant做了同样的操作。
 
     ```bash
-    cd tensorrt_llm_july-release-v1/cpp/tensorrt_llm/plugins
+    cd cpp/tensorrt_llm/plugins
     cp layernormPlugin/* rmsnormPlugin/
     cp layernormQuantizationPlugin/* rmsnormQuantizationPlugin/
     ```
@@ -462,7 +470,7 @@ https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f
 18. 在代码中测试rmsnorm smoothquant的逻辑时，运行build.py编译Engnie后报了一个和cublas相关的错误，错误提示：`terminate called after throwing an instance of 'std::runtime_error'  what():  [TensorRT-LLM Error][int8gemm Runner] Failed to initialize cutlass int8 gemm. Error: Error Internal`。通过多次排查，以及群友的提醒，我们发现这个不是我们plugin的问题，而是smooth_quant_gemm这个插件的问题。该问题可以通过下面的单元测试复现。
 
     ```bash
-    cd tensorrt_llm_july-release-v1/tests/quantization
+    cd tests/quantization
     python -m unittest test_smooth_quant_gemm.py TestSmoothQuantGemm.test_matmul
     ```
 19. 通过[参考教程](https://www.http5.cn/index.php/archives/41/)我们重新编译了Debug版的TRT-LLM，并且可以在vscode中调试TRT-LLM代码。在debug中，我们发现了个别较大的shape存在共享显存分配过多而导致cublas初始化失败的问题。通过增加try/catch功能，我们跳过了失败的策略。然后再次跑test发现出现了下面的错误：
@@ -482,7 +490,7 @@ https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f
 - TRT_LLM engine编译时最大输入长度：2048， 最大新增长度：2048
 - HuggingFace版Qwen采用默认配置，未安装，未启用FlashAttention相关模块
 - 测试时：beam=batch=1，max_new_tokens=100
-- 测试结果（该结果由`tensorrt_llm_july-release-v1/examples/qwen/summarize.py`生成）：
+- 测试结果（该结果由`qwen/summarize.py`生成）：
 ```bash
 HuggingFace (dtype: bf16 | total latency: 99.70530200004578 sec)
   rouge1 : 28.219357100978343
@@ -524,7 +532,7 @@ TensorRT-LLM beam 0 result
 - 测试平台：NVIDIA A10 (24G显存) | TensorRT 9.0.0.1 | tensorrt-llm 0.1.3
 - HuggingFace版Qwen采用默认配置，未安装，未启用FlashAttention相关模块
 - 注：int8 smooth quant编译时打开了`--per_token --per_channel`选项
-- 测试结果（该结果由`tensorrt_llm_july-release-v1/examples/qwen/benchmark.py`生成）
+- 测试结果（该结果由`qwen/benchmark.py`生成）
 1. 最大输入长度：2048， 最大新增长度：2048，num-prompts=100, beam=1, seed=0
 
 | 测试平台     | 加速方式                  | max_batch_size | 吞吐速度（requests/s） | 生成速度（tokens/s） | 吞吐加速比 | 生成加速比 |
@@ -613,18 +621,17 @@ TensorRT-LLM beam 0 result
 | TensorRT-LLM | dtype: int8 (smooth quant) | 11             | 0.55                 | 245.96               | 3.93       | 4.78       |
 | TensorRT-LLM | dtype: int8 (smooth quant) | 12             | OOM                  | OOM                  | /          | /          |
 
-请注意：
-
-- 相关测试代码也需要包含在代码仓库中，可被复现。
-- 请写明云主机的软件硬件环境，方便他人参考。
-
 ### Bug报告（可选）
-
-- 提交bug是对TensorRT/TensorRT-LLM的另一种贡献。发现的TensorRT/TensorRT-LLM或cookbook、或文档和教程相关bug，请提交到[github issues](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues)，并请在这里给出链接。
-
- - 目前已提交的针对TensorRT的bug链接（已由导师复核确定）：[Bug1](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/86), [Bug2](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/89)
-
- - 已提交，待复核的bug：[Bug3](https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/90)
+<details><summary>点击这里展开/折叠内容</summary>
+<ul>
+<li><p>提交bug是对TensorRT/TensorRT-LLM的另一种贡献。发现的TensorRT/TensorRT-LLM或cookbook、或文档和教程相关bug，请提交到<a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues">github issues</a>，并请在这里给出链接。</p>
+</li>
+<li><p>目前已提交的针对TensorRT的bug链接（已由导师复核确定）：<a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/86">Bug1</a>, <a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/89">Bug2</a></p>
+</li>
+<li><p>已提交，待复核的bug：<a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/issues/90">Bug3</a></p>
+</li>
+</ul>
+</details>
 
 ### 送分题答案 | [操作步骤](SEND_POINT_README.md)
 <details><summary>点击这里展开/折叠内容</summary>
