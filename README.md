@@ -50,14 +50,17 @@
     ```bash
     git clone https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM.git -b release/0.5.0
     cd Qwen-7B-Chat-TensorRT-LLM
-    git lfs install
-    git lfs pull
-    git submodule update --init --recursive
     ```
-
-3.  由于现在还没有现成的TensorRT-LLM docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/release/0.5.0/docs/source/installation.md)，也可以直接用下面的命令直接编译：
+    
+3.  由于现在还没有现成的TensorRT-LLM docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/release/0.5.0/docs/source/installation.md)，也可以直接用下面的命令直接编译（已有编译好的镜像可以跳过该步骤。
 
     ```bash
+    # 拉取TensorRT-LLM仓库
+    git submodule update --init --recursive
+    git lfs install
+    git lfs pull
+    
+    # 编译docker
     cd TensorRT-LLM/docker
     make release_build
     
