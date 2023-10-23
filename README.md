@@ -211,7 +211,7 @@ https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f
 
 
 ##### 运行指南（Smooth Quant篇）
-1. 前6节和上面一样，参考上面运行就行。
+1. 前6节和上面一样，参考上面运行就行。注意：运行Smooth Quant需要将huggingface模型完全加载到GPU里面，用于构建int8标定数据集，所以需要提前确保你的显存够大，能够完全加载整个模型。
 
 2. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式
     ```bash
@@ -247,7 +247,7 @@ https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f
     - 在其附近插入可用显存和需要分配的显存代码，发现是显存不够, 将max_batch_size从默认的8改成2后解决。
 
 3. fp16下，模型的logits无法对齐。
-    - 通过阅读[docs/2023-05-19-how-to-debug.md]([https://github.com/NVIDIA/TensorRT-LLM/blob/release/0.5.0/docs/source/2023-05-19-how-to-debug.md](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/blob/main/tensorrt_llm_july-release-v1/docs/2023-05-19-how-to-debug.md))文档，基本掌握的debug能力，然后按照代码运行顺序，从外到内debug，找到误差所在层。
+    - 通过阅读[docs/2023-05-19-how-to-debug.md](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/blob/main/tensorrt_llm_july-release-v1/docs/2023-05-19-how-to-debug.md)文档，基本掌握的debug能力，然后按照代码运行顺序，从外到内debug，找到误差所在层。
     - 首先我们对比了wte和rope输出，基本确定这两个layer没有问题。
     - 然后我们打印了qwen_block的每层输入，其中第一个layer的输入hidden_states正常，后续误差逐步增加，所以初步确定误差在QwenBlock这个类中。
     - 由于attention使用了rope相关计算+gpt attention_layer，这里出问题的可能性较大，于是我们在QwenBlock中的attention计算里面加入调试操作，打印其输入与输出结果，并和pytorch做数值对比（主要对比mean, sum数值）。经对比发现QwenBlock的attention输入sum误差在0.2以内，基本ok，但是其输出误差很大，所以需要进一步定位。
