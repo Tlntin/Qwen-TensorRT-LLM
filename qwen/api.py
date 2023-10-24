@@ -109,7 +109,7 @@ async def stream_chat(request: Request):
             query, system, history, max_input_length,
             max_output_length, sampling_config
         ):
-        for response in decoder.chat_stream(
+        for new_text in decoder.chat_stream(
             tokenizer=tokenizer,
             sampling_config=sampling_config,
             input_text=query,
@@ -124,8 +124,7 @@ async def stream_chat(request: Request):
             # Checks for new messages and return them to client if any
             try:
                 temp_dict = {
-                    "response": response[0],
-                    "history": history + [(query, response[0])],
+                    "response": new_text[0],
                     "finish": False,
                 }
                 yield {
@@ -137,8 +136,7 @@ async def stream_chat(request: Request):
             except StopIteration:
                 await asyncio.sleep(STREAM_DELAY)
         temp_dict = {
-            "response": response[0],
-            "history": history + [(query, response[0])],
+            "response": new_text[0],
             "finish": True,
         }
         yield {
@@ -226,9 +224,21 @@ async def list_models():
 
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
 async def create_chat_completion(request: ChatCompletionRequest):
-    sampling_config.top_p = request.top_p
-    sampling_config.temperature = request.temperature
-    max_new_tokens = min(request.max_tokens, default_config.max_new_tokens)
+    # print("Debug, top_p: ", request.top_p)
+    # print("Debug, temperature: ", request.temperature)
+    # print("Debug, max_tokens: ", request.max_tokens)
+    if request.top_p is not None:
+        sampling_config.top_p = request.top_p
+    else:
+        sampling_config.top_p = default_config.top_p
+    if request.temperature is not None:
+        sampling_config.temperature = request.temperature
+    else:
+        sampling_config.temperature = default_config.temperature
+    if request.max_tokens is not None:
+        max_new_tokens = min(request.max_tokens, default_config.max_new_tokens)
+    else:
+        max_new_tokens = default_config.max_new_tokens
     if request.messages[-1].role != "user":
         raise HTTPException(status_code=400, detail="Invalid request")
     query = request.messages[-1].content
@@ -296,9 +306,10 @@ async def predict(query: str, system: str, history: List[List[str]], max_new_tok
     yield "{}".format(
         chunk.json(exclude_unset=True, ensure_ascii=False)
     )
-
-    old_position = 0
-    for response in decoder.chat_stream(
+    # print("Debug system", system)
+    # print("Debug query", query)
+    # print("Debug history", history)
+    for new_text in decoder.chat_stream(
         tokenizer=tokenizer,
         sampling_config=sampling_config,
         input_text=query,
@@ -306,12 +317,12 @@ async def predict(query: str, system: str, history: List[List[str]], max_new_tok
         history=history,
         max_new_tokens=max_new_tokens,
     ):
-        if len(response) == 0:
+        if len(new_text[0]) == 0:
             continue
-        new_text = response[0][old_position:]
+        # print("Debug, new_text[0]: ", new_text[0])
         choice_data = ChatCompletionResponseStreamChoice(
             index=0,
-            delta=DeltaMessage(content=new_text),
+            delta=DeltaMessage(content=new_text[0]),
             finish_reason=None,
         )
         chunk = ChatCompletionResponse(
@@ -322,7 +333,6 @@ async def predict(query: str, system: str, history: List[List[str]], max_new_tok
         yield "{}".format(
             chunk.json(exclude_unset=True, ensure_ascii=False)
         )
-        old_position = len(response[0])
 
     choice_data = ChatCompletionResponseStreamChoice(
         index=0, delta=DeltaMessage(), finish_reason="stop"

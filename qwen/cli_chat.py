@@ -65,16 +65,17 @@ if __name__ == "__main__":
             )
             print(f'Output: {response[0]}')
         else:
-            position = 0
             print("Output: ", end='')
-            for response in decoder.chat_stream(
+
+            response = ""
+            for new_text in decoder.chat_stream(
                 tokenizer=tokenizer,
                 sampling_config=sampling_config,
                 input_text=input_text,
                 history=history,
                 max_new_tokens=args.max_new_tokens,
             ):
-                print(response[0][position:], end='', flush=True)
-                position = len(response[0])
+                print(new_text[0], end='', flush=True)
+                response += new_text[0]
             print("")
-        history.append((input_text, response[0]))
+        history.append((input_text, response))

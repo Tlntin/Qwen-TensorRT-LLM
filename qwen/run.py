@@ -214,19 +214,33 @@ class QWenForCausalLMGenerationSession(GenerationSession):
             max_new_tokens=max_new_tokens
         )
         with torch.no_grad():
+            chunk_lengths = input_lengths.clone()
             for output_ids in self.decode(
                 input_ids, input_lengths, sampling_config, streaming=True,
             ):
                 torch.cuda.synchronize()
                 if runtime_rank == 0:
-                    output_texts = [
-                    tokenizer.decode(
-                        output_ids[i, 0, input_lengths[i]:],
-                            skip_special_tokens=True
-                        ) 
-                        for i in range(output_ids.size(0))
-                    ]
-                    yield output_texts
+                    output_texts = []
+                    for i in range(output_ids.size(0)):
+                        temp_ids = output_ids[i, 0, chunk_lengths[i]:]
+                        pure_ids = []
+                        for j in range(len(temp_ids)):
+                            if temp_ids[j] in [tokenizer.im_start_id, tokenizer.im_end_id]:
+                                pure_ids = temp_ids[:j]
+                                break
+                        if len(pure_ids) == 0:
+                            pure_ids = temp_ids
+                        if pure_ids.size(0) == 0:
+                            continue
+                        temp_text = tokenizer.decode(pure_ids, skip_special_tokens=True)
+                        # check code is error
+                        if b"\xef\xbf\xbd" in temp_text.encode():
+                            continue
+                        chunk_lengths[i] += pure_ids.size(0)
+                        output_texts.append(temp_text)
+                    if len(output_texts) > 0:
+                        yield output_texts
+
 
 
 def parse_arguments():

@@ -14,7 +14,7 @@ async def handle_event(event: aiohttp_sse_client.client.MessageEvent, event_sour
             await event_source.close()
         except Exception as err:
             print("close with error", err)
-    return data["response"], data["history"], event.type
+    return data["response"], event.type
 
 
 async def listen_sse(query, history=None, max_new_tokens=4096, top_p=0.5, temperature=0):
@@ -30,21 +30,23 @@ async def listen_sse(query, history=None, max_new_tokens=4096, top_p=0.5, temper
             "temperature": temperature,
         }
         headers = {'Content-Type': 'application/json'}
-        response, history = None, None
-        position = 0
+        response = ""
+        if history is None:
+            history = []
         print("Chatbox: ", end='', flush=True)
         async with sseclient.EventSource(url, json=data, headers=headers, session=session) as event_source:
             try:
                 async for event in event_source:
                     # 将事件传递给回调函数进行处理
-                    response, history, e_type = await handle_event(event, event_source)
-                    print(response[position:], end='', flush=True)
-                    position = len(response)
+                    new_text, e_type = await handle_event(event, event_source)
+                    print(new_text, end='', flush=True)
+                    response += new_text
                     if e_type == "finish":
                         break
             except Exception as err:
                 print("event close", err)
         print("")
+        history.append((query, response))
         return response, history
 
 
