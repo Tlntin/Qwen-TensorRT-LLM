@@ -68,7 +68,7 @@
     cd ../..
     ```
     
-4. 进入项目目录，然后创建并启动容器，同时将本地`qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径
+4. 进入项目目录，然后创建并启动容器，同时将本地`qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径，然后打开8000和7860端口的映射，方便调试api和web界面。
 
     ```bash
     docker run --gpus all \
@@ -78,6 +78,8 @@
       --ulimit memlock=-1 \
       --restart=always \
       --ulimit stack=67108864 \
+      -p 8000:8000 \
+      -p 7860:7860 \
       -v ${PWD}/qwen:/app/tensorrt_llm/examples/qwen \
       tensorrt_llm/release sleep 8640000
     ```
