@@ -163,17 +163,16 @@ parameters {
 - 修改前
 ```python
 elif tokenizer_type == 'auto':
-		self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir,
-													   padding_side='left')
+	self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir, padding_side='left')
 ```
 - 修改后
 ```python
 elif tokenizer_type == 'auto':
-		self.tokenizer = AutoTokenizer.from_pretrained(
-			tokenizer_dir,
-			padding_side='left',
-			trust_remote_code=True
-		)
+	self.tokenizer = AutoTokenizer.from_pretrained(
+		tokenizer_dir,
+		padding_side='left',
+		trust_remote_code=True
+	)
 ```
 - 改一下max-batch-size，默认是`max_batch_size: 128`改成你之前编译设置的max_batch_size即可，编译的设置max_batch_size=4，所以我这里也设置为4（测试发现最低需要设置为4，后面会讲到）。
 
