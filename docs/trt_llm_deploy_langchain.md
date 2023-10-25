@@ -1,4 +1,4 @@
-### Triton部署TensorRT-LLM
+### TensorRT-LLM + Langchain部署
 
 1. 部署Qwen-7B-Chat-TensorRT-LLM , 参考该项目：https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM ，需要部署api。
 

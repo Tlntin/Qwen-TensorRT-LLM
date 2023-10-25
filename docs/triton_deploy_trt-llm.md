@@ -1,7 +1,7 @@
-### Triton部署TensorRT-LLM
+# Triton部署TensorRT-LLM
 
 
-# 编译triton/tensorrtllm_backend Docker镜像
+## 编译triton/tensorrtllm_backend Docker镜像
 ### 背景：
 - 在Triton 23.10发布后，才会内置TensorRT-LLM支持
 - 目前Triton最新版是23.09,暂时不支持，所以需要手动编译Docker镜像
@@ -297,3 +297,7 @@ docker run \
 	-v ${PWD}/Qwen-7B-Chat-TensorRT-LLM/qwen:/app/tensorrt_llm/examples/qwen\
 	triton_trt_llm sleep 8640000
 ```
+
+- 附成功截图
+
+![](../images/triton_trt_llm.png)
