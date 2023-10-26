@@ -124,10 +124,21 @@
     python3 build.py --use_weight_only --weight_only_precision=int4
     ```
 
+    - 对于14B模型，可以选择尝试tp = 2 （tp功能目前只支持从Huggingface格式构建engine）
+    ```bash
+    python3 build.py --world_size 2 --tp_size 2
+    ```
+
 10. 试运行（可选）编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。
 
+    - tp = 1时使用python直接运行run.py
     ```bash
     python3 run.py
+    ```
+
+    - tp = 2时使用mpirun 运行run.py
+    ```bash
+    mpirun -n 2 --allow-run-as-root python run.py
     ```
 
 11. 验证模型精度（可选）。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。对于`网络不好`的用户，可以从网盘下载数据集，然后按照使用说明操作即可。
