@@ -315,3 +315,23 @@ python3 scripts/launch_triton_server.py --world_size=1 --model_repo=/tensorrtllm
 - 附成功截图
 
 ![](../images/triton_trt_llm.png)
+
+
+### python客户端请求
+1. 安装python依赖
+```bash
+pip install tritonclient transformers gevent geventhttpclient tiktoken
+```
+2. 运行`qwen/triton_client/inflight_batcher_llm_client.py`文件即可开启stream+inflight_batching请求，注意，该请求需要triton服务端开启stream+inflight_batching功能，否则请求异常，目前仓库里面的最新配置已经默认开启。
+```pbtxt
+model_transaction_policy {
+  decoupled: True
+}
+
+parameters: {
+  key: "gpt_model_type"
+  value: {
+    string_value: "inflight_batching"
+  }
+}
+```

@@ -12,7 +12,7 @@ class DefaultConfig:
     hf_max_batch_size = 1
 
     # Maximum batch size for TRT-LLM backend.
-    trt_max_batch_size=2
+    trt_max_batch_size = 2
 
     # choice the model format, base or chat
     #  choices=["chatml", "raw"],
