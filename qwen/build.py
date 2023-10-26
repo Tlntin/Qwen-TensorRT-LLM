@@ -92,8 +92,11 @@ def to_onnx(network, path):
     onnx.save(onnx_model, path)
 
 
-def get_engine_name(model, dtype, tp_size, rank):
-    return '{}_{}_tp{}_rank{}.engine'.format(model, dtype, tp_size, rank)
+def get_engine_name(model, dtype, tp_size, pp_size, rank):
+    if pp_size == 1:
+        return '{}_{}_tp{}_rank{}.engine'.format(model, dtype, tp_size, rank)
+    return '{}_{}_tp{}_pp{}_rank{}.engine'.format(model, dtype, tp_size,
+                                                  pp_size, rank)
 
 
 def serialize_engine(engine, path):
@@ -476,8 +479,9 @@ def build_rank_engine(builder: Builder,
         load_from_hf_qwen(
             tensorrt_llm_qwen,
             hf_qwen,
-            rank,
-            args.world_size,
+            mapping,
+            #rank,
+            #args.world_size,
             max_position_embeddings=args.n_positions,
             kv_channels=args.kv_channels,
             rotary_emb_base=args.rotary_emb_base,
@@ -603,7 +607,7 @@ def build(rank, args):
             strongly_typed=args.strongly_typed,
             opt_level=args.builder_opt
         )
-        engine_name = get_engine_name(MODEL_NAME, args.dtype, args.world_size,
+        engine_name = get_engine_name(MODEL_NAME, args.dtype, args.tp_size, args.pp_size, 
                                       cur_rank)
         engine = build_rank_engine(builder, builder_config, engine_name,
                                    cur_rank, multi_query_mode, args)

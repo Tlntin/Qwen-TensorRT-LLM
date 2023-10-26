@@ -9,6 +9,7 @@ import tensorrt_llm
 from tensorrt_llm._utils import str_dtype_to_torch, str_dtype_to_np, pad_vocab_size, torch_to_numpy
 from tensorrt_llm.quantization import QuantMode
 from model import QWenForCausalLM
+from tensorrt_llm.mapping import Mapping
 
 def gen_suffix(rank, use_smooth_quant, quant_per_channel):
     suffix = f"{rank}.bin"
@@ -406,8 +407,9 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
 
 def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                        hf_qwen,
-                       rank=0,
-                       tensor_parallel=1,
+                       mapping=Mapping(),
+                       #rank=0,
+                       #tensor_parallel=1,
                        max_position_embeddings=8192,
                        rotary_emb_base=10000,
                        kv_channels=128,
@@ -473,7 +475,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
             tensorrt_llm_qwen.ln_f.weight.value = v
         elif 'lm_head.weight' in k:
             tensorrt_llm_qwen.lm_head.weight.value = np.ascontiguousarray(
-                split(v, tensor_parallel, rank))
+                split(v, mapping.tp_size, mapping.rank))
         else:
             layer_idx = extract_layer_idx(k)
             if layer_idx is None:
@@ -489,16 +491,16 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                 dst = tensorrt_llm_qwen.layers[idx].attention.qkv.weight
                 if multi_query_mode:
                     assert isinstance(v, list) and len(v) == 3
-                    wq = split(v[0], tensor_parallel, rank)
-                    wk = split(v[1], tensor_parallel, rank)
-                    wv = split(v[2], tensor_parallel, rank)
+                    wq = split(v[0], mapping.tp_size, mapping.rank)
+                    wk = split(v[1], mapping.tp_size, mapping.rank)
+                    wv = split(v[2], mapping.tp_size, mapping.rank)
                     split_v = np.concatenate((wq, wk, wv))
                 else:
                     q_emb = v.shape[0] // 3
                     model_emb = v.shape[1]
                     v = v.reshape(3, q_emb, model_emb)
-                    split_v = split(v, tensor_parallel, rank, dim=1)
-                    split_v = split_v.reshape(3 * (q_emb // tensor_parallel),
+                    split_v = split(v, mapping.tp_size, mapping.rank, dim=1)
+                    split_v = split_v.reshape(3 * (q_emb // mapping.tp_size),
                                               model_emb)
                 if use_weight_only:
                     v = np.ascontiguousarray(split_v.transpose())
@@ -516,19 +518,19 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                 dst = tensorrt_llm_qwen.layers[idx].attention.qkv.bias
                 if multi_query_mode:
                     assert isinstance(v, list) and len(v) == 3
-                    wq = split(v[0], tensor_parallel, rank)
-                    wk = split(v[1], tensor_parallel, rank)
-                    wv = split(v[2], tensor_parallel, rank)
+                    wq = split(v[0], mapping.tp_size, mapping.rank)
+                    wk = split(v[1], mapping.tp_size, mapping.rank)
+                    wv = split(v[2], mapping.tp_size, mapping.rank)
                     split_v = np.concatenate((wq, wk, wv))
                 else:
                     q_emb = v.shape[0] // 3
                     v = v.reshape(3, q_emb)
-                    split_v = split(v, tensor_parallel, rank, dim=1)
-                    split_v = split_v.reshape(3 * (q_emb // tensor_parallel))
+                    split_v = split(v, mapping.tp_size, mapping.rank, dim=1)
+                    split_v = split_v.reshape(3 * (q_emb // mapping.tp_size))
                 dst.value = np.ascontiguousarray(split_v)
             elif 'attn.c_proj.weight' in k:
                 dst = tensorrt_llm_qwen.layers[idx].attention.dense.weight
-                split_v = split(v, tensor_parallel, rank, dim=1)
+                split_v = split(v, mapping.tp_size, mapping.rank, dim=1)
                 if use_weight_only:
                     v = np.ascontiguousarray(split_v.transpose())
                     processed_torch_weights, torch_weight_scales = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
@@ -543,7 +545,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                     dst.value = np.ascontiguousarray(split_v)
             elif 'mlp.w1.weight' in k:
                 dst = tensorrt_llm_qwen.layers[idx].mlp.w1.weight
-                split_v = split(v, tensor_parallel, rank, dim=0)
+                split_v = split(v, mapping.tp_size, mapping.rank, dim=0)
                 if use_weight_only:
                     v = np.ascontiguousarray(split_v.transpose())
                     processed_torch_weights, torch_weight_scales = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
@@ -558,7 +560,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                     dst.value = np.ascontiguousarray(split_v)
             elif 'mlp.w2.weight' in k:
                 dst = tensorrt_llm_qwen.layers[idx].mlp.w2.weight
-                split_v = split(v, tensor_parallel, rank, dim=0)
+                split_v = split(v, mapping.tp_size, mapping.rank, dim=0)
                 if use_weight_only:
                     v = np.ascontiguousarray(split_v.transpose())
                     processed_torch_weights, torch_weight_scales = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
@@ -573,7 +575,7 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
                     dst.value = np.ascontiguousarray(split_v)
             elif 'mlp.c_proj.weight' in k:
                 dst = tensorrt_llm_qwen.layers[idx].mlp.c_proj.weight
-                split_v = split(v, tensor_parallel, rank, dim=1)
+                split_v = split(v, mapping.tp_size, mapping.rank, dim=1)
                 if use_weight_only:
                     v = np.ascontiguousarray(split_v.transpose())
                     processed_torch_weights, torch_weight_scales = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
