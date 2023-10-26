@@ -131,12 +131,12 @@
 
 10. 试运行（可选）编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。
 
-    - tp = 1时使用python直接运行run.py
+    - tp = 1（默认单GPU）时使用python直接运行run.py
     ```bash
     python3 run.py
     ```
 
-    - tp = 2时使用mpirun 运行run.py
+    - tp = 2（2卡用户，或者更多GPU卡）时，使用`mpirun`命令来运行run.py
     ```bash
     mpirun -n 2 --allow-run-as-root python run.py
     ```
