@@ -1,6 +1,5 @@
 # Triton部署TensorRT-LLM
 
-
 ## 编译triton/tensorrtllm_backend Docker镜像
 ### 背景：
 - 在Triton 23.10发布后，才会内置TensorRT-LLM支持
@@ -114,13 +113,13 @@ cd /app/tensorrt_llm/examples/qwen/trt_engines/fp16/1-gpu/
 ```
 - 再将Qwen Engine拷贝给Triton
 ```bash
-cp -r ./* triton:/tensorrtllm_backend/triton_model_repo/tensorrt_llm/1/
+cp -r ./* /tensorrtllm_backend/triton_model_repo/tensorrt_llm/1/
 ```
-
 
 - 再把Qwen的tokenizer的文件拷贝给Triton，省事起见，可以将整个`qwen_7b_chat`都拷贝过去
 ```bash
-docker cp qwen_7b_chat triton:/tensorrtllm_backend/triton_model_repo/tensorrt_llm/
+cd /app/tensorrt_llm/examples/qwen/
+cp -r qwen_7b_chat /tensorrtllm_backend/triton_model_repo/tensorrt_llm/
 ```
 - 然后重新进入Triton的容器
 
@@ -130,14 +129,14 @@ docker cp qwen_7b_chat triton:/tensorrtllm_backend/triton_model_repo/tensorrt_ll
 parameters {
   key: "tokenizer_dir"
   value: {
-    string_value: "${tokenizer_dir}"
+	string_value: "${tokenizer_dir}"
   }
 }
 
 parameters {
   key: "tokenizer_type"
   value: {
-    string_value: "${tokenizer_type}"
+	string_value: "${tokenizer_type}"
   }
 }
 ```
@@ -146,35 +145,34 @@ parameters {
 parameters {
   key: "tokenizer_dir"
   value: {
-    string_value: "/tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen_7b_chat"
+	string_value: "/tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen_7b_chat"
   }
 }
 
 parameters {
   key: "tokenizer_type"
   value: {
-    string_value: "auto"
+	string_value: "auto"
   }
 }
 ```
-
 
 8. 编写Triton中的预处理配置， 修改`triton_model_repo/preprocessing/1/model.py`文件，加一个`trust_remote_code=True`，否则会不兼容本地的tokenizer
 - 修改前
 ```python
 elif tokenizer_type == 'auto':
-	self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir, padding_side='left')
+		self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir, padding_side='left')
 ```
 - 修改后
 ```python
 elif tokenizer_type == 'auto':
-	self.tokenizer = AutoTokenizer.from_pretrained(
-		tokenizer_dir,
-		padding_side='left',
-		trust_remote_code=True
-	)
+		self.tokenizer = AutoTokenizer.from_pretrained(
+			tokenizer_dir,
+			padding_side='left',
+			trust_remote_code=True
+		)
 ```
-- 改一下max-batch-size，默认是`max_batch_size: 128`改成你之前编译设置的max_batch_size即可，编译的设置max_batch_size=4，所以我这里也设置为4（测试发现最低需要设置为4，后面会讲到）。
+    - 改一下max-batch-size，默认是`max_batch_size: 128`改成你之前编译设置的max_batch_size即可，编译的设置max_batch_size=4，所以我这里也设置为4（测试发现最低需要设置为4，后面会讲到）。
 
 9.  编写Triton中的trt_llm配置， 修改`triton_model_repo/tensorrt_llm/config.pbtxt`文件
 - 修改前（用于开启流）
@@ -195,7 +193,7 @@ model_transaction_policy {
 parameters: {
   key: "gpt_model_path"
   value: {
-    string_value: "${engine_dir}"
+	string_value: "${engine_dir}"
   }
 }
 ```
@@ -204,7 +202,7 @@ parameters: {
 parameters: {
   key: "gpt_model_path"
   value: {
-    string_value: "/tensorrtllm_backend/triton_model_repo/tensorrt_llm/1"
+	string_value: "/tensorrtllm_backend/triton_model_repo/tensorrt_llm/1"
   }
 }
 ```
@@ -214,7 +212,7 @@ parameters: {
 parameters: {
   key: "gpt_model_type"
   value: {
-    string_value: "inflight_fused_batching"
+	string_value: "inflight_fused_batching"
   }
 }
 ```
@@ -223,7 +221,7 @@ parameters: {
 parameters: {
   key: "gpt_model_type"
   value: {
-    string_value: "V1"
+	string_value: "V1"
   }
 }
 ```
@@ -248,7 +246,7 @@ python3 scripts/launch_triton_server.py --world_size=1 --model_repo=/tensorrtllm
 self.tokenizer.pad_token = self.tokenizer.eos_token
 
 self.pad_id = self.tokenizer.encode(self.tokenizer.pad_token,
-                                   add_special_tokens=False)[0]
+								   add_special_tokens=False)[0]
 ```
 - 修改后
 ```bash
@@ -274,7 +272,7 @@ self.tokenizer.pad_token = eos_token
 16. 再次启动服务，提示8000端口被占用（被之前的qwen容器的api占用了），关闭对应的服务，或者删除对应的容器即可。
 
 
-### 其他
+### 总结
 - 上述文件已经上传到仓库https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM 的`triton_model_repo`目录
 - 只需要启动将本仓库的`triton_model_repo`目录复制到`tensorrtllm_backend`目录中即可
 ```bash
@@ -295,6 +293,23 @@ docker run \
 	-v ${PWD}/tensorrtllm_backend:/tensorrtllm_backend \
 	-v ${PWD}/Qwen-7B-Chat-TensorRT-LLM/qwen:/app/tensorrt_llm/examples/qwen\
 	triton_trt_llm sleep 8640000
+```
+- 安装python依赖并编译Engine
+- 复制Engine文件
+```bash
+cd /app/tensorrt_llm/examples/qwen/trt_engines/fp16/1-gpu/
+mkdir /tensorrtllm_backend/triton_model_repo/tensorrt_llm/1/
+cp -r ./* /tensorrtllm_backend/triton_model_repo/tensorrt_llm/1/
+```
+- 复制tokenzer文件
+```bash
+cd /app/tensorrt_llm/examples/qwen
+cp -r qwen_7b_chat /tensorrtllm_backend/triton_model_repo/tensorrt_llm/
+```
+- 启动服务
+```bash
+cd /tensorrtllm_backend
+python3 scripts/launch_triton_server.py --world_size=1 --model_repo=/tensorrtllm_backend/triton_model_repo
 ```
 
 - 附成功截图
