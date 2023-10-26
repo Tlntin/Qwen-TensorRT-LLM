@@ -124,7 +124,7 @@
     python3 build.py --use_weight_only --weight_only_precision=int4
     ```
 
-    - 对于14B模型，可以选择尝试tp = 2 （tp功能目前只支持从Huggingface格式构建engine）
+    - 对于14B模型，如果单卡装不下，又不想用int4/int8量化，可以选择尝试tp = 2，即启用两张GPU进行编译 （注：tp功能目前只支持从Huggingface格式构建engine）
     ```bash
     python3 build.py --world_size 2 --tp_size 2
     ```
