@@ -48,12 +48,11 @@ def TRT_QWen(args, config):
             "`multi_query_mode` config is deprecated. Please rebuild the engine."
         )
         num_kv_heads = 1
-    num_kv_heads = (num_kv_heads + tp_size - 1) // tp_size
     use_custom_all_reduce = config['plugin_config'].get('use_custom_all_reduce',
                                                         False)
 
     runtime_rank = tensorrt_llm.mpi_rank()
-    runtime_mapping = tensorrt_llm.Mapping(world_size, runtime_rank)
+    runtime_mapping = tensorrt_llm.Mapping(world_size=world_size, rank=runtime_rank, tp_size=tp_size, pp_size=pp_size)
     torch.cuda.set_device(runtime_rank % runtime_mapping.gpus_per_node)
 
     model_config = ModelConfig(
@@ -75,7 +74,7 @@ def TRT_QWen(args, config):
     runtime_mapping = tensorrt_llm.Mapping(world_size, runtime_rank)
     torch.cuda.set_device(runtime_rank % runtime_mapping.gpus_per_node)
 
-    engine_name = get_engine_name('qwen', dtype, world_size, runtime_rank)
+    engine_name = get_engine_name('qwen', dtype, tp_size, pp_size, runtime_rank)
     serialize_path = os.path.join(args.engine_dir, engine_name)
 
     tensorrt_llm.logger.set_level(args.log_level)
