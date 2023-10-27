@@ -4,6 +4,7 @@ transformers~=4.31.0
 transformers-stream-generator
 sentencepiece~=0.1.99
 tiktoken
+einops
 
 # optional dependencies
 gradio==3.40.1
