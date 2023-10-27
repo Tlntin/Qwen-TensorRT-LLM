@@ -71,7 +71,7 @@ def TRT_QWen(args, config):
     )
 
     runtime_rank = tensorrt_llm.mpi_rank()
-    runtime_mapping = tensorrt_llm.Mapping(world_size, runtime_rank)
+    runtime_mapping = tensorrt_llm.Mapping(world_size=world_size, rank=runtime_rank, tp_size=tp_size, pp_size=pp_size)
     torch.cuda.set_device(runtime_rank % runtime_mapping.gpus_per_node)
 
     engine_name = get_engine_name('qwen', dtype, tp_size, pp_size, runtime_rank)
@@ -244,22 +244,15 @@ def main(args):
             torch.cuda.synchronize()
 
         # Extract a list of tensors of shape beam_width x output_ids.
-        output_beams_list = [
-            tokenizer.batch_decode(
-                output_ids[
-                    batch_idx,
-                    :,
-                    input_lengths[batch_idx]:
-                ],
-                skip_special_tokens=True
-            )
-            for batch_idx in range(batch_size)
-        ]
-        return (
-            output_beams_list,
-            output_ids[:, :, max_length: ].tolist()
-        )
-    
+        if tensorrt_llm_qwen.mapping.is_first_pp_rank():
+            output_beams_list = [
+                tokenizer.batch_decode(output_ids[batch_idx, :,
+                                                  input_lengths[batch_idx]:],
+                                       skip_special_tokens=True)
+                for batch_idx in range(batch_size)
+            ]
+            return output_beams_list, output_ids[:, :, max_length:].tolist()
+        return [], []
 
     def summarize_hf(datapoint):
         batch_size = len(datapoint['article'])
