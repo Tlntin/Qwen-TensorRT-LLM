@@ -5,6 +5,7 @@ import os
 from tqdm import trange
 import numpy as np
 import torch
+from tqdm import tqdm
 import tensorrt_llm
 from tensorrt_llm._utils import str_dtype_to_torch, str_dtype_to_np, pad_vocab_size, torch_to_numpy
 from tensorrt_llm.quantization import QuantMode
@@ -464,7 +465,12 @@ def load_from_hf_qwen(tensorrt_llm_qwen: QWenForCausalLM,
     # sin_weight = torch.sin(value_table).float()
     # tensorrt_llm_qwen.rope.position_embedding_cos.weight.value = torch_to_numpy(cos_weight)
     # tensorrt_llm_qwen.rope.position_embedding_sin.weight.value = torch_to_numpy(sin_weight)
-    for k, v in model_params.items():
+    for k, v in tqdm(
+        model_params.items(),
+        total=len(model_params),
+        ncols=80,
+        desc="Converting..."
+    ):
         if isinstance(v, list):
             v = [torch_to_numpy(vv.to(torch_dtype).detach().cpu()) for vv in v]
         else:
