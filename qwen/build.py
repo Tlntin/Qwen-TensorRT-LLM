@@ -15,8 +15,11 @@ import tensorrt_llm
 from tensorrt_llm._utils import str_dtype_to_trt
 from tensorrt_llm.builder import Builder
 from tensorrt_llm.logger import logger
-from tensorrt_llm.models import weight_only_quantize
+from tensorrt_llm.models import (fp8_quantize, smooth_quantize,
+                                 weight_only_groupwise_quantize,
+                                 weight_only_quantize)
 from tensorrt_llm.network import net_guard
+from tensorrt_llm.plugin.plugin import ContextFMHAType
 from tensorrt_llm.quantization import QuantMode
 from tensorrt_llm.mapping import Mapping
 from weight import load_from_hf_qwen, load_from_ft
@@ -185,6 +188,12 @@ def parse_arguments():
         choices=['float16', 'bfloat16', 'float32', None]
     )
     parser.add_argument('--parallel_build', default=False, action='store_true')
+    parser.add_argument('--enable_context_fmha',
+                        default=False,
+                        action='store_true')
+    parser.add_argument('--enable_context_fmha_fp32_acc',
+                        default=False,
+                        action='store_true')
     parser.add_argument('--visualize', default=False, action='store_true')
     parser.add_argument('--enable_debug_output',
                         default=False,
@@ -228,6 +237,15 @@ def parse_arguments():
         'By default, we use a single static scaling factor to scale activations in the int8 range. '
         'per_token chooses at run time, and for each token, a custom scaling factor. '
         'The latter is usually more accurate, but a little slower.')
+    
+    parser.add_argument(
+        '--per_group',
+        default=False,
+        action="store_true",
+        help=
+        'By default, we use a single static scaling factor to scale weights in the int4 range. '
+        'per_group chooses at run time, and for each group, a custom scaling factor. '
+        'The flag is built for GPTQ/AWQ quantization.')
 
     parser.add_argument(
         "--add_plugins",
@@ -274,6 +292,12 @@ def parse_arguments():
         default=64,
         help='Number of tokens per block in paged KV cache'
     )
+
+    parser.add_argument(
+        '--max_num_tokens',
+        type=int,
+        default=None,
+        help='Define the max number of tokens supported by the engine')
     
     parser.add_argument(
         '--int8_kv_cache',
@@ -353,8 +377,17 @@ def parse_arguments():
         args.quant_mode = QuantMode.use_smooth_quant(args.per_token,
                                                      args.per_channel)
     elif args.use_weight_only:
-        args.quant_mode = QuantMode.use_weight_only(
-            args.weight_only_precision == 'int4')
+        if args.per_group:
+            args.quant_mode = QuantMode.from_description(
+                quantize_weights=True,
+                quantize_activations=False,
+                per_token=False,
+                per_channel=False,
+                per_group=True,
+                use_int4_weights=True)
+        else:
+            args.quant_mode = QuantMode.use_weight_only(
+                args.weight_only_precision == 'int4')
     else:
         args.quant_mode = QuantMode(0)
     
@@ -386,6 +419,14 @@ def parse_arguments():
         assert args.n_kv_head == args.world_size, \
         "The current implementation of GQA requires the number of K/V heads to match the number of GPUs." \
         "This limitation will be removed in a future version."
+
+    if args.dtype == 'bfloat16':
+        assert args.use_gemm_plugin, "Please use gemm plugin when dtype is bfloat16"
+
+    assert args.pp_size * args.tp_size == args.world_size
+
+    if args.max_num_tokens is not None:
+        assert args.enable_context_fmha
 
     return args
 
@@ -449,16 +490,38 @@ def build_rank_engine(builder: Builder,
             custom_plugin_paths,
         )
         print("load smooth quantize ok")
-    elif args.use_weight_only and args.weight_only_precision == 'int8':
-        tensorrt_llm_qwen = weight_only_quantize(
-            tensorrt_llm_qwen,
-            QuantMode.use_weight_only()
-        )
-    elif args.use_weight_only and args.weight_only_precision == 'int4':
-        tensorrt_llm_qwen = weight_only_quantize(
-            tensorrt_llm_qwen,
-            QuantMode.use_weight_only(use_int4_weights=True)
-        )
+    elif args.use_weight_only:
+        if args.weight_only_precision == 'int8':
+            tensorrt_llm_qwen = weight_only_quantize(tensorrt_llm_qwen,
+                                                      args.quant_mode)
+        elif args.weight_only_precision == 'int4':
+            tensorrt_llm_qwen = weight_only_quantize(tensorrt_llm_qwen,
+                                                      args.quant_mode)
+        elif args.weight_only_precision == 'int4_awq':
+            tensorrt_llm_qwen = weight_only_groupwise_quantize(
+                model=tensorrt_llm_qwen,
+                quant_mode=args.quant_mode,
+                group_size=args.group_size,
+                zero=False,
+                pre_quant_scale=True,
+                exclude_modules=[])
+        elif args.weight_only_precision == 'int4_gptq':
+            tensorrt_llm_qwen = weight_only_groupwise_quantize(
+                model=tensorrt_llm_qwen,
+                quant_mode=args.quant_mode,
+                group_size=args.group_size,
+                zero=True,
+                pre_quant_scale=False)
+        # elif args.enable_fp8 or args.fp8_kv_cache:
+        #     logger.info(f'Loading scaling factors from '
+        #                 f'{args.quantized_fp8_model_path}')
+        #     quant_scales = get_scaling_factors(args.quantized_fp8_model_path,
+        #                                        num_layers=args.n_layer,
+        #                                        quant_mode=args.quant_mode)
+        #     tensorrt_llm_qwen = fp8_quantize(tensorrt_llm_qwen,
+        #                                       quant_mode=args.quant_mode,
+        #                                       quant_scales=quant_scales)
+ 
 
     ft_dir_path = os.path.join(args.ft_dir_path, str(args.tp_size) + "-gpu")
     if args.hf_model_dir is not None and \
@@ -527,6 +590,19 @@ def build_rank_engine(builder: Builder,
         # See https://nvbugs/4174113
         network.plugin_config.set_quantize_tensor_plugin()
         network.plugin_config.set_quantize_per_token_plugin()
+    assert not (args.enable_context_fmha and args.enable_context_fmha_fp32_acc)
+    if args.enable_context_fmha:
+        network.plugin_config.set_context_fmha(ContextFMHAType.enabled)
+    if args.enable_context_fmha_fp32_acc:
+        network.plugin_config.set_context_fmha(
+            ContextFMHAType.enabled_with_fp32_acc)
+    if args.use_weight_only:
+        if args.per_group:
+            network.plugin_config.set_weight_only_groupwise_quant_matmul_plugin(
+                dtype='float16')
+        else:
+            network.plugin_config.set_weight_only_quant_matmul_plugin(
+                dtype='float16')
     if args.world_size > 1:
         network.plugin_config.set_nccl_plugin(args.dtype,
                                               args.use_custom_all_reduce)
@@ -546,7 +622,8 @@ def build_rank_engine(builder: Builder,
             max_input_len=args.max_input_len,
             max_new_tokens=args.max_new_tokens,
             use_cache=True,
-            max_beam_width=args.max_beam_width
+            max_beam_width=args.max_beam_width,
+            max_num_tokens=args.max_num_tokens,
         )
         tensorrt_llm_qwen(*inputs)
         if args.enable_debug_output:
@@ -604,6 +681,7 @@ def build(rank, args):
             max_batch_size=args.max_batch_size,
             max_input_len=args.max_input_len,
             max_output_len=args.max_new_tokens,
+            max_num_tokens=args.max_num_tokens,
             int8=int8_trt_flag,
             fp8=args.quant_mode.has_fp8_qdq(),
             quant_mode=args.quant_mode,

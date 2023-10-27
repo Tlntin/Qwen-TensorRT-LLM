@@ -31,6 +31,7 @@
 2. 旧的比赛相关文件仍然保留在[main分支](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/tree/main)，如果需要深入学习建议用main分支，目前设定release/0.5.0为主分支。
 3. 增加`TensorRT-LLM接入LangChain指南`，[文档链接](./docs/trt_llm_deploy_langchain.md)。
 4. 增加`Triton部署TensorRT-LLM教程`，并且可选`inflight_batching`功能，[文档链接](./docs/triton_deploy_trt-llm.md)。
+5. 支持int8-kv-cache和`--remove_input_padding`和`--enable_context_fmha`来节省显存。
 
 ### 主要贡献
 
@@ -114,30 +115,28 @@
 
 9. 开始编译。
 
-    - 注：`--remove_input_padding`和`--enable_context_fmha`为可选参数，可以一定程度上节省显存
-
-    - 对于24G显存用户，可以直接编译fp16。
+    - 对于24G显存用户，可以直接编译fp16（注：`--remove_input_padding`和`--enable_context_fmha`为可选参数，可以一定程度上节省显存）。
 
     ```bash
     python3 build.py --remove_input_padding --enable_context_fmha
     ```
-
+    
     - 对于16G显存用户，可以试试int8 (weight only)。
 
     ```bash
     python3 build.py --use_weight_only --weight_only_precision=int8
     ```
-
+    
     - 对于12G显存用户，可以试试int4 (weight only)
     ```bash
     python3 build.py --use_weight_only --weight_only_precision=int4
     ```
-
+    
     - 对于14B模型，如果单卡装不下，又不想用int4/int8量化，可以选择尝试tp = 2，即启用两张GPU进行编译 （注：tp功能目前只支持从Huggingface格式构建engine）
     ```bash
     python3 build.py --world_size 2 --tp_size 2
     ```
-
+    
 10. 试运行（可选）编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。
 
     - tp = 1（默认单GPU）时使用python直接运行run.py
@@ -260,6 +259,17 @@ https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f
     python3 build.py --use_smooth_quant --per_token --per_channel
     ```
 4. 编译完成，run/summarize/benchmark等等都和上面的是一样的了。
+
+##### 运行指南（int8-kv-cache篇）
+1. 前6节和上面一样，参考上面运行就行。注意：运行int8-kv-cache需要将huggingface模型完全加载到GPU里面，用于构建int8标定数据集，所以需要提前确保你的显存够大，能够完全加载整个模型。
+2. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式。
+```bash
+python3 hf_qwen_convert.py --calibrate-kv-cache
+```
+3. 编译int8 weight only + int8-kv-cache
+```bash
+python3 build.py --use_weight_only --weight_only_precision=int8 --int8_kv_cache
+```
 
 ### 主要开发工作
 

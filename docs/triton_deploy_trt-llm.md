@@ -296,10 +296,10 @@ docker run \
 	--ulimit stack=67108864 \
 	--gpus all \
 	-v ${PWD}/tensorrtllm_backend:/tensorrtllm_backend \
-	-v ${PWD}/Qwen-7B-Chat-TensorRT-LLM/qwen:/app/tensorrt_llm/examples/qwen\
+	-v ${PWD}/Qwen-7B-Chat-TensorRT-LLM/qwen:/app/tensorrt_llm/examples/qwen \
 	triton_trt_llm sleep 8640000
 ```
-- 安装python依赖并编译Engine
+- **重复一次之前项目的工作，安装python依赖并编译pytorch模型为TensorRT Engine**
 - 复制Engine文件
 ```bash
 cd /app/tensorrt_llm/examples/qwen/trt_engines/fp16/1-gpu/
@@ -321,8 +321,15 @@ python3 scripts/launch_triton_server.py --world_size=1 --model_repo=/tensorrtllm
 
 ![](../images/triton_trt_llm.png)
 
+- 关闭服务
+```bash
+pgrep tritonserver | xargs kill -9
+```
+
+
 
 ### python客户端请求
+
 1. 安装python依赖
 ```bash
 pip install tritonclient transformers gevent geventhttpclient tiktoken

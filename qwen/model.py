@@ -1087,12 +1087,15 @@ class QWenForCausalLM(QWenModel, GenerationMixin):
                 return lm_logits
             return hidden_states
 
-    def prepare_inputs(self,
-                       max_batch_size,
-                       max_input_len,
-                       max_new_tokens,
-                       use_cache,
-                       max_beam_width: int = 1):
+    def prepare_inputs(
+            self,
+            max_batch_size,
+            max_input_len,
+            max_new_tokens,
+            use_cache,
+            max_beam_width: int = 1,
+            max_num_tokens: int = None,
+        ):
         '''@brief: Prepare inputs Tensors for the model, the given sizes are used to determine the
             ranges of the dimensions of when using TRT dynamic shapes.
 
@@ -1126,7 +1129,8 @@ class QWenForCausalLM(QWenModel, GenerationMixin):
             dtype=self.dtype,
             num_heads=self.num_heads,
             mapping=self.mapping,
-            max_num_tokens=max_new_tokens)
+            max_num_tokens=max_num_tokens,
+        )
 
         return (model_inputs['input_ids'], model_inputs['position_ids'], True,
                 model_inputs['last_token_ids'],

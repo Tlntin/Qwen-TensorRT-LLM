@@ -411,7 +411,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         if use_int8_kv_cache:
             t = fromfile(
                 dir_path, 'model.layers.' + str(i) +
-                '.attention.query_key_value.scale_y_quant_orig.bin', [1],
+                '.attention.qkv.scale_y_quant_orig.bin', [1],
                 np.float32)
             tensorrt_llm_qwen.layers[
                 i].attention.kv_orig_quant_scale.value = 1.0 / t
