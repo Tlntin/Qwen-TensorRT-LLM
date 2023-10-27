@@ -4,6 +4,11 @@
 ### 背景：
 - 在Triton 23.10发布后，才会内置TensorRT-LLM支持
 - 目前Triton最新版是23.09,暂时不支持，所以需要手动编译Docker镜像
+- 可以用下面的命令手动编译Docker镜像（推荐），也可以用我编译好的镜像（仅在RTX 3090上面测试，不保证其他显卡可用，不过理论上30系/40系应该都可以）
+```bash
+docker pull registry.cn-guangzhou.aliyuncs.com/tlntin/triton_trt_llm:v0.5.0
+docker tag registry.cn-guangzhou.aliyuncs.com/tlntin/triton_trt_llm:v0.5.0 triton_trt_llm
+```
 
 1. 拉取本项目代码
 ```bash
