@@ -55,7 +55,7 @@
     ```
     
 3.  由于现在还没有现成的TensorRT-LLM docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/release/0.5.0/docs/source/installation.md)，也可以直接用下面的命令直接编译（已有编译好的镜像可以跳过该步骤）。
-
+    - 手动编译（推荐）
     ```bash
     # 拉取TensorRT-LLM仓库
     git submodule update --init --recursive
@@ -69,8 +69,13 @@
     # 然后返回到项目路径
     cd ../..
     ```
+    - 拉取编译好的镜像（仅在RTX 3090上面测试，不保证其他显卡可用，不过理论上30系/40系应该都可以）
+    ```bash
+    docker pull registry.cn-guangzhou.aliyuncs.com/tlntin/triton_trt_llm:v0.5.0
+    docker tag registry.cn-guangzhou.aliyuncs.com/tlntin/triton_trt_llm:v0.5.0 tensorrt_llm/release
+    ```
     
-4. 进入项目目录，然后创建并启动容器，同时将本地`qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径，然后打开8000和7860端口的映射，方便调试api和web界面。
+5. 进入项目目录，然后创建并启动容器，同时将本地`qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径，然后打开8000和7860端口的映射，方便调试api和web界面。
 
     ```bash
     docker run --gpus all \
@@ -86,27 +91,27 @@
       tensorrt_llm/release sleep 8640000
     ```
     
-5. 下载模型`QWen-7B-Chat`模型（可以参考总述部分），然后将文件夹重命名为`qwen_7b_chat`，最后放到`qwen/`路径下即可。
-6. 进入docker容器里面的qwen路径，安装提供的Python依赖
+6. 下载模型`QWen-7B-Chat`模型（可以参考总述部分），然后将文件夹重命名为`qwen_7b_chat`，最后放到`qwen/`路径下即可。
+7. 进入docker容器里面的qwen路径，安装提供的Python依赖
 
     ```bash
     cd /app/tensorrt_llm/examples/qwen/
     pip install -r requirements.txt
     ```
 
-7. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式（非必选，不convert直接build也是可以的，两种方式都兼容，直接build更省空间，但是不支持smooth quant; 运行该代码默认是需要加载cuda版huggingface模型再转换，所以低于24G显存的显卡建议跳过这步。）
+8. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式（非必选，不convert直接build也是可以的，两种方式都兼容，直接build更省空间，但是不支持smooth quant; 运行该代码默认是需要加载cuda版huggingface模型再转换，所以低于24G显存的显卡建议跳过这步。）
 
     ```bash
     python3 hf_qwen_convert.py
     ```
 
-8. 修改编译参数（可选）
+9. 修改编译参数（可选）
 
     - 默认编译参数，包括batch_size, max_input_len, max_new_tokens, seq_length都存放在`default_config.py`中
     - 对于24G显存用户，直接编译即可，默认是fp16数据类型，max_batch_size=2
     - 对于低显存用户，可以降低max_batch_size=1，或者继续降低max_input_len, max_new_tokens
 
-9. 开始编译。
+10. 开始编译。
    - 对于24G显存用户，可以直接编译fp16。
 
     ```bash
@@ -129,7 +134,7 @@
     python3 build.py --world_size 2 --tp_size 2
     ```
 
-10. 试运行（可选）编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。
+11. 试运行（可选）编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。
 
     - tp = 1（默认单GPU）时使用python直接运行run.py
     ```bash
@@ -141,7 +146,7 @@
     mpirun -n 2 --allow-run-as-root python run.py
     ```
 
-11. 验证模型精度（可选）。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。对于`网络不好`的用户，可以从网盘下载数据集，然后按照使用说明操作即可。
+12. 验证模型精度（可选）。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。对于`网络不好`的用户，可以从网盘下载数据集，然后按照使用说明操作即可。
 
     - 百度网盘：链接: https://pan.baidu.com/s/1UQ01fBBELesQLMF4gP0vcg?pwd=b62q 提取码: b62q 
     - 谷歌云盘：https://drive.google.com/drive/folders/1YrSv1NNhqihPhCh6JYcz7aAR5DAuO5gU?usp=sharing
@@ -167,7 +172,7 @@
 
     - 一般来说，如果trt-llm的rouge分数和huggingface差不多，略低一些（1以内）或者略高一些（2以内），则说明精度基本对齐。
 
-12. 测量模型吞吐速度和生成速度（可选）。需要下载`ShareGPT_V3_unfiltered_cleaned_split.json`这个文件。
+13. 测量模型吞吐速度和生成速度（可选）。需要下载`ShareGPT_V3_unfiltered_cleaned_split.json`这个文件。
 
     - 可以通过wget/浏览器直接下载，[下载链接](https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json)
     - 也可通过百度网盘下载，链接: https://pan.baidu.com/s/12rot0Lc0hc9oCb7GxBS6Ng?pwd=jps5 提取码: jps5
@@ -185,12 +190,12 @@
     python3 benchmark.py --backend=trt_llm --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --trt_max_batch_size=1
     ```
 
-13. 尝试终端对话（可选）。运行下面的命令，然后输入你的问题，直接回车即可。
+14. 尝试终端对话（可选）。运行下面的命令，然后输入你的问题，直接回车即可。
 
     ```bash
     python3 cli_chat.py
     ```
-14. 部署api，并调用api进行对话（可选）。
+15. 部署api，并调用api进行对话（可选）。
 
     - 部署api
 
@@ -204,7 +209,7 @@
     - `openai_normal_client.py`，通过`openai`模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。
     - `openai_stream_client.py`，通过`openai`模块直接调用自己部署的api，该示例为流式调用。
     - 
-15. 尝试网页对话（可选，需要先部署api）。运行下面的命令，然后打开本地浏览器，访问：[http://127.0.0.1:7860](http://127.0.0.1:7860) 即可
+16. 尝试网页对话（可选，需要先部署api）。运行下面的命令，然后打开本地浏览器，访问：[http://127.0.0.1:7860](http://127.0.0.1:7860) 即可
 
     ```bash
     python3 web_demo.py
@@ -223,7 +228,7 @@
         - `server_name="0.0.0.0"`: 允许任意ip访问，适合服务器，然后你只需要输入`http://[你的ip]: 7860`就能看到网页了，如果不开这个选择，默认只能部署的那台机器才能访问。
         - `share=False`：仅局域网/或者公网ip访问，不会生成公网域名。
         - `inbrowser=False`： 部署后不打开浏览器，适合服务器。
-16. web_demo运行效果（测试平台：RTX 4080, qwen-7b-chat, int4 weight only)
+17. web_demo运行效果（测试平台：RTX 4080, qwen-7b-chat, int4 weight only)
 
 https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956
 
