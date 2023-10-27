@@ -561,6 +561,7 @@ class QWenAttention(Module):
             kv_quant_orig_scale=kv_quant_orig_scale,
             kv_cache_quant_mode=QuantMode.from_description(
                 use_int8_kv_cache=self.use_int8_kv_cache),
+            kv_cache_block_pointers=kv_cache_params.get_first_kv_cache_block_pointers(),
             max_context_length=attention_params.max_context_length,
             mask_type=self.attention_mask_type.value,
             host_context_lengths=attention_params.host_context_lengths

@@ -168,8 +168,7 @@ class SmoothQuantAttention(Module):
                 max_context_length=attention_params.max_context_length,
                 tp_size=self.tp_size,
                 tp_rank=self.tp_rank,
-                kv_cache_block_pointers=kv_cache_params.
-                get_first_kv_cache_block_pointers(),
+                kv_cache_block_pointers=kv_cache_params.get_first_kv_cache_block_pointers(),
                 host_context_lengths=attention_params.host_context_lengths)
         else:
             assert self.paged_kv_cache == False
