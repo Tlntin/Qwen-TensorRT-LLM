@@ -53,8 +53,8 @@
     git clone https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM.git -b release/0.5.0
     cd Qwen-7B-Chat-TensorRT-LLM
     ```
-    
-3.  由于现在还没有现成的TensorRT-LLM docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/release/0.5.0/docs/source/installation.md)，也可以直接用下面的命令直接编译（已有编译好的镜像可以跳过该步骤）。
+
+3. 由于现在还没有现成的TensorRT-LLM docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/release/0.5.0/docs/source/installation.md)，也可以直接用下面的命令直接编译（已有编译好的镜像可以跳过该步骤）。
     - 手动编译（推荐）
     ```bash
     # 拉取TensorRT-LLM仓库
@@ -74,8 +74,8 @@
     docker pull registry.cn-guangzhou.aliyuncs.com/tlntin/triton_trt_llm:v0.5.0
     docker tag registry.cn-guangzhou.aliyuncs.com/tlntin/triton_trt_llm:v0.5.0 tensorrt_llm/release
     ```
-    
-5. 进入项目目录，然后创建并启动容器，同时将本地`qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径，然后打开8000和7860端口的映射，方便调试api和web界面。
+
+4. 进入项目目录，然后创建并启动容器，同时将本地`qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径，然后打开8000和7860端口的映射，方便调试api和web界面。
 
     ```bash
     docker run --gpus all \
@@ -90,32 +90,36 @@
       -v ${PWD}/qwen:/app/tensorrt_llm/examples/qwen \
       tensorrt_llm/release sleep 8640000
     ```
-    
-6. 下载模型`QWen-7B-Chat`模型（可以参考总述部分），然后将文件夹重命名为`qwen_7b_chat`，最后放到`qwen/`路径下即可。
-7. 进入docker容器里面的qwen路径，安装提供的Python依赖
+
+5. 下载模型`QWen-7B-Chat`模型（可以参考总述部分），然后将文件夹重命名为`qwen_7b_chat`，最后放到`qwen/`路径下即可。
+
+6. 进入docker容器里面的qwen路径，安装提供的Python依赖
 
     ```bash
     cd /app/tensorrt_llm/examples/qwen/
     pip install -r requirements.txt
     ```
 
-8. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式（非必选，不convert直接build也是可以的，两种方式都兼容，直接build更省空间，但是不支持smooth quant; 运行该代码默认是需要加载cuda版huggingface模型再转换，所以低于24G显存的显卡建议跳过这步。）
+7. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式（非必选，不convert直接build也是可以的，两种方式都兼容，直接build更省空间，但是不支持smooth quant; 运行该代码默认是需要加载cuda版huggingface模型再转换，所以低于24G显存的显卡建议跳过这步。）
 
     ```bash
     python3 hf_qwen_convert.py
     ```
 
-9. 修改编译参数（可选）
+8. 修改编译参数（可选）
 
     - 默认编译参数，包括batch_size, max_input_len, max_new_tokens, seq_length都存放在`default_config.py`中
     - 对于24G显存用户，直接编译即可，默认是fp16数据类型，max_batch_size=2
     - 对于低显存用户，可以降低max_batch_size=1，或者继续降低max_input_len, max_new_tokens
 
-10. 开始编译。
-   - 对于24G显存用户，可以直接编译fp16。
+9. 开始编译。
+
+    - 注：`--remove_input_padding`和`--enable_context_fmha`为可选参数，可以一定程度上节省显存
+
+    - 对于24G显存用户，可以直接编译fp16。
 
     ```bash
-    python3 build.py
+    python3 build.py --remove_input_padding --enable_context_fmha
     ```
 
     - 对于16G显存用户，可以试试int8 (weight only)。
@@ -134,7 +138,7 @@
     python3 build.py --world_size 2 --tp_size 2
     ```
 
-11. 试运行（可选）编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。
+10. 试运行（可选）编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。
 
     - tp = 1（默认单GPU）时使用python直接运行run.py
     ```bash
@@ -146,89 +150,92 @@
     mpirun -n 2 --allow-run-as-root python run.py
     ```
 
-12. 验证模型精度（可选）。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。对于`网络不好`的用户，可以从网盘下载数据集，然后按照使用说明操作即可。
+11. 验证模型精度（可选）。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。对于`网络不好`的用户，可以从网盘下载数据集，然后按照使用说明操作即可。
 
-    - 百度网盘：链接: https://pan.baidu.com/s/1UQ01fBBELesQLMF4gP0vcg?pwd=b62q 提取码: b62q 
-    - 谷歌云盘：https://drive.google.com/drive/folders/1YrSv1NNhqihPhCh6JYcz7aAR5DAuO5gU?usp=sharing
-    - 跑hugggingface版
+     - 百度网盘：链接: https://pan.baidu.com/s/1UQ01fBBELesQLMF4gP0vcg?pwd=b62q 提取码: b62q 
+     - 谷歌云盘：https://drive.google.com/drive/folders/1YrSv1NNhqihPhCh6JYcz7aAR5DAuO5gU?usp=sharing
+     - 跑hugggingface版
 
-    ```bash
-    python3 summarize.py --backend=hf
-    ```
+     ```bash
+     python3 summarize.py --backend=hf
+     ```
 
-    - 跑trt-llm版
+     - 跑trt-llm版
 
-    ```bash
-    python3 summarize.py --backend=trt_llm
-    ```
+     ```bash
+     python3 summarize.py --backend=trt_llm
+     ```
 
-    - 注：如果用了网盘的数据集，解压后加载就需要多两个环境变量了，运行示范如下：
-    
-    ```bash
-    HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python3 summarize.py --backend=hf
-    或者
-    HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python3 summarize.py --backend=trt_llm
-    ```
+     - 注：如果用了网盘的数据集，解压后加载就需要多两个环境变量了，运行示范如下：
 
-    - 一般来说，如果trt-llm的rouge分数和huggingface差不多，略低一些（1以内）或者略高一些（2以内），则说明精度基本对齐。
+     ```bash
+     HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python3 summarize.py --backend=hf
+     或者
+     HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python3 summarize.py --backend=trt_llm
+     ```
 
-13. 测量模型吞吐速度和生成速度（可选）。需要下载`ShareGPT_V3_unfiltered_cleaned_split.json`这个文件。
+     - 一般来说，如果trt-llm的rouge分数和huggingface差不多，略低一些（1以内）或者略高一些（2以内），则说明精度基本对齐。
 
-    - 可以通过wget/浏览器直接下载，[下载链接](https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json)
-    - 也可通过百度网盘下载，链接: https://pan.baidu.com/s/12rot0Lc0hc9oCb7GxBS6Ng?pwd=jps5 提取码: jps5
-    - 下载后同样放到`examples/qwen/`路径下即可
-    - 测量前，如果需要改max_input_length/max_new_tokens，可以直接改`default_config.py`即可。一般不推荐修改，如果修改了这个，则需要重新编译一次trt-llm，保证两者输入数据集长度统一。
-    - 测量huggingface模型
+12. 测量模型吞吐速度和生成速度（可选）。需要下载`ShareGPT_V3_unfiltered_cleaned_split.json`这个文件。
 
-    ```bash
-    python3 benchmark.py --backend=hf --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --hf_max_batch_size=1
-    ```
+     - 可以通过wget/浏览器直接下载，[下载链接](https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json)
+     - 也可通过百度网盘下载，链接: https://pan.baidu.com/s/12rot0Lc0hc9oCb7GxBS6Ng?pwd=jps5 提取码: jps5
+     - 下载后同样放到`examples/qwen/`路径下即可
+     - 测量前，如果需要改max_input_length/max_new_tokens，可以直接改`default_config.py`即可。一般不推荐修改，如果修改了这个，则需要重新编译一次trt-llm，保证两者输入数据集长度统一。
+     - 测量huggingface模型
 
-    - 测量trt-llm模型 (注意：`--trt_max_batch_size`不应该超过build时候定义的最大batch_size，否则会出现内存错误。)
+     ```bash
+     python3 benchmark.py --backend=hf --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --hf_max_batch_size=1
+     ```
 
-    ```bash
-    python3 benchmark.py --backend=trt_llm --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --trt_max_batch_size=1
-    ```
+     - 测量trt-llm模型 (注意：`--trt_max_batch_size`不应该超过build时候定义的最大batch_size，否则会出现内存错误。)
 
-14. 尝试终端对话（可选）。运行下面的命令，然后输入你的问题，直接回车即可。
+     ```bash
+     python3 benchmark.py --backend=trt_llm --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --trt_max_batch_size=1
+     ```
 
-    ```bash
-    python3 cli_chat.py
-    ```
-15. 部署api，并调用api进行对话（可选）。
+13. 尝试终端对话（可选）。运行下面的命令，然后输入你的问题，直接回车即可。
 
-    - 部署api
+     ```bash
+     python3 cli_chat.py
+     ```
 
-    ```bash
-    python3 api.py
-    ```
+14. 部署api，并调用api进行对话（可选）。
 
-    - 另开一个终端，进入`qwen/client`目录，里面有4个文件，分别代表不同的调用方式。
-    - `async_client.py`，通过异步的方式调用api，通过SSE协议来支持流式输出。
-    - `normal_client.py`，通过同步的方式调用api，为常规的HTTP协议，Post请求，不支持流式输出，请求一次需要等模型生成完所有文字后，才能返回。
-    - `openai_normal_client.py`，通过`openai`模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。
-    - `openai_stream_client.py`，通过`openai`模块直接调用自己部署的api，该示例为流式调用。
-    - 
-16. 尝试网页对话（可选，需要先部署api）。运行下面的命令，然后打开本地浏览器，访问：[http://127.0.0.1:7860](http://127.0.0.1:7860) 即可
+     - 部署api
 
-    ```bash
-    python3 web_demo.py
-    ```
-    - 默认配置的web_demo.py如下：
-    ```python
-    demo.queue().launch(share=False, inbrowser=True)
-    ```
-    - 如果是服务器运行，建议改成这样
-    ```python
-    demo.queue().launch(server_name="0.0.0.0", share=False, inbrowser=False) 
-    ```
-    - web_demo参数说明
-        - `share=True`: 代表将网站穿透到公网，会自动用一个随机的临时公网域名，有效期3天，不过这个选项可能不太安全，有可能造成服务器被攻击，不建议打开。
-        - `inbrowser=True`: 部署服务后，自动打开浏览器，如果是本机，可以打开。如果是服务器，不建议打开，因为服务器也没有谷歌浏览器给你打开。
-        - `server_name="0.0.0.0"`: 允许任意ip访问，适合服务器，然后你只需要输入`http://[你的ip]: 7860`就能看到网页了，如果不开这个选择，默认只能部署的那台机器才能访问。
-        - `share=False`：仅局域网/或者公网ip访问，不会生成公网域名。
-        - `inbrowser=False`： 部署后不打开浏览器，适合服务器。
-17. web_demo运行效果（测试平台：RTX 4080, qwen-7b-chat, int4 weight only)
+     ```bash
+     python3 api.py
+     ```
+
+     - 另开一个终端，进入`qwen/client`目录，里面有4个文件，分别代表不同的调用方式。
+     - `async_client.py`，通过异步的方式调用api，通过SSE协议来支持流式输出。
+     - `normal_client.py`，通过同步的方式调用api，为常规的HTTP协议，Post请求，不支持流式输出，请求一次需要等模型生成完所有文字后，才能返回。
+     - `openai_normal_client.py`，通过`openai`模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。
+     - `openai_stream_client.py`，通过`openai`模块直接调用自己部署的api，该示例为流式调用。
+     - 
+
+15. 尝试网页对话（可选，需要先部署api）。运行下面的命令，然后打开本地浏览器，访问：[http://127.0.0.1:7860](http://127.0.0.1:7860) 即可
+
+     ```bash
+     python3 web_demo.py
+     ```
+     - 默认配置的web_demo.py如下：
+     ```python
+     demo.queue().launch(share=False, inbrowser=True)
+     ```
+     - 如果是服务器运行，建议改成这样
+     ```python
+     demo.queue().launch(server_name="0.0.0.0", share=False, inbrowser=False) 
+     ```
+     - web_demo参数说明
+         - `share=True`: 代表将网站穿透到公网，会自动用一个随机的临时公网域名，有效期3天，不过这个选项可能不太安全，有可能造成服务器被攻击，不建议打开。
+         - `inbrowser=True`: 部署服务后，自动打开浏览器，如果是本机，可以打开。如果是服务器，不建议打开，因为服务器也没有谷歌浏览器给你打开。
+         - `server_name="0.0.0.0"`: 允许任意ip访问，适合服务器，然后你只需要输入`http://[你的ip]: 7860`就能看到网页了，如果不开这个选择，默认只能部署的那台机器才能访问。
+         - `share=False`：仅局域网/或者公网ip访问，不会生成公网域名。
+         - `inbrowser=False`： 部署后不打开浏览器，适合服务器。
+
+16. web_demo运行效果（测试平台：RTX 4080, qwen-7b-chat, int4 weight only)
 
 https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956
 
