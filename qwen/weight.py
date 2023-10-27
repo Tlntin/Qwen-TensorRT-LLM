@@ -75,8 +75,9 @@ def parse_ft_config(ini_file):
 
 def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                  dir_path,
-                 rank=0,
-                 tensor_parallel=1,
+                 mapping=Mapping(),
+                 #rank=0,
+                 #tensor_parallel=1,
                  dtype='float16',
                  share_embedding_table=False,
                  parallel_embedding_table=False,
@@ -174,9 +175,17 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         return x.view(np.float32) if use_smooth_quant else x
 
     # Debug
-    suffix = gen_suffix(rank, use_smooth_quant, quant_per_channel)
+    suffix = gen_suffix(mapping.rank, use_smooth_quant, quant_per_channel)
     # The type of weights.
     w_type = np_dtype if not use_smooth_quant else np.int8
+
+    if mapping.is_first_pp_rank():
+        tensorrt_llm_qwen.vocab_embedding.weight.value = (fromfile(
+            dir_path, 'vocab_embedding.weight.bin', [vocab_size, hidden_size]))
+
+    if mapping.is_last_pp_rank():
+        tensorrt_llm_qwen.ln_f.weight.value = (fromfile(
+            dir_path, 'ln_f.weight.bin'))
 
     # pe = fromfile(dir_path, 'model.wpe.bin', [n_positions, n_embd])
     # if pe is not None:
@@ -196,22 +205,29 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
     # tensorrt_llm_qwen.rope.position_embedding_sin.weight.value = torch_to_numpy(sin_weight)
 
     # breakpoint()
-    vocab_embedding_weight = fromfile(dir_path, 'vocab_embedding.weight.bin',
-                                      [vocab_size, hidden_size])
-    tensorrt_llm_qwen.vocab_embedding.weight.value = vocab_embedding_weight
-
 
     lm_head_weight = fromfile(dir_path, 'lm_head.weight.bin',
-                                  [vocab_size, hidden_size])
-    tensorrt_llm_qwen.lm_head.weight.value = np.ascontiguousarray(
-            split(lm_head_weight, tensor_parallel, rank))
+                              [vocab_size, hidden_size])
 
-    tensorrt_llm_qwen.ln_f.weight.value = fromfile(dir_path, 'ln_f.weight.bin')
+    if vocab_size % mapping.tp_size != 0:
+        # padding
+        vocab_size_padded = tensorrt_llm_qwen.lm_head.out_features * mapping.tp_size
+        pad_width = vocab_size_padded - vocab_size
+        lm_head_weight = np.pad(lm_head_weight, ((0, pad_width), (0, 0)),
+                                'constant',
+                                constant_values=0)
+    if mapping.is_last_pp_rank():
+        tensorrt_llm_qwen.lm_head.weight.value = np.ascontiguousarray(
+            split(lm_head_weight, mapping.tp_size, mapping.tp_rank))
 
-    for i in trange(num_hidden_layers, desc="load weights"):
+    layers_range = list(
+        range(mapping.pp_rank * tensorrt_llm_qwen.num_layers,
+              (mapping.pp_rank + 1) * tensorrt_llm_qwen.num_layers, 1))
+
+    for i in layers_range:
         c_attn_out_dim = (3 * hidden_size //
-                          tensor_parallel) if not multi_query_mode else (
-                              hidden_size // tensor_parallel +
+                          mapping.tp_size) if not multi_query_mode else (
+                              hidden_size // mapping.tp_size +
                               (hidden_size // num_hidden_layers) * 2)
 
         tensorrt_llm_qwen.layers[i].ln_1.weight.value = fromfile(
@@ -241,7 +257,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                     [1, c_attn_out_dim],
                     quant_per_token_dyn,
                     quant_per_channel,
-                    rank=rank,
+                    rank=mapping.rank,
                     is_qkv=True)
             elif use_weight_only:
                 # t = np.ascontiguousarray(np.transpose(t, [1, 0]))
@@ -258,14 +274,14 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         dst = tensorrt_llm_qwen.layers[i].attention.qkv.bias
         t = fromfile(
             dir_path, 'model.layers.' + str(i) +
-            '.attention.qkv.bias.' + str(rank) + '.bin', [c_attn_out_dim])
+            '.attention.qkv.bias.' + str(mapping.rank) + '.bin', [c_attn_out_dim])
         dst.value = np.ascontiguousarray(t)
 
         dst = tensorrt_llm_qwen.layers[i].attention.dense.weight
         t = fromfile(
             dir_path,
             'model.layers.' + str(i) + '.attention.dense.weight.' + suffix,
-            [hidden_size // tensor_parallel, hidden_size], w_type)
+            [hidden_size // mapping.tp_size, hidden_size], w_type)
         if use_smooth_quant:
             dst.value = sq_trick(np.ascontiguousarray(np.transpose(t, [1, 0])))
             dense_scale = getattr(tensorrt_llm_qwen.layers[i].attention,
@@ -281,7 +297,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                 tensorrt_llm_qwen.layers[i].attention.dense,
                 dir_path,
                 'model.layers.' + str(i) + '.attention.dense',
-                [1, hidden_size // tensor_parallel], rank
+                [1, hidden_size // mapping.tp_size], mapping.rank
             )
             
         elif use_weight_only:
@@ -299,7 +315,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         t = fromfile(
             dir_path,
             'model.layers.' + str(i) + '.mlp.w1.weight.' + suffix,
-            [hidden_size, inter_size // tensor_parallel // 2],
+            [hidden_size, inter_size // mapping.tp_size // 2],
             w_type
         )
         if use_smooth_quant:
@@ -310,10 +326,10 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                 tensorrt_llm_qwen.layers[i].ln_2.scale_to_int,
                 dir_path,
                 'model.layers.' + str(i) + '.mlp.w1.',
-                [1, inter_size // tensor_parallel//2],
+                [1, inter_size // mapping.tp_size//2],
                 quant_per_token_dyn,
                 quant_per_channel,
-                rank=rank
+                rank=mapping.rank
             )
         elif use_weight_only:
             dst = tensorrt_llm_qwen.layers[i].mlp.w1.weight
@@ -331,7 +347,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         t = fromfile(
             dir_path,
             'model.layers.' + str(i) + '.mlp.w2.weight.' + suffix,
-            [hidden_size, inter_size // tensor_parallel//2], w_type)
+            [hidden_size, inter_size // mapping.tp_size//2], w_type)
         if use_smooth_quant:
             tensorrt_llm_qwen.layers[i].mlp.w2.weight.value = sq_trick(
                 np.ascontiguousarray(np.transpose(t, [1, 0])))
@@ -340,10 +356,10 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                 tensorrt_llm_qwen.layers[i].ln_2.scale_to_int,
                 dir_path,
                 'model.layers.' + str(i) + '.mlp.w2.',
-                [1, inter_size // tensor_parallel//2],
+                [1, inter_size // mapping.tp_size//2],
                 quant_per_token_dyn,
                 quant_per_channel,
-                rank=rank
+                rank=mapping.rank
             )
         elif use_weight_only:
             dst = tensorrt_llm_qwen.layers[i].mlp.w2.weight
@@ -361,7 +377,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
         t = fromfile(
             dir_path,
             'model.layers.' + str(i) + '.mlp.c_proj.weight.' + suffix,
-            [inter_size // tensor_parallel // 2, hidden_size],
+            [inter_size // mapping.tp_size // 2, hidden_size],
             w_type
         )
         if use_smooth_quant:
@@ -377,7 +393,7 @@ def load_from_ft(tensorrt_llm_qwen: QWenForCausalLM,
                 tensorrt_llm_qwen.layers[i].mlp.c_proj,
                 dir_path,
                 'model.layers.' + str(i) + '.mlp.c_proj',
-                [1, inter_size // tensor_parallel // 2], rank
+                [1, inter_size // mapping.tp_size // 2], mapping.rank
             )
         elif use_weight_only:
             dst = tensorrt_llm_qwen.layers[i].mlp.c_proj.weight

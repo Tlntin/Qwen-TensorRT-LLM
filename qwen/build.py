@@ -127,7 +127,7 @@ def parse_arguments():
     parser.add_argument(
         '--ft_dir_path',
         type=str,
-        default=os.path.join(default_config.ft_dir_path, "1-gpu"),
+        default=default_config.ft_dir_path,
     )
     parser.add_argument(
         '--dtype',
@@ -460,8 +460,9 @@ def build_rank_engine(builder: Builder,
             QuantMode.use_weight_only(use_int4_weights=True)
         )
 
+    ft_dir_path = os.path.join(args.ft_dir_path, str(args.tp_size) + "-gpu")
     if args.hf_model_dir is not None and \
-        (args.ft_dir_path is None or not os.path.exists(args.ft_dir_path)):
+        (ft_dir_path is None or not os.path.exists(ft_dir_path)):
         logger.info(f'Loading HF QWen ... from {args.hf_model_dir}')
         tik = time.time()
         hf_qwen = AutoModelForCausalLM.from_pretrained(
@@ -489,13 +490,15 @@ def build_rank_engine(builder: Builder,
             multi_query_mode=multi_query_mode
         )
         del hf_qwen
-    elif args.ft_dir_path is not None:
-        dir_path = args.ft_dir_path
+    elif ft_dir_path is not None:
+        dir_path = ft_dir_path
+        logger.info(f'Loading FT QWen ... from {ft_dir_path}')
         load_from_ft(
             tensorrt_llm_qwen,
             dir_path,
-            rank,
-            args.world_size,
+            mapping,
+            #rank,
+            #args.world_size,
             dtype=args.dtype,
             multi_query_mode=multi_query_mode
         )
