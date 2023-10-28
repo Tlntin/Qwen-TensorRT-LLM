@@ -2,20 +2,18 @@
 ##### 准备工作
 1. 进入examples/gpt目录
 ```bash
-cd tensorrt_llm_july-release-v1/examples/gpt
+cd /app/tensorrt_llm/examples/gpt
 ```
 
 2. 安装3个基本py模块，否则会报错。
 ```bash
-pip install datasets
-pip install nltk
-pip install rouge_score
+pip install datasets nltk rouge_score
 ```
 3. 从huggingface下载模型到服务器，然后将其移动到examples/gpt目录下，并且重命名为gpt2
 ```bash
 git lfs install
 git clone https://huggingface.co/gpt2-medium
-mv gpt2-medium tensorrt_llm_july-release-v1/examples/gpt/gpt2
+mv gpt2-medium /app/tensorrt_llm/examples/gptgpt2
 ```
 
 4. 针对`网络不好`的用户，可以通过百度网盘下载对应数据集，然后根据里面的使用说明将其解压到huggingface的cache路径。

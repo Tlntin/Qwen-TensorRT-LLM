@@ -674,7 +674,7 @@ TensorRT-LLM beam 0 result
 </ul>
 </details>
 
-### 送分题答案 | [操作步骤](SEND_POINT_README.md)
+### 送分题答案 | [操作步骤](./docs/SEND_POINT_README.md)
 <details><summary>点击这里展开/折叠内容</summary>
 <ol>
 <li>第一题。</li>
