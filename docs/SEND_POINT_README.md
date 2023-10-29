@@ -62,7 +62,5 @@ python3 summarize.py --engine_dir trt_engine/gpt2/fp16/1-gpu \
                      --batch_size 1 \
                      --test_trt_llm \
                      --hf_model_location=gpt2 \
-                     --check_accuracy \
-                     --dataset_path="ccdv/cnn_dailymail" \
-                     --tensorrt_llm_rouge1_threshold=14
+                     --check_accuracy
 ```
