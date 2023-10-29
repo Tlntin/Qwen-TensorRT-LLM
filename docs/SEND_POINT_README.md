@@ -13,7 +13,7 @@ pip install datasets nltk rouge_score
 ```bash
 git lfs install
 git clone https://huggingface.co/gpt2-medium
-mv gpt2-medium /app/tensorrt_llm/examples/gptgpt2
+mv gpt2-medium /app/tensorrt_llm/examples/gpt/gpt2
 ```
 
 4. 针对`网络不好`的用户，可以通过百度网盘下载对应数据集，然后根据里面的使用说明将其解压到huggingface的cache路径。
