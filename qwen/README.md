@@ -114,7 +114,7 @@ python build.py --hf_model_dir ./tmp/Qwen/14B \
 
 
 #### INT8 weight only + INT8 KV cache
-For INT8 KV cache, [`hf_Qwen_convert.py`](./hf_Qwen_convert.py) features a
+For INT8 KV cache, [`hf_qwen_convert.py`](./hf_qwen_convert.py) features a
 `--calibrate-kv-cache, -kv` option. Setting `-kv` will calibrate the model,
 and then export the scaling factors needed for INT8 KV cache inference.
 
