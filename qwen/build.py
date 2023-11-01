@@ -521,11 +521,13 @@ def build_rank_engine(builder: Builder,
         #     tensorrt_llm_qwen = fp8_quantize(tensorrt_llm_qwen,
         #                                       quant_mode=args.quant_mode,
         #                                       quant_scales=quant_scales)
- 
-
-    ft_dir_path = os.path.join(args.ft_dir_path, str(args.tp_size) + "-gpu")
+    if not args.ft_dir_path.rstrip("/").endswith("-gpu"):
+        ft_dir_path = os.path.join(args.ft_dir_path, str(args.tp_size) + "-gpu")
+    else:
+        ft_dir_path = args.ft_dir_path
     if args.hf_model_dir is not None and \
         (ft_dir_path is None or not os.path.exists(ft_dir_path)):
+        print("\033[33m", ft_dir_path, "not exists, will get weight from qwen local", "\033[0m")
         logger.info(f'Loading HF QWen ... from {args.hf_model_dir}')
         tik = time.time()
         hf_qwen = AutoModelForCausalLM.from_pretrained(
