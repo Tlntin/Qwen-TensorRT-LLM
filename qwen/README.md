@@ -25,7 +25,22 @@ The TensorRT-LLM Qwen example code locates at [examples/Qwen](./). It takes HF w
 
 ### Build TensorRT engine(s)
 
-Need to prepare the HF Qwen checkpoint first by following the guides here [qwen-7b-chat](https://huggingface.co/Qwen/Qwen-7B-Chat) or [qwen-14b-chat](https://huggingface.co/Qwen/Qwen-14B-Chat)
+Need to prepare the HF Qwen checkpoint first by following the guides here [Qwen-7B-Chat](https://huggingface.co/Qwen/Qwen-7B-Chat) or [Qwen-14B-Chat](https://huggingface.co/Qwen/Qwen-14B-Chat)
+
+Create a `tmp/Qwen` directory to store the weights downloaded from huaggingface.
+```bash
+mkdir -p ./tmp/Qwen
+```
+
+Store Qwen-7B-Chat or Qwen-14B-Chat separately.
+- for Qwen-7B-Chat
+```bash
+mv Qwen-7B-Chat ./tmp/Qwen/7B
+```
+- for Qwen-14B-Chat
+```
+mv Qwen-14B-Chat ./tmp/Qwen/14B
+```
 
 TensorRT-LLM Qwen builds TensorRT engine(s) from HF checkpoint. If no checkpoint directory is specified, TensorRT-LLM will build engine(s) with dummy weights.
 
