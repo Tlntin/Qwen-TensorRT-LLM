@@ -1,3 +1,4 @@
+### [README FOR ENGLISH](qwen/README.md)
 ### 总述
 <details>
   <summary>点击这里展开/折叠内容</summary>
@@ -56,7 +57,7 @@
     ```
 
 3. 由于现在还没有现成的TensorRT-LLM docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/release/0.5.0/docs/source/installation.md)，也可以直接用下面的命令直接编译（已有编译好的镜像可以跳过该步骤）。
-    - 手动编译（推荐）
+    - 手动编译
     ```bash
     # 拉取TensorRT-LLM仓库
     git submodule update --init --recursive
@@ -69,6 +70,10 @@
     
     # 然后返回到项目路径
     cd ../..
+    ```
+    - 官方镜像（推荐），需要手动安装trt-llm python包，详细使用可以参考[该教程](https://zhuanlan.zhihu.com/p/664545577)
+    ```bash
+    docker pull nvcr.io/nvidia/tritonserver:23.10-trtllm-python-py3
     ```
     - 拉取编译好的镜像（仅在RTX 3090上面测试，不保证其他显卡可用，不过理论上30系/40系应该都可以）
     ```bash
