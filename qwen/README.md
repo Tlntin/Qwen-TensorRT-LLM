@@ -242,7 +242,17 @@ python3 run.py --max_new_tokens=50 \
 # With bf16 inference
 python3 run.py --max_new_tokens=50 \
                --tokenizer_dir ./tmp/Qwen/7B/ \
-               --engine_dir=./tmp/Qwen/7B/trt_engines/bf16/1-gpu/
+               --engine_dir=./tmp/Qwen/7B/trt_engines/bf16/1-gpu
+
+# With int8 weight only inference
+python3 run.py --max_new_tokens=50 \
+               --tokenizer_dir ./tmp/Qwen/7B/ \
+               --engine_dir=./tmp/Qwen/7B/trt_engines/int8_weight_only/1-gpu/
+
+# With int4 weight only inference
+python3 run.py --max_new_tokens=50 \
+               --tokenizer_dir ./tmp/Qwen/7B/ \
+               --engine_dir=./tmp/Qwen/7B/trt_engines/int4_weight_only/1-gpu/
 ```
 
 ### Summarization using the Qwen model
