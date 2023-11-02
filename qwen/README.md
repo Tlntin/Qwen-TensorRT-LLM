@@ -103,6 +103,19 @@ python build.py --hf_model_dir ./tmp/Qwen/7B/ \
                 --world_size 2 \
                 --tp_size 2
 
+# Build Qwen 7B using 2-way tensor parallelism and apply INT4 weight-only quantization..
+python build.py --hf_model_dir ./tmp/Qwen/7B/ \
+                --dtype float16 \
+                --remove_input_padding \
+                --use_gpt_attention_plugin float16 \
+                --enable_context_fmha \
+                --use_gemm_plugin float16 \
+                --use_weight_only \
+                --weight_only_precision int4 \
+                --output_dir ./tmp/Qwen/7B/trt_engines/int4_weight_only/2-gpu/ \
+                --world_size 2 \
+                --tp_size 2
+
 # Build Qwen 7B using 2-way tensor parallelism and 2-way pipeline parallelism.
 python build.py --hf_model_dir ./tmp/Qwen/7B/ \
                 --dtype float16 \
@@ -247,6 +260,12 @@ python3 run.py --max_new_tokens=50 \
                --tokenizer_dir ./tmp/Qwen/7B/ \
                --engine_dir=./tmp/Qwen/7B/trt_engines/fp16/1-gpu/
 
+# With fp16 inference two gpus
+mpirun -n 2 --allow-run-as-root  \
+    python3 run.py --max_new_tokens=50 \
+               --tokenizer_dir ./tmp/Qwen/7B/ \
+               --engine_dir=./tmp/Qwen/7B/trt_engines/fp16/2-gpu/
+
 # With bf16 inference
 python3 run.py --max_new_tokens=50 \
                --tokenizer_dir ./tmp/Qwen/7B/ \
@@ -261,6 +280,12 @@ python3 run.py --max_new_tokens=50 \
 python3 run.py --max_new_tokens=50 \
                --tokenizer_dir ./tmp/Qwen/7B/ \
                --engine_dir=./tmp/Qwen/7B/trt_engines/int4_weight_only/1-gpu/
+
+# With int4 weight only inference use two gpus
+mpirun -n 2 --allow-run-as-root  \
+    python3 run.py --max_new_tokens=50 \
+               --tokenizer_dir ./tmp/Qwen/7B/ \
+               --engine_dir=./tmp/Qwen/7B/trt_engines/int4_weight_only/2-gpu/
 ```
 
 ### Summarization using the Qwen model
