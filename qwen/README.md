@@ -21,7 +21,7 @@ The TensorRT-LLM Qwen implementation can be found in [model.py](model.py). The T
 
 ## Usage
 
-The TensorRT-LLM Qwen example code locates at [examples/Qwen](./). It takes HF weights as input, and builds the corresponding TensorRT engines. The number of TensorRT engines depends on the number of GPUs used to run inference.
+The TensorRT-LLM Qwen example code locates at [examples/qwen](./). It takes HF weights as input, and builds the corresponding TensorRT engines. The number of TensorRT engines depends on the number of GPUs used to run inference.
 
 ### Build TensorRT engine(s)
 
@@ -209,6 +209,7 @@ Examples of build invocations:
 # Build model for SmoothQuant in the _per_tensor_ mode.
 python3 build.py --ft_dir_path=./tmp/Qwen/7B/sq0.5/1-gpu/ \
                  --use_smooth_quant \
+                 --hf_model_dir ./tmp/Qwen/7B \
                  --output_dir ./tmp/Qwen/7B/trt_engines/sq0.5/1-gpu/
 
 # Build model for SmoothQuant in the _per_token_ + _per_channel_ mode
@@ -216,6 +217,7 @@ python3 build.py --ft_dir_path=./tmp/Qwen/7B/sq0.5/1-gpu/ \
                  --use_smooth_quant \
                  --per_token \
                  --per_channel \
+                 --hf_model_dir ./tmp/Qwen/7B \
                  --output_dir ./tmp/Qwen/7B/trt_engines/sq0.5/1-gpu/
 ```
 
@@ -226,7 +228,13 @@ python3 run.py --max_new_tokens=50 \
                --engine_dir=./tmp/Qwen/7B/trt_engines/sq0.5/1-gpu/
 ```
 
-Note we use `--ft_model_dir` instead of `--model_dir` and `--meta_ckpt_dir` since SmoothQuant model needs INT8 weights and various scales from the binary files.
+- summarize
+```bash
+python summarize.py --backend=trt_llm \
+                    --tokenizer_dir ./tmp/Qwen/7B/ \
+                    --data_type fp16 \
+                    --engine_dir=./tmp/Qwen/7B/trt_engines/sq0.5/1-gpu/
+```
 
 
 ### Run
@@ -263,6 +271,12 @@ python summarize.py --backend=trt_llm \
                     --tokenizer_dir ./tmp/Qwen/7B/ \
                     --data_type fp16 \
                     --engine_dir ./tmp/Qwen/7B/trt_engines/fp16/1-gpu/
+
+# Run summarization using the Qwen 7B model in BF16.
+python summarize.py --backend=trt_llm \
+                    --tokenizer_dir ./tmp/Qwen/7B/ \
+                    --data_type fp16 \
+                    --engine_dir ./tmp/Qwen/7B/trt_engines/bf16/1-gpu/
 
 # Run summarization using the Qwen 7B model quantized to INT8.
 python summarize.py --backend=trt_llm \
