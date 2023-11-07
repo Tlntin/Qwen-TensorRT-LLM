@@ -120,7 +120,7 @@ with gr.Blocks() as demo:
             top_p = gr.Slider(
                 minimum=0,
                 maximum=1,
-                value=0.5,
+                value=0.8,
                 step=0.1,
                 label="top-p",
                 interactive=True
@@ -128,7 +128,7 @@ with gr.Blocks() as demo:
             temperature = gr.Slider(
                 minimum=0,
                 maximum=1,
-                value=0,
+                value=1,
                 step=0.1,
                 label="temperature",
                 interactive=True

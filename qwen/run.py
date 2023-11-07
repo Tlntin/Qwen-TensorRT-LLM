@@ -367,6 +367,9 @@ def get_model(tokenizer_dir, engine_dir, log_level='error'):
         num_beams=1,
         top_k = top_k,
         top_p = top_p,
+        length_penalty=1,
+        repetition_penalty=1.1,
+        min_length=0,
     )
 
     engine_name = get_engine_name('qwen', dtype, tp_size, pp_size, runtime_rank)

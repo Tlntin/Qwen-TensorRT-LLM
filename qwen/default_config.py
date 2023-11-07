@@ -31,11 +31,11 @@ class DefaultConfig:
     seq_length = 2048
 
     # Top p for sampling.
-    top_p = 0.5
+    top_p = 0.8
 
 
     # Top k for sampling.
-    top_k = 1
+    top_k = 0
 
     # Temperature for sampling.
     temperature = 1.0
