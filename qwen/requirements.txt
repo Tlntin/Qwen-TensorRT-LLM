@@ -11,4 +11,4 @@ gradio==3.40.1
 mdtex2html
 sse_starlette
 aiohttp_sse_client
-openai
+openai==1.1.1

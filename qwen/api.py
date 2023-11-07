@@ -304,7 +304,7 @@ async def predict(query: str, system: str, history: List[List[str]], max_new_tok
         object="chat.completion.chunk",
     )
     yield "{}".format(
-        chunk.json(exclude_unset=True, ensure_ascii=False)
+        chunk.model_dump_json(exclude_unset=True)
     )
     # print("Debug system", system)
     # print("Debug query", query)
@@ -331,7 +331,7 @@ async def predict(query: str, system: str, history: List[List[str]], max_new_tok
             object="chat.completion.chunk",
         )
         yield "{}".format(
-            chunk.json(exclude_unset=True, ensure_ascii=False)
+            chunk.model_dump_json(exclude_unset=True)
         )
 
     choice_data = ChatCompletionResponseStreamChoice(
@@ -343,7 +343,7 @@ async def predict(query: str, system: str, history: List[List[str]], max_new_tok
         object="chat.completion.chunk",
     )
     yield "{}".format(
-        chunk.json(exclude_unset=True, ensure_ascii=False)
+        chunk.model_dump_json(exclude_unset=True)
     )
     yield "[DONE]"
 

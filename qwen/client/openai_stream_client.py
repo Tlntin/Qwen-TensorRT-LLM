@@ -1,6 +1,9 @@
-import openai
-openai.api_base = "http://localhost:8000/v1"
-openai.api_key = ""
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:8000/v1",
+    api_key="no api"
+)
  
  
 messages = [{"role": "system", "content": "You are a helpful assistant."}]
@@ -13,7 +16,7 @@ while True:
         messages = messages[:1]
         continue
     messages.append({"role": "user", "content": prompt})
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=messages,
         top_p=0.5,
@@ -25,7 +28,10 @@ while True:
     print("ChatBot：", end='', flush=True)
     response_text = ""
     for event in response:
-        event_text = event['choices'][0]['delta'].get("content", "")  # extract the text
+        # print(event)
+        event_text = event.choices[0].delta.content  # extract the text
+        if event_text is None:
+            event_text = ""
         response_text += event_text
         print(event_text, end='', flush=True)
     messages.append({"role": "assistant", "content": response_text})
