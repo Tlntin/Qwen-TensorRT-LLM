@@ -2,10 +2,13 @@ import os
 import gradio as gr
 import mdtex2html
 from default_config import default_config
+from openai import OpenAI
 
-import openai
-openai.api_base = "http://localhost:8000/v1"
-openai.api_key = ""
+
+client = OpenAI(
+    base_url="http://localhost:8000/v1",
+    api_key="no api"
+)
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -67,7 +70,8 @@ def predict(input_text, chatbot, top_p, temperature, max_generate_length, histor
     messages.append({"role": "user", "content": input_text})
     chatbot.append((parse_text(input_text), ""))
     history.append((input_text, ""))
-    response = openai.ChatCompletion.create(
+    
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=messages,
         top_p=top_p,
@@ -78,7 +82,9 @@ def predict(input_text, chatbot, top_p, temperature, max_generate_length, histor
     )
     response_text = ""
     for event in response:
-        event_text = event['choices'][0]['delta'].get("content", "")  # extract the text
+        event_text = event.choices[0].delta.content  # extract the text
+        if event_text is None:
+            event_text = ""
         response_text += event_text
         chatbot[-1] = (parse_text(input_text), parse_text(response_text))
         history[-1] = (input_text, response_text)
