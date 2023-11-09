@@ -27,7 +27,7 @@ from tensorrt_llm.network import net_guard
 from tensorrt_llm.plugin.plugin import ContextFMHAType
 from tensorrt_llm.quantization import QuantMode
 from tensorrt_llm.mapping import Mapping
-from weight import load_from_hf_qwen, load_from_ft
+from weight import load_from_hf_qwen, load_from_ft, load_from_gptq_qwen
 from utils.quantization import smooth_quantize
 from default_config import default_config
 
@@ -135,6 +135,11 @@ def parse_arguments():
         "--hf_model_dir",
         type=str,
         default=default_config.hf_model_dir,
+    )
+    parser.add_argument(
+        "--quant_ckpt_path",
+        type=str,
+        default=None,
     )
     parser.add_argument(
         "--ft_dir_path",
@@ -250,6 +255,12 @@ def parse_arguments():
         "per_group chooses at run time, and for each group, a custom scaling factor. "
         "The flag is built for GPTQ/AWQ quantization.",
     )
+    parser.add_argument(
+        "--group_size",
+        type=int,
+        default=128,
+        help="group size used in gptq/awq quantization.",
+    )
 
     parser.add_argument(
         "--add_plugins",
@@ -274,7 +285,7 @@ def parse_arguments():
         type=str,
         nargs="?",
         default="int8",
-        choices=["int8", "int4"],
+        choices=["int8", "int4", "int4_gptq"],
         help="Define the precision for the weights when using weight-only quantization."
         "You must also use --use_weight_only for that argument to have an impact.",
     )
@@ -375,6 +386,7 @@ def parse_arguments():
 
     if args.use_smooth_quant:
         args.quant_mode = QuantMode.use_smooth_quant(args.per_token, args.per_channel)
+
     elif args.use_weight_only:
         if args.per_group:
             args.quant_mode = QuantMode.from_description(
@@ -534,11 +546,23 @@ def build_rank_engine(
         #     tensorrt_llm_qwen = fp8_quantize(tensorrt_llm_qwen,
         #                                       quant_mode=args.quant_mode,
         #                                       quant_scales=quant_scales)
+
     if not args.ft_dir_path.rstrip("/").endswith("-gpu"):
         ft_dir_path = os.path.join(args.ft_dir_path, str(args.tp_size) + "-gpu")
     else:
         ft_dir_path = args.ft_dir_path
-    if args.hf_model_dir is not None and (
+
+    if args.per_group:
+        assert args.weight_only_precision == "int4_gptq"
+
+        load_from_gptq_qwen(
+            tensorrt_llm_qwen=tensorrt_llm_qwen,
+            quant_ckpt_path=args.quant_ckpt_path,
+            mapping=mapping,
+            dtype=args.dtype,
+        )
+
+    elif args.hf_model_dir is not None and (
         ft_dir_path is None or not os.path.exists(ft_dir_path)
     ):
         print(
@@ -571,6 +595,7 @@ def build_rank_engine(
             multi_query_mode=multi_query_mode,
         )
         del hf_qwen
+
     elif ft_dir_path is not None:
         dir_path = ft_dir_path
         logger.info(f"Loading FT QWen ... from {ft_dir_path}")
@@ -650,6 +675,7 @@ def build_rank_engine(
             model_path = os.path.join(args.output_dir, "test.onnx")
             to_onnx(network.trt_network, model_path)
 
+    tensorrt_llm.graph_rewriting.optimize(network)
     engine = None
 
     # Network -> Engine
@@ -675,6 +701,7 @@ def build(rank, args):
         # skip other ranks if parallel_build is enabled
         if args.parallel_build and cur_rank != rank:
             continue
+        # note: when only int8 kv cache is used together with paged kv cache no int8 tensors are exposed to trt
         int8_trt_flag = args.quant_mode.has_act_and_weight_quant() or (
             not args.paged_kv_cache and args.quant_mode.has_int8_kv_cache()
         )
