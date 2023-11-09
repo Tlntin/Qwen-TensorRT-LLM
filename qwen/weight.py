@@ -4,7 +4,6 @@ from pathlib import Path
 import os
 
 from safetensors import safe_open
-from tqdm import trange
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -799,8 +798,8 @@ def load_from_gptq_qwen(
         )
     )
 
-    for l in layers_range:
-        prefix = f"transformer.h.{l}.attn."
+    for layer in tqdm(layers_range, ncols=80, desc="loading attention weight..."):
+        prefix = f"transformer.h.{layer}.attn."
         split_qkv_suf = []
 
         for suf in suffixs:
@@ -830,7 +829,7 @@ def load_from_gptq_qwen(
             split_qkv_suf[2],
         )
 
-        idx = l - mapping.pp_rank * layers_per_pipeline_stage
+        idx = layer - mapping.pp_rank * layers_per_pipeline_stage
         tensorrt_llm_qwen.layers[idx].attention.qkv.qweight.value = th_qweight.numpy()
         tensorrt_llm_qwen.layers[idx].attention.qkv.bias.value = th_bias.numpy()
         tensorrt_llm_qwen.layers[idx].attention.qkv.scale.value = th_zero.numpy()
@@ -838,7 +837,7 @@ def load_from_gptq_qwen(
 
     torch_dtype = str_dtype_to_torch(dtype)
 
-    for k, v in model_params.items():
+    for k, v in tqdm(model_params.items(), ncols=80, desc="loading other weight..."):
         if isinstance(v, list):
             v = [torch_to_numpy(vv.to(torch_dtype).detach().cpu()) for vv in v]
         else:

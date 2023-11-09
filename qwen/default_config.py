@@ -5,6 +5,7 @@ class DefaultConfig:
     now_dir = os.path.dirname(os.path.abspath(__file__))
     hf_model_dir = os.path.join(now_dir, "qwen_7b_chat")
     tokenizer_dir = os.path.join(now_dir, "qwen_7b_chat")
+    int4_gptq_model_dir = os.path.join(now_dir, "qwen_7b_chat_int4")
     ft_dir_path = os.path.join(now_dir, "c-model", "qwen_7b_chat")
     engine_dir=os.path.join(now_dir, "trt_engines", "fp16", "1-gpu")
 

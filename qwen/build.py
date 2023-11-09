@@ -139,7 +139,10 @@ def parse_arguments():
     parser.add_argument(
         "--quant_ckpt_path",
         type=str,
-        default=None,
+        default=os.path.join(
+            default_config.int4_gptq_model_dir,
+            "gptq_model-4bit-128g.safetensors",
+        ),
     )
     parser.add_argument(
         "--ft_dir_path",

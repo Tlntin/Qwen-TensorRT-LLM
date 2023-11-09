@@ -278,7 +278,22 @@ python3 hf_qwen_convert.py --calibrate-kv-cache
 ```bash
 python3 build.py --use_weight_only --weight_only_precision=int8 --int8_kv_cache
 ```
-
+##### 运行指南（int4-gptq篇）
+1. 需要安装[auto-gptq](https://github.com/PanQiWei/AutoGPTQ)模块，并且升级transformers模块版本，最低要求4.32.0。（注：安装完模块后可能会提示tensorrt_llm与其他模块版本不兼容，可以忽略该警告）
+```bash
+pip install auto-gptq
+pip install transformers -U
+```
+2. 转权重获取scale相关信息，考虑到int4用户一般没有足够显存，所以用cpu方式加载模型并转换。
+```bash
+python3 gptq_cpu_convert.py
+```
+3. 编译TensorRT-LLM Engine
+```bash
+python build.py --use_weight_only \
+                --weight_only_precision int4_gptq \
+                --per_group
+```
 ### 主要开发工作
 
 ##### 开发工作的难点
