@@ -26,6 +26,9 @@
 
 ### 更新说明
 
+#### 2023/11/09 更新
+1. 新增int4-gptq支持，感谢[@Sanster](https://github.com/Sanster)的贡献。
+
 #### 2023/10/25更新
 
 1. 更新TensorRT-LLM底层，从2023年7月份比赛专用版更新到10月份发布的release/0.5.0版。
