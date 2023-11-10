@@ -259,9 +259,9 @@ pip install transformers -U
 
 2. Weight quantization
 ```bash
-python3 gptq_cpu_convert.py --hf_model_dir ./tmp/Qwen/7B \
-							--tokenizer_dir ./tmp/Qwen/7B \
-                 			--quant_ckpt_path ./tmp/Qwen/7B/int4-gptq
+python3 gptq_convert.py --hf_model_dir ./tmp/Qwen/7B \
+                        --tokenizer_dir ./tmp/Qwen/7B \
+                        --quant_ckpt_path ./tmp/Qwen/7B/int4-gptq
 ```
 
 3. Build TRT-LLM engine:

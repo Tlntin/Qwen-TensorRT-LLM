@@ -284,9 +284,9 @@ python3 build.py --use_weight_only --weight_only_precision=int8 --int8_kv_cache
 pip install auto-gptq
 pip install transformers -U
 ```
-2. 转权重获取scale相关信息，考虑到int4用户一般没有足够显存，所以用cpu方式加载模型并转换。
+2. 转权重获取scale相关信息，默认使用GPU进行校准，需要能够完整加载模型。（注：对于Qwen-7B-Chat V1.0，可以加上`--device=cpu`来尝试用cpu标定，但是时间会很长）
 ```bash
-python3 gptq_cpu_convert.py
+python3 gptq_convert.py
 ```
 3. 编译TensorRT-LLM Engine
 ```bash
