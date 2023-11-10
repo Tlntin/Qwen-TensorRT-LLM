@@ -65,6 +65,7 @@ if args.use_inflight_batching:
 ```
 - 下面是一个简单示例（以smooth quant int8量化为例）：
 ```bash
+python3 hf_qwen_convert.py --smoothquant=0.5
 python3 build.py \
 	--use_smooth_quant \
 	--per_token \
