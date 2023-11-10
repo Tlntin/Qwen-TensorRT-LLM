@@ -209,18 +209,18 @@
 
 14. 部署api，并调用api进行对话（可选）。
 
-     - 部署api
+      - 部署api
 
-     ```bash
-     python3 api.py
-     ```
+      ```bash
+      python3 api.py
+      ```
 
-     - 另开一个终端，进入`qwen/client`目录，里面有4个文件，分别代表不同的调用方式。
-     - `async_client.py`，通过异步的方式调用api，通过SSE协议来支持流式输出。
-     - `normal_client.py`，通过同步的方式调用api，为常规的HTTP协议，Post请求，不支持流式输出，请求一次需要等模型生成完所有文字后，才能返回。
-     - `openai_normal_client.py`，通过`openai`模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。
-     - `openai_stream_client.py`，通过`openai`模块直接调用自己部署的api，该示例为流式调用。
-     - 
+      - 另开一个终端，进入`qwen/client`目录，里面有4个文件，分别代表不同的调用方式。
+      - `async_client.py`，通过异步的方式调用api，通过SSE协议来支持流式输出。
+      - `normal_client.py`，通过同步的方式调用api，为常规的HTTP协议，Post请求，不支持流式输出，请求一次需要等模型生成完所有文字后，才能返回。
+      - `openai_normal_client.py`，通过`openai`模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。
+      - `openai_stream_client.py`，通过`openai`模块直接调用自己部署的api，该示例为流式调用。
+      - 注意：需要`pydantic`模块版本>=2.3.2，否则将会出现`ChatCompletionResponse' object has no attribute 'model_dump_json'`报错，参考[issue](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/issues/27)
 
 15. 尝试网页对话（可选，需要先部署api）。运行下面的命令，然后打开本地浏览器，访问：[http://127.0.0.1:7860](http://127.0.0.1:7860) 即可
 
