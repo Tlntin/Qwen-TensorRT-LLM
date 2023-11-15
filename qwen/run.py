@@ -3,7 +3,7 @@ import csv
 import json
 import os
 from pathlib import Path
-from typing import List, Union
+from typing import List, Union, Optional
 import numpy as np
 import torch
 # for debug
@@ -113,6 +113,7 @@ class QWenForCausalLMGenerationSession(GenerationSession):
         sampling_config: SamplingConfig,
         max_new_tokens: int,
         runtime_rank: int = 0,
+        stop_works_list: Optional[torch.Tensor] = None
     ):
         max_input_length = torch.max(input_lengths).item()
         max_new_tokens = min(
@@ -126,7 +127,10 @@ class QWenForCausalLMGenerationSession(GenerationSession):
             max_new_tokens=max_new_tokens
         )
         output_ids = self.decode(
-            input_ids, input_lengths, sampling_config
+            input_ids,
+            input_lengths,
+            sampling_config,
+            # stop_words_list=stop_works_list
         )
         with torch.no_grad():
             torch.cuda.synchronize()
