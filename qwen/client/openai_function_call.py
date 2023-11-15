@@ -25,7 +25,7 @@ class Weather:
     def get_location_from_api(self, location, adm=None,
                               location_range="world", lang="zh"):
         """
-        Get api based on Japanese weather
+        Get api based on https:dev.qweather.com
         params location: the location to be queried
         params adm: superior region, for example, the superior region of Yuexiu is Guangzhou
         params location_range: query range, default global, supports cn: China, us: United States, fr: France,
