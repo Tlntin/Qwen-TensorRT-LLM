@@ -27,7 +27,7 @@
 ### 更新说明
 
 #### 2023/11/16 更新
-1. api.py新增function call功能，同时新增天气查询demo,放在[qwen/client/openai_function_call.py](qwen/client/openai_function_call.py)目录。（注意：天气api需要自己去和风天气申请，网站：https://dev.qweather.com/ ）
+1. api.py新增function call功能，同时新增天气查询demo,代码在[qwen/client/openai_function_call.py](qwen/client/openai_function_call.py)。（注意：天气api需要自己去和风天气申请，网站：https://dev.qweather.com/ ）
 - ![测试案例1](./images/function_call_001.jpg)
 - ![测试案例2](./images/function_call_002.jpg)
 
