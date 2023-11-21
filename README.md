@@ -27,7 +27,8 @@
 ### 更新说明
 
 #### 2023/11/21 更新
-1. 新增chatglm2-6b模型支持，相比社区版本增加了tp支持，适用于chatglm2-6b和chatglm3-6b，[文档链接](./chatglm2-6b/README.md)
+1. 新增chatglm2-6b模型支持，相比社区版本增加了tp支持，适用于chatglm2-6b和chatglm3-6b，[文档链接](./chatglm2-6b/README.md)。
+2. 待优化：glm2/3使用的是GQA，但是现在的计算方式退化成了MHA，猜测原因是glm2实现的时候gpt attention plugin还不支持gqa，可以说是遗留问题，可以参考llama 80B的实现，直接使用GQA，加速计算。
    
 #### 2023/11/16 更新
 1. api.py新增function call功能，同时新增天气查询demo,代码在[qwen/client/openai_function_call.py](qwen/client/openai_function_call.py)。（注意：天气api需要自己去和风天气申请，网站：https://dev.qweather.com/ ）
