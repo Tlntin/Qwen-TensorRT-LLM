@@ -389,6 +389,7 @@ class QWenAttention(Module):
 
         assert isinstance(hidden_states, Tensor)
         qkv = self.qkv(hidden_states)
+        # self.register_network_output("my_qkv", identity_op(qkv))
 
         """
         # 2023.09.19

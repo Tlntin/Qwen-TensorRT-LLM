@@ -29,7 +29,7 @@
 #### 2023/11/21 更新
 1. 新增chatglm2-6b模型支持，相比社区版本增加了tp支持，适用于chatglm2-6b和chatglm3-6b，[文档链接](./chatglm2-6b/README.md)。
 2. 待优化：glm2/3使用的是GQA，但是现在的计算方式退化成了MHA，猜测原因是glm2实现的时候gpt attention plugin还不支持gqa，可以说是遗留问题，可以参考llama 80B的实现，直接使用GQA，加速计算。
-   
+3. 新增int4-awq支持，用于Qwen-xx-chat。
 #### 2023/11/16 更新
 1. api.py新增function call功能，同时新增天气查询demo,代码在[qwen/client/openai_function_call.py](qwen/client/openai_function_call.py)。（注意：天气api需要自己去和风天气申请，网站：https://dev.qweather.com/ ）
 - ![测试案例1](./images/function_call_001.jpg)
@@ -302,6 +302,68 @@ python3 gptq_convert.py
 python build.py --use_weight_only \
                 --weight_only_precision int4_gptq \
                 --per_group
+```
+4. 如果想要节省显存（注：只能用于单batch），可以试试加上这俩参数来编译Engine
+```bash
+python build.py --use_weight_only \
+                --weight_only_precision int4_gptq \
+                --per_group \
+                --remove_input_padding \
+                --enable_context_fmha
+```
+
+##### 运行指南（int4-awq篇）
+1. 需要下载并安装[nvidia-ammo](https://developer.nvidia.com/downloads/assets/cuda/files/nvidia-ammo/nvidia_ammo-0.3.0.tar.gz)模块，下面是一个安装代码参考，注意不要安装cuda版，而是安装通用版，否则会有bug。
+```bash
+pip install nvidia_ammo-0.3.0-cp310-cp310-linux_x86_64.whl
+```
+2. 修改ammo代码，加上qwen支持（不加上会报错），下面是一个简单的参考案例：
+- 先在vscode，任意写一个python文件，导入下面的函数
+```python
+from tensorrt_llm.models.quantized.ammo import quantize_and_export
+```
+- 然后contrl + 鼠标左按键，单击`quantize_and_export`函数，查看它的内部实现。
+- 在下面的if判断里面，加上下面这段代码，用来支持Qwen
+```bash
+elif "QWen" in model_cls_name:
+    model_type = "qwen"
+```
+- 修改后长这样：
+```bash
+model_cls_name = type(model).__name__
+if "Llama" in model_cls_name:
+    model_type = "llama"
+elif "GPTJ" in model_cls_name:
+    model_type = "gptj"
+elif "GPT2" in model_cls_name:
+    model_type = "gpt2"
+elif "QWen" in model_cls_name:
+    model_type = "qwen"
+elif "Falcon" in model_cls_name or "RW" in model_cls_name:
+    model_type = "falcon"
+else:
+    raise NotImplementedError(
+        f"Deploying quantized model {model_cls_name} is not supported")
+```
+3. 运行int4-awq量化代码，导出校准权重。
+```bash
+python3 quantize.py --export_path ./qwen_7b_4bit_gs128_awq.pt
+```
+4. 运行build.py，用于构建TensorRT-LLM Engine。
+```bash
+python build.py --use_weight_only \
+                --weight_only_precision int4_awq \
+                --per_group \
+                --quant_ckpt_path ./qwen_7b_4bit_gs128_awq.pt
+```
+5. 如果想要节省显存（注：只能用于单batch），可以试试加上这俩参数来编译Engine
+```bash
+python build.py --use_weight_only \
+                --weight_only_precision int4_awq \
+                --per_group \
+                --remove_input_padding \
+                --enable_context_fmha \
+                --quant_ckpt_path ./qwen_7b_4bit_gs128_awq.pt
 ```
 ### 主要开发工作
 

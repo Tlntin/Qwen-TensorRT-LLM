@@ -27,7 +27,7 @@ from tensorrt_llm.network import net_guard
 from tensorrt_llm.plugin.plugin import ContextFMHAType
 from tensorrt_llm.quantization import QuantMode
 from tensorrt_llm.mapping import Mapping
-from weight import load_from_hf_qwen, load_from_ft, load_from_gptq_qwen
+from weight import load_from_hf_qwen, load_from_ft, load_from_gptq_qwen, load_from_awq_qwen
 from utils.quantization import smooth_quantize
 from default_config import default_config
 
@@ -143,6 +143,14 @@ def parse_arguments():
             default_config.int4_gptq_model_dir,
             "gptq_model-4bit-128g.safetensors",
         ),
+        # default=os.path.join(
+        #     default_config.hf_model_dir,
+        #     "awq_model-4bit-128g.safetensors"
+        # )
+        # default=os.path.join(
+        #     now_dir,
+        #     "qwen_7b_4bit_gs128_awq.pt"
+        # )
     )
     parser.add_argument(
         "--ft_dir_path",
@@ -284,11 +292,11 @@ def parse_arguments():
 
     parser.add_argument(
         "--weight_only_precision",
-        const="int8",
+        const="int4_awq",
         type=str,
         nargs="?",
-        default="int8",
-        choices=["int8", "int4", "int4_gptq"],
+        default="int4_awq",
+        choices=["int8", "int4", "int4_gptq", "int4_awq"],
         help="Define the precision for the weights when using weight-only quantization."
         "You must also use --use_weight_only for that argument to have an impact.",
     )
@@ -523,15 +531,14 @@ def build_rank_engine(
             tensorrt_llm_qwen = weight_only_quantize(tensorrt_llm_qwen, args.quant_mode)
         elif args.weight_only_precision == "int4":
             tensorrt_llm_qwen = weight_only_quantize(tensorrt_llm_qwen, args.quant_mode)
-        elif args.weight_only_precision == "int4_awq":
+        elif args.weight_only_precision == 'int4_awq':
             tensorrt_llm_qwen = weight_only_groupwise_quantize(
                 model=tensorrt_llm_qwen,
                 quant_mode=args.quant_mode,
                 group_size=args.group_size,
                 zero=False,
                 pre_quant_scale=True,
-                exclude_modules=[],
-            )
+                exclude_modules=[])
         elif args.weight_only_precision == "int4_gptq":
             tensorrt_llm_qwen = weight_only_groupwise_quantize(
                 model=tensorrt_llm_qwen,
@@ -556,15 +563,11 @@ def build_rank_engine(
         ft_dir_path = args.ft_dir_path
 
     if args.per_group:
-        assert args.weight_only_precision == "int4_gptq"
-
-        load_from_gptq_qwen(
-            tensorrt_llm_qwen=tensorrt_llm_qwen,
-            quant_ckpt_path=args.quant_ckpt_path,
-            mapping=mapping,
-            dtype=args.dtype,
-        )
-
+        load_func = load_from_awq_qwen if args.weight_only_precision == 'int4_awq' else load_from_gptq_qwen
+        load_func(tensorrt_llm_qwen=tensorrt_llm_qwen,
+                  quant_ckpt_path=args.quant_ckpt_path,
+                  mapping=mapping,
+                  dtype=args.dtype)
     elif args.hf_model_dir is not None and (
         ft_dir_path is None or not os.path.exists(ft_dir_path)
     ):
