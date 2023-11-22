@@ -26,6 +26,8 @@
 
 ### 更新说明
 
+#### 2023/11/22 更新
+1. 新增chatglm3-6b-32k模型支持，chatglm3-6b-32k与chatglm3-6b相比不同之处在于位置编码的rope_ratio不同，[文档链接](./chatglm3-6b-32k/README.md)
 #### 2023/11/21 更新
 1. 新增chatglm2-6b模型支持，相比社区版本增加了tp支持，适用于chatglm2-6b和chatglm3-6b，[文档链接](./chatglm2-6b/README.md)。
 2. 待优化：glm2/3使用的是GQA，但是现在的计算方式退化成了MHA，猜测原因是glm2实现的时候gpt attention plugin还不支持gqa，可以说是遗留问题，可以参考llama 80B的实现，直接使用GQA，加速计算。
