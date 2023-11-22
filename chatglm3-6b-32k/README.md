@@ -1,13 +1,13 @@
-# ChatGLM2-6B
+# ChatGLM3-6B-32K
 
-This is a repo to build and inference ChatGLM2-6B with TRT-LLM.
-This document explains how to build the [ChatGLM2-6B](https://huggingface.co/THUDM/chatglm2-6b) model using TensorRT-LLM and run on a single GPU.
+This is a repo to build and inference ChatGLM3-6B-32K with TRT-LLM.
+This document explains how to build the [ChatGLM3-6B-32K](https://huggingface.co/THUDM/chatglm3-6b-32k) model using TensorRT-LLM and run on a single GPU.
 
 ## Overview
 
-The TensorRT-LLM ChatGLM2-6B implementation can be found in [`example/chatglm2-6b/model.py`](./model.py). The TensorRT-LLM ChatGLM2-6B example code is located in [`examples/chatglm2-6b`](./). There are serveral main files in that folder:
+The TensorRT-LLM ChatGLM3-6B-32K implementation can be found in [`example/chatglm3-6b-32k/model.py`](./model.py). The TensorRT-LLM ChatGLM3-6B-32K example code is located in [`examples/chatglm3-6b-32k`](./). There are serveral main files in that folder:
 
-* [`build.py`](./build.py) to load a checkpoint from the [HuggingFace (HF) Transformers](https://github.com/huggingface/transformers) format to the TensorRT-LLM Chatglm2-6B network, and build the [TensorRT](https://developer.nvidia.com/tensorrt) engine(s) needed to run the ChatGLM2-6B model,
+* [`build.py`](./build.py) to load a checkpoint from the [HuggingFace (HF) Transformers](https://github.com/huggingface/transformers) format to the TensorRT-LLM Chatglm3-6B-32K network, and build the [TensorRT](https://developer.nvidia.com/tensorrt) engine(s) needed to run the ChatGLM3-6B-32K model,
 * [`run.py`](./run.py) to run the inference on an input text,
 
 
@@ -20,7 +20,7 @@ The next section describe how to build the engine and run the inference demo.
 ```bash
 apt-get update
 apt-get install git-lfs
-git clone https://huggingface.co/THUDM/chatglm2-6b pyTorchModel
+git clone https://huggingface.co/THUDM/chatglm3-6b-32k pyTorchModel
 ```
 
 ### 2. Build TensorRT engine(s)
@@ -64,16 +64,16 @@ python3 build.py --model_dir=./pyTorchModel \
 
 You can enable the int 8 weight-only quantization by adding `--use_weight_only`, this will siginficantly lower the latency and memory footprint.
 
-You can enable the FMHA kernels for ChatGLM2-6B by adding `--enable_context_fmha` to the invocation of `build.py`. Note that it is disabled by default because of possible accuracy issues due to the use of Flash Attention.
+You can enable the FMHA kernels for ChatGLM3-6B-32K by adding `--enable_context_fmha` to the invocation of `build.py`. Note that it is disabled by default because of possible accuracy issues due to the use of Flash Attention.
 
 ### 3. Run
 
 #### Single node, single GPU
 
-To run a TensorRT-LLM ChatGLM2-6B model on a single GPU, you can use `python3`:
+To run a TensorRT-LLM ChatGLM3-6B-32K model on a single GPU, you can use `python3`:
 
 ```bash
-# Run the ChatGLM2-6B model on a single GPU.
+# Run the ChatGLM3-6B-32K model on a single GPU.
 python3 run.py
 ```
 
@@ -81,14 +81,14 @@ python3 run.py
 two gpus:
 
 ```bash
-# Run the ChatGLM2-6B model on two GPUS.
+# Run the ChatGLM3-6B-32K model on two GPUS.
 mpirun -n 2 --allow-run-as-root python run.py
 ```
 
 four gpus:
 
 ```bash
-# Run the ChatGLM2-6B model on four GPUS.
+# Run the ChatGLM3-6B-32K model on four GPUS.
 mpirun -n 4 --allow-run-as-root python run.py
 ```
 ## Benchmark
