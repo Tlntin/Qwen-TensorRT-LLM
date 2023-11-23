@@ -38,7 +38,7 @@ from utils.utils import make_context
 
 
 
-def get_calib_dataloader(data="cnn_dailymail",
+def get_calib_dataloader(data="ccdv/cnn_dailymail",
                          tokenizer=None,
                          batch_size=1,
                          calib_size=512,
@@ -50,8 +50,8 @@ def get_calib_dataloader(data="cnn_dailymail",
             data_files="https://the-eye.eu/public/AI/pile/val.jsonl.zst",
             split="train")
         dataset = dataset["text"][:calib_size]
-    elif data == "cnn_dailymail":
-        dataset = load_dataset("cnn_dailymail", name="3.0.0", split="train")
+    elif data == "ccdv/cnn_dailymail":
+        dataset = load_dataset("ccdv/cnn_dailymail", name="3.0.0", split="train")
         dataset = dataset["article"][:calib_size]
     else:
         raise NotImplementedError
