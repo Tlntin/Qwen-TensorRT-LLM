@@ -11,7 +11,7 @@ import tensorrt_llm
 from tensorrt_llm._utils import (
     str_dtype_to_torch,
     str_dtype_to_np,
-    pad_vocab_size,
+    # pad_vocab_size,
     torch_to_numpy,
 )
 from tensorrt_llm.quantization import QuantMode
@@ -254,15 +254,15 @@ def load_from_ft(
         )
 
         tensorrt_llm_qwen.layers[i].ln_1.weight.value = fromfile(
-            dir_path, "transformer.h." + str(i) + ".ln_1.weight.bin"
+            dir_path, "model.layers." + str(i) + ".ln_1.weight.bin"
         )
 
         dst = tensorrt_llm_qwen.layers[i].ln_2.weight
-        dst.value = fromfile(dir_path, "transformer.h." + str(i) + ".ln_2.weight.bin")
+        dst.value = fromfile(dir_path, "model.layers." + str(i) + ".ln_2.weight.bin")
 
         t = fromfile(
             dir_path,
-            "transformer.h." + str(i) + ".attention.qkv.weight." + suffix,
+            "model.layers." + str(i) + ".attention.qkv.weight." + suffix,
             [hidden_size, c_attn_out_dim],
             w_type,
         )
@@ -275,7 +275,7 @@ def load_from_ft(
                     tensorrt_llm_qwen.layers[i].attention.qkv,
                     tensorrt_llm_qwen.layers[i].ln_1.scale_to_int,
                     dir_path,
-                    "transformer.h." + str(i) + ".attention.qkv.",
+                    "model.layers." + str(i) + ".attention.qkv.",
                     [1, c_attn_out_dim],
                     quant_per_token_dyn,
                     quant_per_channel,
@@ -300,7 +300,7 @@ def load_from_ft(
         dst = tensorrt_llm_qwen.layers[i].attention.qkv.bias
         t = fromfile(
             dir_path,
-            "transformer.h."
+            "model.layers."
             + str(i)
             + ".attention.qkv.bias."
             + str(mapping.rank)
@@ -312,7 +312,7 @@ def load_from_ft(
         dst = tensorrt_llm_qwen.layers[i].attention.dense.weight
         t = fromfile(
             dir_path,
-            "transformer.h." + str(i) + ".attention.dense.weight." + suffix,
+            "model.layers." + str(i) + ".attention.dense.weight." + suffix,
             [hidden_size // mapping.tp_size, hidden_size],
             w_type,
         )
@@ -327,7 +327,7 @@ def load_from_ft(
                 tensorrt_llm_qwen.layers[i].attention.dense,
                 dense_scale,
                 dir_path,
-                "transformer.h." + str(i) + ".attention.dense.",
+                "model.layers." + str(i) + ".attention.dense.",
                 [1, hidden_size],
                 quant_per_token_dyn,
                 quant_per_channel,
@@ -335,7 +335,7 @@ def load_from_ft(
             set_smoother(
                 tensorrt_llm_qwen.layers[i].attention.dense,
                 dir_path,
-                "transformer.h." + str(i) + ".attention.dense",
+                "model.layers." + str(i) + ".attention.dense",
                 [1, hidden_size // mapping.tp_size],
                 mapping.rank,
             )
@@ -357,7 +357,7 @@ def load_from_ft(
 
         t = fromfile(
             dir_path,
-            "transformer.h." + str(i) + ".mlp.w1.weight." + suffix,
+            "model.layers." + str(i) + ".mlp.w1.weight." + suffix,
             [hidden_size, inter_size // mapping.tp_size // 2],
             w_type,
         )
@@ -369,7 +369,7 @@ def load_from_ft(
                 tensorrt_llm_qwen.layers[i].mlp.w1,
                 tensorrt_llm_qwen.layers[i].ln_2.scale_to_int,
                 dir_path,
-                "transformer.h." + str(i) + ".mlp.w1.",
+                "model.layers." + str(i) + ".mlp.w1.",
                 [1, inter_size // mapping.tp_size // 2],
                 quant_per_token_dyn,
                 quant_per_channel,
@@ -395,7 +395,7 @@ def load_from_ft(
 
         t = fromfile(
             dir_path,
-            "transformer.h." + str(i) + ".mlp.w2.weight." + suffix,
+            "model.layers." + str(i) + ".mlp.w2.weight." + suffix,
             [hidden_size, inter_size // mapping.tp_size // 2],
             w_type,
         )
@@ -407,7 +407,7 @@ def load_from_ft(
                 tensorrt_llm_qwen.layers[i].mlp.w2,
                 tensorrt_llm_qwen.layers[i].ln_2.scale_to_int,
                 dir_path,
-                "transformer.h." + str(i) + ".mlp.w2.",
+                "model.layers." + str(i) + ".mlp.w2.",
                 [1, inter_size // mapping.tp_size // 2],
                 quant_per_token_dyn,
                 quant_per_channel,
@@ -433,7 +433,7 @@ def load_from_ft(
 
         t = fromfile(
             dir_path,
-            "transformer.h." + str(i) + ".mlp.c_proj.weight." + suffix,
+            "model.layers." + str(i) + ".mlp.c_proj.weight." + suffix,
             [inter_size // mapping.tp_size // 2, hidden_size],
             w_type,
         )
@@ -448,7 +448,7 @@ def load_from_ft(
                 tensorrt_llm_qwen.layers[i].mlp.c_proj,
                 proj_scale,
                 dir_path,
-                "transformer.h." + str(i) + ".mlp.c_proj.",
+                "model.layers." + str(i) + ".mlp.c_proj.",
                 [1, hidden_size],
                 quant_per_token_dyn,
                 quant_per_channel,
@@ -456,7 +456,7 @@ def load_from_ft(
             set_smoother(
                 tensorrt_llm_qwen.layers[i].mlp.c_proj,
                 dir_path,
-                "transformer.h." + str(i) + ".mlp.c_proj",
+                "model.layers." + str(i) + ".mlp.c_proj",
                 [1, inter_size // mapping.tp_size // 2],
                 mapping.rank,
             )
@@ -481,7 +481,7 @@ def load_from_ft(
         if use_int8_kv_cache:
             t = fromfile(
                 dir_path,
-                "transformer.h." + str(i) + ".attention.qkv.scale_y_quant_orig.bin",
+                "model.layers." + str(i) + ".attention.qkv.scale_y_quant_orig.bin",
                 [1],
                 np.float32,
             )
@@ -797,7 +797,7 @@ def load_from_gptq_qwen(
             1,
         )
     )
-
+    torch_dtype = str_dtype_to_torch(dtype)
     for layer in tqdm(layers_range, ncols=80, desc="loading attention weight..."):
         prefix = f"transformer.h.{layer}.attn."
         split_qkv_suf = []
@@ -840,7 +840,7 @@ def load_from_gptq_qwen(
         tensorrt_llm_qwen.layers[idx].attention.qkv.zero.value = th_zero.numpy() 
         tensorrt_llm_qwen.layers[idx].attention.qkv.scale.value = th_scale.to(torch_dtype).numpy()
 
-    torch_dtype = str_dtype_to_torch(dtype)
+    
 
     for k, v in tqdm(model_params.items(), ncols=80, desc="loading other weight..."):
         if isinstance(v, list):
@@ -1138,12 +1138,12 @@ def load_from_awq_qwen(tensorrt_llm_qwen: QWenForCausalLM,
     if pad_vocab:
         weight = model_params['lm_head.weight']
         [vocab_size, k] = weight.shape
-        new_weight = torch.zeros([pad_vocab_size, k])
+        new_weight = torch.zeros([pad_vocab_size1, k])
         new_weight[:vocab_size, :] = weight
         new_weight = new_weight.T.contiguous()
         amax = model_params['lm_head.weight_quantizer._amax'].reshape(
             [vocab_size, k // group_size])
-        new_amax = torch.ones([pad_vocab_size, k // group_size])
+        new_amax = torch.ones([pad_vocab_size1, k // group_size])
         new_amax[:vocab_size, :] = amax
         new_amax = new_amax.T.contiguous()
         new_scale = new_amax / 8

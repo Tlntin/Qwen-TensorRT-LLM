@@ -18,7 +18,7 @@ from tensorrt_llm._utils import str_dtype_to_trt
 from tensorrt_llm.builder import Builder
 from tensorrt_llm.logger import logger
 from tensorrt_llm.models import (
-    fp8_quantize,
+    # fp8_quantize,
     smooth_quantize,
     weight_only_groupwise_quantize,
     weight_only_quantize,
