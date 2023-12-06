@@ -17,6 +17,7 @@ from tensorrt_llm._utils import (
 from tensorrt_llm.quantization import QuantMode
 from model import QWenForCausalLM
 from tensorrt_llm.mapping import Mapping
+from transformers import AutoModelForCausalLM
 
 
 def gen_suffix(rank, use_smooth_quant, quant_per_channel):
@@ -733,7 +734,17 @@ def load_from_gptq_qwen(
     elif quant_ckpt_path.endswith(".pt"):
         model_params = torch.load(quant_ckpt_path, map_location=torch.device("cpu"))
     else:
-        raise ValueError("quantized checkpoint format not supported!")
+        if os.path.isdir(quant_ckpt_path):
+            model = AutoModelForCausalLM.from_pretrained(
+                quant_ckpt_path,
+                device_map="auto",
+                trust_remote_code=True
+            ).eval().cpu()
+            model_params = {k: v for k, v in model.state_dict().items()}
+            torch.cuda.empty_cache()
+            del model
+        else:
+            raise ValueError("quantized checkpoint format not supported!")
 
     def unpack_int32_into_int8(w_packed):
         # unpack inputs packed in int32/float32 into uint4 and store them in int8 format
@@ -1107,8 +1118,12 @@ def load_from_awq_qwen(tensorrt_llm_qwen: QWenForCausalLM,
         process_and_assign_weight(model_params, mPrefix, mOp, 1)
 
         # Attention QKV Liner Bias
-        qkv_bias = model_params[prefix + "attn.c_attn.bias"].cpu().to(torch_dtype).contiguous()
-        tensorrt_llm_qwen.layers[layer_idx].attention.qkv.bias.value = qkv_bias.numpy()
+        th_bias = model_params[prefix + "attn.c_attn.bias"].cpu().to(torch_dtype).contiguous()
+        q_emb = th_bias.shape[0] // 3
+        th_bias = th_bias.reshape(3, q_emb)
+        split_v = split(th_bias, mapping.tp_size, mapping.rank, dim=1)
+        split_v = split_v.reshape(3 * (q_emb // mapping.tp_size))
+        tensorrt_llm_qwen.layers[layer_idx].attention.qkv.bias.value = np.ascontiguousarray(split_v)
 
         # Attention Dense (out_proj) Linear
         mPrefix = prefix + "attn.c_proj"

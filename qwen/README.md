@@ -13,11 +13,16 @@ The TensorRT-LLM Qwen implementation can be found in [model.py](model.py). The T
 ## Support Matrix
   * FP16
     <!-- * FP8 -->
-  * INT8 & INT4 Weight-Only
+  * INT8 & INT4 Weight-Only & INT4-AWQ & INT4-GPTQ
     <!-- * FP8 KV CACHE -->
   * INT8 KV CACHE
   * Tensor Parallel
   * STRONGLY TYPED
+
+## Support Model
+- QWen 1.8b/7b/14b/72b(maybe)
+- Qwen 1.8b-chat/7b-chat/14b-chat/72b-chat(maybe)
+- Qwen 1.8b-chat-int4/7b-chat-int4/14b-chat-int4/72b-chat-int4(maybe)
 
 ## Usage
 
@@ -253,18 +258,18 @@ python summarize.py --backend=trt_llm \
 To run the GPTQ Qwen example, the following steps are required:
 1. You need to install the [auto-gptq](https://github.com/PanQiWei/AutoGPTQ) module and upgrade the transformers module version, with a minimum of 4.32.0. (Note: After installing the module, it may prompt that the tensorrt_llm is not compatible with other module versions, you can ignore this warning)
 ```bash
-pip install auto-gptq
+pip install auto-gptq optimum
 pip install transformers -U
 ```
-
-2. Weight quantization
+2. Manually get the quanted weights (optional)
+- Weight quantization
 ```bash
 python3 gptq_convert.py --hf_model_dir ./tmp/Qwen/7B \
                         --tokenizer_dir ./tmp/Qwen/7B \
                         --quant_ckpt_path ./tmp/Qwen/7B/int4-gptq
 ```
 
-3. Build TRT-LLM engine:
+-  Build TRT-LLM engine:
 ```bash
 python build.py --hf_model_dir ./tmp/Qwen/7B \
                 --quant_ckpt_path ./tmp/Qwen/7B/int4-gptq/gptq_model-4bit-128g.safetensors \
@@ -281,19 +286,52 @@ python build.py --hf_model_dir ./tmp/Qwen/7B \
                 --output_dir ./tmp/Qwen/7B/trt_engines/int4-gptq/1-gpu
 ```
 
-4. Run int4-gptq
+- Run int4-gptq
 ```bash
 python3 run.py --max_new_tokens=50 \
                --tokenizer_dir ./tmp/Qwen/7B/ \
                --engine_dir=./tmp/Qwen/7B/trt_engines/int4-gptq/1-gpu
 ```
 
-5. Summarize
+- Summarize
 ```bash
 python summarize.py --backend=trt_llm \
                     --tokenizer_dir ./tmp/Qwen/7B/ \
                     --data_type fp16 \
                     --engine_dir ./tmp/Qwen/7B/trt_engines/int4-gptq/1-gpu
+```
+
+3. Use official int4 weights, e.g. Qwen-1_8B-Chat-Int4 model(recommended)
+-  Build TRT-LLM engine:
+```bash
+python build.py --hf_model_dir Qwen-1_8B-Chat-Int4 \
+                --quant_ckpt_path Qwen-1_8B-Chat-Int4 \
+                --dtype float16 \
+                --remove_input_padding \
+                --use_gpt_attention_plugin float16 \
+                --enable_context_fmha \
+                --use_gemm_plugin float16 \
+                --use_weight_only \
+                --weight_only_precision int4_gptq \
+                --per_group \
+                --world_size 1 \
+                --tp_size 1 \
+                --output_dir ./tmp/Qwen/1.8B/trt_engines/int4-gptq/1-gpu
+```
+
+- Run int4-gptq
+```bash
+python3 run.py --max_new_tokens=50 \
+               --tokenizer_dir Qwen-1_8B-Chat-Int4 \
+               --engine_dir=./tmp/Qwen/1.8B/trt_engines/int4-gptq/1-gpu
+```
+
+- Summarize
+```bash
+python summarize.py --backend=trt_llm \
+                    --tokenizer_dir Qwen-1_8B-Chat-Int4 \
+                    --data_type fp16 \
+                    --engine_dir ./tmp/Qwen/1.8B/trt_engines/int4-gptq/1-gpu
 ```
 
 

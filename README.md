@@ -25,6 +25,9 @@
 </details>
 
 ### 更新说明
+#### 2023/12/06 更新
+1. 支持Qwen-xxx-Chat-Int4模型直接编译成TensorRT Engine。
+2. 修复awq多卡qkv bias部分报错。
 
 #### 2023/11/22 更新
 1. 新增chatglm3-6b-32k模型支持，chatglm3-6b-32k与chatglm3-6b相比不同之处在于位置编码的rope_ratio不同，[文档链接](./chatglm3-6b-32k/README.md)
@@ -292,26 +295,40 @@ python3 build.py --use_weight_only --weight_only_precision=int8 --int8_kv_cache
 ##### 运行指南（int4-gptq篇）
 1. 需要安装[auto-gptq](https://github.com/PanQiWei/AutoGPTQ)模块，并且升级transformers模块版本，最低要求4.32.0。（注：安装完模块后可能会提示tensorrt_llm与其他模块版本不兼容，可以忽略该警告）
 ```bash
-pip install auto-gptq
+pip install auto-gptq optimum
 pip install transformers -U
 ```
-2. 转权重获取scale相关信息，默认使用GPU进行校准，需要能够完整加载模型。（注：对于Qwen-7B-Chat V1.0，可以加上`--device=cpu`来尝试用cpu标定，但是时间会很长）
+2. 手动获取标定权重（可选）
+- 转权重获取scale相关信息，默认使用GPU进行校准，需要能够完整加载模型。（注：对于Qwen-7B-Chat V1.0，可以加上`--device=cpu`来尝试用cpu标定，但是时间会很长）
 ```bash
 python3 gptq_convert.py
 ```
-3. 编译TensorRT-LLM Engine
+- 编译TensorRT-LLM Engine
 ```bash
 python build.py --use_weight_only \
                 --weight_only_precision int4_gptq \
                 --per_group
 ```
-4. 如果想要节省显存（注：只能用于单batch），可以试试加上这俩参数来编译Engine
+- 如果想要节省显存（注：只能用于单batch），可以试试加上这俩参数来编译Engine
 ```bash
 python build.py --use_weight_only \
                 --weight_only_precision int4_gptq \
                 --per_group \
                 --remove_input_padding \
                 --enable_context_fmha
+```
+3. 使用官方int4权重，例如Qwen-xx-Chat-Int4模型（推荐）
+- 编译模型，注意设置hf模型路径和`--quant_ckpt_path`量化后权重路径均设置为同一个路径，下面是1.8b模型的示例（其他模型也是一样操作）
+```bash
+python build.py --use_weight_only \
+                --weight_only_precision int4_gptq \
+                --per_group \
+                --hf_model_dir Qwen-1_8B-Chat-Int4 \
+                --quant_ckpt_path Qwen-1_8B-Chat-Int4
+```
+- 运行模型，这里需要指定一下tokenizer路径
+```bash
+python3 run.py --tokenizer_dir=Qwen-1_8B-Chat-Int4
 ```
 
 ##### 运行指南（int4-awq篇）

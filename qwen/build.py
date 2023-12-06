@@ -19,7 +19,7 @@ from tensorrt_llm.builder import Builder
 from tensorrt_llm.logger import logger
 from tensorrt_llm.models import (
     # fp8_quantize,
-    smooth_quantize,
+    # smooth_quantize,
     weight_only_groupwise_quantize,
     weight_only_quantize,
 )
@@ -292,10 +292,10 @@ def parse_arguments():
 
     parser.add_argument(
         "--weight_only_precision",
-        const="int4_awq",
+        const="int4_gptq",
         type=str,
         nargs="?",
-        default="int4_awq",
+        default="int4_gptq",
         choices=["int8", "int4", "int4_gptq", "int4_awq"],
         help="Define the precision for the weights when using weight-only quantization."
         "You must also use --use_weight_only for that argument to have an impact.",
