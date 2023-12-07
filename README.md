@@ -31,9 +31,9 @@
 
 # 运行指南
 
-### 通用说明
+### 准备工作
 
-1. 准备工作
+1. 相关要求
    - 有一个英伟达显卡，建议12G显存以上，推荐24G（注：12G显存可以用int4, 16G显存可以用int8, 24G显存可以用fp16）。
    - 需要Linux系统，WSL或许也可以试试。
    - 已经安装了docker，并且安装了nvidia-docker，[安装指南](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
@@ -70,10 +70,9 @@
     cd /app/tensorrt_llm/examples/qwen/
     pip install -r requirements.txt
     ```
-### 运行指南（fp16模型）
-1. 下载模型，例如`QWen-7B-Chat`模型，然后将文件夹重命名为`qwen_7b_chat`，最后放到`qwen/`路径下即可。
+6. 下载模型，例如`QWen-7B-Chat`模型，然后将文件夹重命名为`qwen_7b_chat`，最后放到`qwen/`路径下即可。
 
-2. 修改编译参数（可选）
+7. 修改编译参数（可选）
 
     - 默认编译参数，包括batch_size, max_input_len, max_new_tokens, seq_length都存放在`default_config.py`中
     - 默认模型路径，包括`hf_model_dir`（模型路径）和`tokenizer_dir`（分词器路径）以及`int4_gptq_model_dir`（手动gptq量化输出路径），可以改成你自定义的路径。
@@ -81,7 +80,8 @@
     - 对于低显存用户，可以降低max_batch_size=1，或者继续降低max_input_len, max_new_tokens
     - 默认的seq_lenght是2048，有的模型是8192有的是2048，一般看`config.json`里面这个参数对应的数值是啥，如果没改对后面会警告或者报错提醒一下（准备加入这个功能）。
 
-3. 开始编译。
+### 运行指南（fp16模型）
+1. 编译。
 
     - 对于24G显存用户，可以直接编译fp16（注：`--remove_input_padding`和`--enable_context_fmha`为可选参数，可以一定程度上节省显存）。
 
@@ -105,7 +105,7 @@
     python3 build.py --world_size 2 --tp_size 2
     ```
     
-4. 试运行（可选）编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。
+2. 运行。编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。
 
     - tp = 1（默认单GPU）时使用python直接运行run.py
     ```bash
@@ -117,7 +117,7 @@
     mpirun -n 2 --allow-run-as-root python run.py
     ```
 
-5. 验证模型精度（可选）。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。对于`网络不好`的用户，可以从网盘下载数据集，然后按照使用说明操作即可。
+3. 验证模型精度。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。对于`网络不好`的用户，可以从网盘下载数据集，然后按照使用说明操作即可。
 
      - 百度网盘：链接: https://pan.baidu.com/s/1UQ01fBBELesQLMF4gP0vcg?pwd=b62q 提取码: b62q 
      - 谷歌云盘：https://drive.google.com/drive/folders/1YrSv1NNhqihPhCh6JYcz7aAR5DAuO5gU?usp=sharing
@@ -143,7 +143,7 @@
 
      - 一般来说，如果trt-llm的rouge分数和huggingface差不多，略低一些（1以内）或者略高一些（2以内），则说明精度基本对齐。
 
-6. 测量模型吞吐速度和生成速度（可选）。需要下载`ShareGPT_V3_unfiltered_cleaned_split.json`这个文件。
+4. 测量模型吞吐速度和生成速度。需要下载`ShareGPT_V3_unfiltered_cleaned_split.json`这个文件。
 
      - 可以通过wget/浏览器直接下载，[下载链接](https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json)
      - 也可通过百度网盘下载，链接: https://pan.baidu.com/s/12rot0Lc0hc9oCb7GxBS6Ng?pwd=jps5 提取码: jps5
@@ -160,52 +160,6 @@
      ```bash
      python3 benchmark.py --backend=trt_llm --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --trt_max_batch_size=1
      ```
-
-7. 尝试终端对话（可选）。运行下面的命令，然后输入你的问题，直接回车即可。
-
-     ```bash
-     python3 cli_chat.py
-     ```
-
-8. 部署api，并调用api进行对话（可选）。
-
-      - 部署api
-
-      ```bash
-      python3 api.py
-      ```
-
-      - 另开一个终端，进入`qwen/client`目录，里面有4个文件，分别代表不同的调用方式。
-      - `async_client.py`，通过异步的方式调用api，通过SSE协议来支持流式输出。
-      - `normal_client.py`，通过同步的方式调用api，为常规的HTTP协议，Post请求，不支持流式输出，请求一次需要等模型生成完所有文字后，才能返回。
-      - `openai_normal_client.py`，通过`openai`模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。
-      - `openai_stream_client.py`，通过`openai`模块直接调用自己部署的api，该示例为流式调用。
-      - 注意：需要`pydantic`模块版本>=2.3.2，否则将会出现`ChatCompletionResponse' object has no attribute 'model_dump_json'`报错，参考[issue](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/issues/27)
-
-9. 尝试网页对话（可选，需要先部署api）。运行下面的命令，然后打开本地浏览器，访问：[http://127.0.0.1:7860](http://127.0.0.1:7860) 即可
-
-     ```bash
-     python3 web_demo.py
-     ```
-     - 默认配置的web_demo.py如下：
-     ```python
-     demo.queue().launch(share=False, inbrowser=True)
-     ```
-     - 如果是服务器运行，建议改成这样
-     ```python
-     demo.queue().launch(server_name="0.0.0.0", share=False, inbrowser=False) 
-     ```
-     - web_demo参数说明
-         - `share=True`: 代表将网站穿透到公网，会自动用一个随机的临时公网域名，有效期3天，不过这个选项可能不太安全，有可能造成服务器被攻击，不建议打开。
-         - `inbrowser=True`: 部署服务后，自动打开浏览器，如果是本机，可以打开。如果是服务器，不建议打开，因为服务器也没有谷歌浏览器给你打开。
-         - `server_name="0.0.0.0"`: 允许任意ip访问，适合服务器，然后你只需要输入`http://[你的ip]: 7860`就能看到网页了，如果不开这个选择，默认只能部署的那台机器才能访问。
-         - `share=False`：仅局域网/或者公网ip访问，不会生成公网域名。
-         - `inbrowser=False`： 部署后不打开浏览器，适合服务器。
-
-10. web_demo运行效果（测试平台：RTX 4080, qwen-7b-chat, int4 weight only)
-
-https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956
-
 
 ### 运行指南（Smooth Quant篇）
 1. 注意：运行Smooth Quant需要将huggingface模型完全加载到GPU里面，用于构建int8标定数据集，所以需要提前确保你的显存够大，能够完全加载整个模型。
@@ -359,7 +313,51 @@ python build.py --use_weight_only \
                 --quant_ckpt_path ./qwen_7b_4bit_gs128_awq.pt
 ```
 
+### 其他应用
+1. 尝试终端对话。运行下面的命令，然后输入你的问题，直接回车即可。
 
+     ```bash
+     python3 cli_chat.py
+     ```
+
+2. 部署api，并调用api进行对话。
+
+      - 部署api
+
+      ```bash
+      python3 api.py
+      ```
+
+      - 另开一个终端，进入`qwen/client`目录，里面有4个文件，分别代表不同的调用方式。
+      - `async_client.py`，通过异步的方式调用api，通过SSE协议来支持流式输出。
+      - `normal_client.py`，通过同步的方式调用api，为常规的HTTP协议，Post请求，不支持流式输出，请求一次需要等模型生成完所有文字后，才能返回。
+      - `openai_normal_client.py`，通过`openai`模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。
+      - `openai_stream_client.py`，通过`openai`模块直接调用自己部署的api，该示例为流式调用。
+      - 注意：需要`pydantic`模块版本>=2.3.2，否则将会出现`ChatCompletionResponse' object has no attribute 'model_dump_json'`报错，参考[issue](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/issues/27)
+
+3. 尝试网页对话（可选，需要先部署api）。运行下面的命令，然后打开本地浏览器，访问：[http://127.0.0.1:7860](http://127.0.0.1:7860) 即可
+
+     ```bash
+     python3 web_demo.py
+     ```
+     - 默认配置的web_demo.py如下：
+     ```python
+     demo.queue().launch(share=False, inbrowser=True)
+     ```
+     - 如果是服务器运行，建议改成这样
+     ```python
+     demo.queue().launch(server_name="0.0.0.0", share=False, inbrowser=False) 
+     ```
+     - web_demo参数说明
+         - `share=True`: 代表将网站穿透到公网，会自动用一个随机的临时公网域名，有效期3天，不过这个选项可能不太安全，有可能造成服务器被攻击，不建议打开。
+         - `inbrowser=True`: 部署服务后，自动打开浏览器，如果是本机，可以打开。如果是服务器，不建议打开，因为服务器也没有谷歌浏览器给你打开。
+         - `server_name="0.0.0.0"`: 允许任意ip访问，适合服务器，然后你只需要输入`http://[你的ip]: 7860`就能看到网页了，如果不开这个选择，默认只能部署的那台机器才能访问。
+         - `share=False`：仅局域网/或者公网ip访问，不会生成公网域名。
+         - `inbrowser=False`： 部署后不打开浏览器，适合服务器。
+
+4. web_demo运行效果（测试平台：RTX 4080, qwen-7b-chat, int4 weight only)
+
+https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956
 
 ### 群聊信息
 
