@@ -344,30 +344,55 @@ pip install nvidia_ammo-0.3.0-cp310-cp310-linux_x86_64.whl
 2. Modify the ammo code and add qwen support (an error will be reported if not added). Here is a simple reference case:
 - First, write a python file in vscode and import the following function
 ```python
-import quantize_and_export from tensorrt_llm.models.quantized.ammo
+from tensorrt_llm.models.quantized.ammo import quantize_and_export
 ```
 - Then control + left mouse button, click the `quantize_and_export` function to view its internal implementation.
-- In the if judgment below, add the following question code to support Qwen
+- Find "model_lookup" , add the following question code to support Qwen
 ```bash
-elif "QWen" in model_cls_name:
-    model_type = “qwen”
+    ("qwen", ): "qwen",
 ```
 - After modification, it looks like this:
 ```bash
-model_cls_name = type(model).__name__
-If model_cls_name is "Llama":
-    model_type = "llama"
-elif "GPTJ" in model_cls_name:
-    modeltype="gptj"
-elif "GPT2" in model_cls_name:
-    modeltype="gpt2"
-elif "QWen" in model_cls_name:
-    model_type = “qwen”
-elif "Falcon" in model_cls_name or "RW" in model_cls_name:
-    model_type = "Falcon"
-Others:
-    raises an unimplemented error(
-        f "Deployment of quantized model {model_cls_name}" is not supported)
+model_lookup = {
+    ("llama", "mistral"): "llama",
+    ("gptj", ): "gptj",
+    ("falcon", "rw"): "falcon",
+    ("baichuan", ): "baichuan",
+    ("mpt", ): "mpt",
+    ("gpt2", ): "gpt2",
+    ("chatglm", ): "chatglm",
+}
+```
+- Second, change save code
+- before
+```python
+if export_path:
+    with torch.inference_mode():
+        export_model_config(
+            model,
+            model_type,
+            torch.float16,
+            export_dir=export_path,
+            inference_tensor_parallel=tensor_parallel_size,
+        )
+    logger.info(f"Quantized model exported to :{export_path}")
+```
+- after
+```python
+if export_path:
+    with torch.inference_mode():
+        if qformat == "int4_awq" and model_type == "qwen":
+            torch.save(model.state_dict(), export_path)
+        else:
+            export_model_config(
+                model,
+                model_type,
+                torch.float16,
+                quantization=qformat,
+                export_dir=export_path,
+                inference_tensor_parallel=tensor_parallel_size,
+            )
+    logger.info(f"Quantized model exported to :{export_path}")
 ```
 3. Weight quantization
 ```bash
