@@ -46,7 +46,7 @@
 #### 2023/10/25更新
 
 1. 更新TensorRT-LLM底层，从2023年7月份比赛专用版更新到10月份发布的release/0.5.0版。
-2. 旧的比赛相关文件仍然保留在[main分支](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/tree/main)，如果需要深入学习建议用main分支，目前设定release/0.5.0为主分支。
+2. 旧的比赛相关文件仍然保留在[v0.1.0分支](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/tree/v0.1.0)，如果需要深入学习建议用main分支，目前设定release/0.5.0为主分支。
 3. 增加`TensorRT-LLM接入LangChain指南`，[文档链接](./docs/trt_llm_deploy_langchain.md)。
 4. 增加`Triton部署TensorRT-LLM教程`，并且可选`inflight_batching`功能，[文档链接](./docs/triton_deploy_trt-llm.md)。
 5. 支持int8-kv-cache和`--remove_input_padding`和`--enable_context_fmha`来节省显存。
