@@ -554,6 +554,7 @@ class QWenAttention(Module):
             hidden_size_per_head=self.attention_head_size,
             q_scaling=self.q_scaling,
             rotary_embedding_dim=self.rotary_embedding_dim, # when we use it 0, we will not use rotary embedding in plugin
+            rotary_embedding_base=self.rotary_embedding_base,
             rotary_embedding_scale_type=self.neox_rotary_style,
             rotary_embedding_max_positions=self.max_position_embeddings,
             position_embedding_type=PositionEmbeddingType.rope_gpt_neox,
