@@ -42,11 +42,20 @@
 
 2. 由于TensorRT-LLM 还未发布0.6.1 docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/v0.6.1/docs/source/installation.md)，注意：一定要从0.6.1分支开始编译，否则可能会存在不兼容。如果官方后续有发布对应镜像，可以参考0.5.0官方容器的文档进行部署，[参考链接](https://zhuanlan.zhihu.com/p/664545577)。
 
+    - 这里提供一个编译好的TensorRT-LLM镜像（不含triton），版本为0.6.1，理论上支持Compute Capability为7.0/8.0/8.6/8.9/9.0的显卡，不确定自己Compute Capability的，可以去官网https://developer.nvidia.com/cuda-gpus查询，使用下面的代码拉取镜像，并且重命名一下。
+
+      ```bash
+      docker pull registry.cn-guangzhou.aliyuncs.com/tlntin/tensorrt_llm:v0.6.1
+      docker tag registry.cn-guangzhou.aliyuncs.com/tlntin/tensorrt_llm:v0.6.1 tensorrt_llm/release
+      ```
+
+      
+
 3. 拉取本项目代码
 
     ```bash
-    git clone https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM.git -b release/0.5.0
-    cd Qwen-7B-Chat-TensorRT-LLM
+    git clone https://github.com/Tlntin/Qwen-TensorRT-LLM.git
+    cd Qwen-TensorRT-LLM
     ```
 
 4. 进入项目目录，然后创建并启动容器，同时将本地`qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径，然后打开8000和7860端口的映射，方便调试api和web界面。
@@ -64,12 +73,14 @@
       -v ${PWD}/examples/qwen:/app/tensorrt_llm/examples/qwen \
       tensorrt_llm/release sleep 8640000
     ```
+
 5. 进入docker容器里面的qwen路径，安装提供的Python依赖
 
     ```bash
     cd /app/tensorrt_llm/examples/qwen/
     pip install -r requirements.txt
     ```
+
 6. 下载模型，例如`QWen-7B-Chat`模型，然后将文件夹重命名为`qwen_7b_chat`，最后放到`qwen/`路径下即可。
 
 7. 修改编译参数（可选）
