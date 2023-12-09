@@ -40,9 +40,9 @@
    - 需要较大的磁盘空间，最少50G以上，推荐100G。
    - 需要较大的CPU内存，最少32G，推荐64G以上。
 
-2. 由于TensorRT-LLM 还未发布0.6.1 docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/v0.6.1/docs/source/installation.md)，注意：一定要从0.6.1分支开始编译，否则可能会存在不兼容。如果官方后续有发布对应镜像，可以参考0.5.0官方容器的文档进行部署，[参考链接](https://zhuanlan.zhihu.com/p/664545577)。
+2. 由于TensorRT-LLM 还未发布0.6.1 docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/v0.6.1/docs/source/installation.md)，注意：一定要从0.6.1分支开始编译，否则可能会存在不兼容。如果官方后续有发布对应镜像（一般为Triton镜像），可以参考之前的文档进行部署，[参考链接](https://zhuanlan.zhihu.com/p/664545577)。
 
-    - 这里提供一个编译好的TensorRT-LLM镜像（不含triton），版本为0.6.1，理论上支持Compute Capability为7.0/8.0/8.6/8.9/9.0的显卡，不确定自己Compute Capability的，可以去官网https://developer.nvidia.com/cuda-gpus查询，使用下面的代码拉取镜像，并且重命名一下。
+    - 这里提供一个编译好的TensorRT-LLM镜像（不含triton），版本为0.6.1，理论上支持Compute Capability为7.0/8.0/8.6/8.9/9.0的显卡，不确定自己Compute Capability的，可以去官网[https://developer.nvidia.com/cuda-gpus](https://developer.nvidia.com/cuda-gpus)查询，使用下面的代码拉取镜像，并且重命名一下。
 
       ```bash
       docker pull registry.cn-guangzhou.aliyuncs.com/tlntin/tensorrt_llm:v0.6.1
