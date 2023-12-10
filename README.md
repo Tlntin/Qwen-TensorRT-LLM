@@ -1,10 +1,10 @@
 ### [README FOR ENGLISH](qwen/README.md)
 # 总述
 ### 背景介绍
-- 介绍本工作是 <a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023">NVIDIA TensorRT Hackathon 2023</a> 的参赛题目，本项目使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。相关代码已经放在[release/0.1.0](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/tree/release/0.1.0)分支，感兴趣的同学可以去该分支学习完整流程。
-- [release/0.5.0](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/tree/release/0.5.0)分支和TensorRT-LLM官方仓库[release/0.5.0](https://github.com/NVIDIA/TensorRT-LLM/tree/release/0.5.0)分支对齐，所有功能均在该分支上面进行测试。
+- 介绍本工作是 <a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023">NVIDIA TensorRT Hackathon 2023</a> 的参赛题目，本项目使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。相关代码已经放在[release/0.1.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.1.0)分支，感兴趣的同学可以去该分支学习完整流程。
+- 本项目[release/0.5.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.5.0)分支和TensorRT-LLM官方仓库[release/0.5.0](https://github.com/NVIDIA/TensorRT-LLM/tree/release/0.5.0)分支对齐，所有功能均在该分支上面进行测试。
 - main分支目前和TensorRT-LLM官方仓库[v0.6.1](https://github.com/NVIDIA/TensorRT-LLM/releases/tag/v0.6.1)对齐，该版本已经支持Qwen，但是可能支持的功能特性还有不足，故我们决定继续更新该仓库。
-- 最新triton容器23.11还未完整支持tensorrt-llm 0.6.1，需要用triton的建议先用[release/0.5.0](https://github.com/NVIDIA/TensorRT-LLM/tree/release/0.5.0)。
+- 最新triton容器23.11还未完整支持tensorrt-llm 0.6.1，需要用triton的建议先用本项目的[release/0.5.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.5.0)分支。
 
 ### 功能概述
 
