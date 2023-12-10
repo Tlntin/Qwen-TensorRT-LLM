@@ -4,6 +4,7 @@
 - 介绍本工作是 <a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023">NVIDIA TensorRT Hackathon 2023</a> 的参赛题目，本项目使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。相关代码已经放在[release/0.1.0](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/tree/release/0.1.0)分支，感兴趣的同学可以去该分支学习完整流程。
 - [release/0.5.0](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/tree/release/0.5.0)分支和TensorRT-LLM官方仓库[release/0.5.0](https://github.com/NVIDIA/TensorRT-LLM/tree/release/0.5.0)分支对齐，所有功能均在该分支上面进行测试。
 - main分支目前和TensorRT-LLM官方仓库[v0.6.1](https://github.com/NVIDIA/TensorRT-LLM/releases/tag/v0.6.1)对齐，该版本已经支持Qwen，但是可能支持的功能特性还有不足，故我们决定继续更新该仓库。
+- 最新triton容器23.11还未完整支持tensorrt-llm 0.6.1，需要用triton的建议先用[release/0.5.0](https://github.com/NVIDIA/TensorRT-LLM/tree/release/0.5.0)。
 
 ### 功能概述
 
@@ -29,18 +30,205 @@
 - 本项目配套博客适配概述：[如何在 NVIDIA TensorRT-LLM 中支持 Qwen 模型](https://developer.nvidia.com/zh-cn/blog/qwen-model-support-nvidia-tensorrt-llm)
 - [TensorRT-LLM的模型量化：实现与性能科普视频](https://www.bilibili.com/video/BV1Pw411h7nM/?spm=a2c22.12281976.0.0.6ee62084utHBCm)
 
+
+
+### 软硬件要求
+
+- Linux最佳，已安装docker，并且安装了nvidia-docker（[安装指南](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)），Windows理论也可以，但是还未测试，感兴趣可以自己研究一下。
+- 有英伟达显卡（30系，40系，V100/A100等），以及一定的显存、内存、磁盘。结合[Qwen官方推理要求](https://github.com/QwenLM/Qwen/blob/main/README_CN.md#%E6%8E%A8%E7%90%86%E6%80%A7%E8%83%BD)，预估出下面的要求，详见表格（仅编译期最大要求），仅供参考：
+
+<table>
+    <tr>
+        <td>Model Size</td>
+        <td>Quantization</td>
+        <td>GPU Memory Usage (GB)</td>
+        <td>CPU Memory Usage (GB)</td>
+        <td>Disk Usage (GB)</td>
+    </tr>
+    <!-- 1.8b -->
+    <tr>
+        <td rowspan="7">1.8B</td>
+        <td>fp16</td>
+        <td>5</td>
+        <td>15</td>
+        <td>11</td>
+    </tr>
+    <tr>
+        <td>int8 smooth quant</td>
+        <td>5</td>
+        <td>15</td>
+        <td>22</td>
+    </tr>
+    <tr>
+        <td>int8 weight only</td>
+        <td>4</td>
+        <td>12</td>
+        <td>9</td>
+    </tr>
+    <tr>
+        <td>int4 weight only</td>
+        <td>4</td>
+        <td>10</td>
+        <td>7</td>
+    </tr>
+    <tr>
+        <td>int4 gptq (raw)</td>
+        <td>4</td>
+        <td>10</td>
+        <td>6</td>
+    </tr>
+    <tr>
+        <td>int4 gptq (manual)</td>
+        <td>5</td>
+        <td>13</td>
+        <td>14</td>
+    </tr>
+    <tr>
+        <td>int4 awq</td>
+        <td>5</td>
+        <td>13</td>
+        <td>18</td>
+    </tr>
+    <!-- 7b -->
+    <tr>
+        <td rowspan="7">7B</td>
+        <td>fp16</td>
+        <td>21</td>
+        <td>59</td>
+        <td>42</td>
+    </tr>
+    <tr>
+        <td>int8 smooth quant</td>
+        <td>21</td>
+        <td>59</td>
+        <td>84</td>
+    </tr>
+    <tr>
+        <td>int8 weight only</td>
+        <td>14</td>
+        <td>39</td>
+        <td>28</td>
+    </tr>
+    <tr>
+        <td>int4 weight only</td>
+        <td>10</td>
+        <td>29</td>
+        <td>21</td>
+    </tr>
+    <tr>
+        <td>int4 gptq (raw)</td>
+        <td>10</td>
+        <td>29</td>
+        <td>16</td>
+    </tr>
+    <tr>
+        <td>int4 gptq (manual)</td>
+        <td>21</td>
+        <td>51</td>
+        <td>42</td>
+    </tr>
+    <tr>
+        <td>int4 awq</td>
+        <td>21</td>
+        <td>51</td>
+        <td>56</td>
+    </tr>
+    <!-- 14b -->
+    <tr>
+        <td rowspan="7">14B</td>
+        <td>fp16</td>
+        <td>38</td>
+        <td>106</td>
+        <td>75</td>
+    </tr>
+    <tr>
+        <td>int8 smooth quant</td>
+        <td>38</td>
+        <td>106</td>
+        <td>150</td>
+    </tr>
+    <tr>
+        <td>int8 weight only</td>
+        <td>24</td>
+        <td>66</td>
+        <td>47</td>
+    </tr>
+    <tr>
+        <td>int4 weight only</td>
+        <td>16</td>
+        <td>46</td>
+        <td>33</td>
+    </tr>
+    <tr>
+        <td>int4 gptq (raw)</td>
+        <td>16</td>
+        <td>46</td>
+        <td>26</td>
+    </tr>
+    <tr>
+        <td>int4 gptq (manual)</td>
+        <td>38</td>
+        <td>90</td>
+        <td>66</td>
+    </tr>
+    <tr>
+        <td>int4 awq</td>
+        <td>38</td>
+        <td>90</td>
+        <td>94</td>
+    </tr>
+    <!-- 72b -->
+    <tr>
+        <td rowspan="7">72B</td>
+        <td>fp16</td>
+        <td>181</td>
+        <td>506</td>
+        <td>362</td>
+    </tr>
+    <tr>
+        <td>int8 smooth quant</td>
+        <td>181</td>
+        <td>506</td>
+        <td>724</td>
+    </tr>
+    <tr>
+        <td>int8 weight only</td>
+        <td>102</td>
+        <td>284</td>
+        <td>203</td>
+    </tr>
+    <tr>
+        <td>int4 weight only</td>
+        <td>61</td>
+        <td>171</td>
+        <td>122</td>
+    </tr>
+    <tr>
+        <td>int4 gptq (raw)</td>
+        <td>61</td>
+        <td>171</td>
+        <td>98</td>
+    </tr>
+    <tr>
+        <td>int4 gptq (manual)</td>
+        <td>181</td>
+        <td>434</td>
+        <td>244</td>
+    </tr>
+    <tr>
+        <td>int4 awq</td>
+        <td>181</td>
+        <td>434</td>
+        <td>406</td>
+    </tr>
+</table>
+
+
+
 # 运行指南
 
 ### 准备工作
-
-1. 相关要求
-   - 有一个英伟达显卡，建议12G显存以上，推荐24G（注：12G显存可以用int4, 16G显存可以用int8, 24G显存可以用fp16）。
-   - 需要Linux系统，WSL或许也可以试试。
-   - 已经安装了docker，并且安装了nvidia-docker，[安装指南](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
-   - 需要较大的磁盘空间，最少50G以上，推荐100G。
-   - 需要较大的CPU内存，最少32G，推荐64G以上。
-
-2. 由于TensorRT-LLM 还未发布0.6.1 docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/v0.6.1/docs/source/installation.md)，注意：一定要从0.6.1分支开始编译，否则可能会存在不兼容。如果官方后续有发布对应镜像（一般为Triton镜像），可以参考之前的文档进行部署，[参考链接](https://zhuanlan.zhihu.com/p/664545577)。
+1. 由于TensorRT-LLM 还未发布0.6.1 docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/v0.6.1/docs/source/installation.md)，注意：一定要从0.6.1分支开始编译，否则可能会存在不兼容。如果官方后续有发布对应镜像（一般为Triton镜像），可以参考之前的文档进行部署，[参考链接](https://zhuanlan.zhihu.com/p/664545577)。
 
     - 这里提供一个编译好的TensorRT-LLM镜像（不含triton），版本为0.6.1，理论上支持Compute Capability为7.0/8.0/8.6/8.9/9.0的显卡，不确定自己Compute Capability的，可以去官网[https://developer.nvidia.com/cuda-gpus](https://developer.nvidia.com/cuda-gpus)查询，使用下面的代码拉取镜像，并且重命名一下。
 
@@ -51,14 +239,14 @@
 
       
 
-3. 拉取本项目代码
+2. 拉取本项目代码
 
     ```bash
     git clone https://github.com/Tlntin/Qwen-TensorRT-LLM.git
     cd Qwen-TensorRT-LLM
     ```
 
-4. 进入项目目录，然后创建并启动容器，同时将本地`qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径，然后打开8000和7860端口的映射，方便调试api和web界面。
+3. 进入项目目录，然后创建并启动容器，同时将本地`qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径，然后打开8000和7860端口的映射，方便调试api和web界面。
 
     ```bash
     docker run --gpus all \
@@ -74,16 +262,16 @@
       tensorrt_llm/release sleep 8640000
     ```
 
-5. 进入docker容器里面的qwen路径，安装提供的Python依赖
+4. 进入docker容器里面的qwen路径，安装提供的Python依赖
 
     ```bash
     cd /app/tensorrt_llm/examples/qwen/
     pip install -r requirements.txt
     ```
 
-6. 下载模型，例如`QWen-7B-Chat`模型，然后将文件夹重命名为`qwen_7b_chat`，最后放到`qwen/`路径下即可。
+5. 下载模型，例如`QWen-7B-Chat`模型，然后将文件夹重命名为`qwen_7b_chat`，最后放到`qwen/`路径下即可。
 
-7. 修改编译参数（可选）
+6. 修改编译参数（可选）
 
     - 默认编译参数，包括batch_size, max_input_len, max_new_tokens, seq_length都存放在`default_config.py`中
     - 默认模型路径，包括`hf_model_dir`（模型路径）和`tokenizer_dir`（分词器路径）以及`int4_gptq_model_dir`（手动gptq量化输出路径），可以改成你自定义的路径。
@@ -94,24 +282,24 @@
 ### 运行指南（fp16模型）
 1. 编译。
 
-    - 对于24G显存用户，想要编译7B模型，可以直接编译fp16（注：`--remove_input_padding`和`--enable_context_fmha`为可选参数，可以一定程度上节省显存）。
+    - 编译fp16（注：`--remove_input_padding`和`--enable_context_fmha`为可选参数，可以一定程度上节省显存）。
 
     ```bash
     python3 build.py --remove_input_padding --enable_context_fmha
     ```
     
-    - 对于16G显存用户，想要编译7B模型，可以试试int8 (weight only)。
+    - 编译 int8 (weight only)。
 
     ```bash
     python3 build.py --use_weight_only --weight_only_precision=int8
     ```
     
-    - 对于12G显存用户，想要编译7B模型，可以试试int4 (weight only)
+    - 编译int4 (weight only)
     ```bash
     python3 build.py --use_weight_only --weight_only_precision=int4
     ```
     
-    - 对于14B模型，如果单卡装不下，又不想用int4/int8量化，可以选择尝试tp = 2，即启用两张GPU进行编译 （注：tp功能目前只支持从Huggingface格式构建engine）
+    - 对于如果单卡装不下，又不想用int4/int8量化，可以选择尝试tp = 2，即启用两张GPU进行编译 （注：tp功能目前只支持从Huggingface格式构建engine）
     ```bash
     python3 build.py --world_size 2 --tp_size 2
     ```
