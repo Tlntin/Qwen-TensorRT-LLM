@@ -17,12 +17,7 @@ import tensorrt_llm
 from tensorrt_llm._utils import str_dtype_to_trt
 from tensorrt_llm.builder import Builder
 from tensorrt_llm.logger import logger
-from tensorrt_llm.models import (
-    # fp8_quantize,
-    # smooth_quantize,
-    weight_only_groupwise_quantize,
-    weight_only_quantize,
-)
+from tensorrt_llm.models import quantize_model
 from tensorrt_llm.network import net_guard
 from tensorrt_llm.plugin.plugin import ContextFMHAType
 from tensorrt_llm.quantization import QuantMode
@@ -527,35 +522,25 @@ def build_rank_engine(
         )
         print("load smooth quantize ok")
     elif args.use_weight_only:
-        if args.weight_only_precision == "int8":
-            tensorrt_llm_qwen = weight_only_quantize(tensorrt_llm_qwen, args.quant_mode)
-        elif args.weight_only_precision == "int4":
-            tensorrt_llm_qwen = weight_only_quantize(tensorrt_llm_qwen, args.quant_mode)
-        elif args.weight_only_precision == 'int4_awq':
-            tensorrt_llm_qwen = weight_only_groupwise_quantize(
-                model=tensorrt_llm_qwen,
-                quant_mode=args.quant_mode,
-                group_size=args.group_size,
-                zero=False,
-                pre_quant_scale=True,
-                exclude_modules=[])
-        elif args.weight_only_precision == "int4_gptq":
-            tensorrt_llm_qwen = weight_only_groupwise_quantize(
-                model=tensorrt_llm_qwen,
-                quant_mode=args.quant_mode,
-                group_size=args.group_size,
-                zero=True,
-                pre_quant_scale=False,
-            )
-        # elif args.enable_fp8 or args.fp8_kv_cache:
-        #     logger.info(f'Loading scaling factors from '
-        #                 f'{args.quantized_fp8_model_path}')
-        #     quant_scales = get_scaling_factors(args.quantized_fp8_model_path,
-        #                                        num_layers=args.n_layer,
-        #                                        quant_mode=args.quant_mode)
-        #     tensorrt_llm_qwen = fp8_quantize(tensorrt_llm_qwen,
-        #                                       quant_mode=args.quant_mode,
-        #                                       quant_scales=quant_scales)
+        quantize_kwargs = {}
+        if args.weight_only_precision == 'int4_awq':
+            quantize_kwargs = {
+                "group_size": args.group_size,
+                "zero": False,
+                "pre_quant_scale": True,
+                "exclude_modules": [],
+            }
+        elif args.weight_only_precision == 'int4_gptq':
+            quantize_kwargs = {
+                "group_size": args.group_size,
+                "zero": True,
+                "pre_quant_scale": False,
+            }
+        tensorrt_llm_qwen = quantize_model(
+            tensorrt_llm_qwen,
+            args.quant_mode,
+            **quantize_kwargs
+        )
 
     if not args.ft_dir_path.rstrip("/").endswith("-gpu"):
         ft_dir_path = os.path.join(args.ft_dir_path, str(args.tp_size) + "-gpu")
@@ -711,6 +696,9 @@ def build(rank, args):
         int8_trt_flag = args.quant_mode.has_act_and_weight_quant() or (
             not args.paged_kv_cache and args.quant_mode.has_int8_kv_cache()
         )
+        # to fixup a bug
+        if args.use_weight_only:
+            int8_trt_flag = True
         builder_config = builder.create_builder_config(
             name=MODEL_NAME,
             precision=args.dtype,

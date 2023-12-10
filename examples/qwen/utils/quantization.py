@@ -39,7 +39,6 @@ class SmoothQuantAttention(Module):
         tp_group=None,
         tp_size=1,
         tp_rank=0,
-        multi_block_mode=False,
         scale_alibi_bias=False,
         paged_kv_cache=False,
         quant_mode=QuantMode(0)
@@ -70,7 +69,6 @@ class SmoothQuantAttention(Module):
         self.scale_alibi_bias = scale_alibi_bias
 
         self.position_embedding_type = position_embedding_type
-        self.multi_block_mode = multi_block_mode
         self.paged_kv_cache = paged_kv_cache
 
         self.rotary_embedding_dim = 0
@@ -150,8 +148,8 @@ class SmoothQuantAttention(Module):
                 tensor=qkv,
                 past_key_value=kv_cache_params.get_first_past_key_value(),
                 sequence_length=attention_params.sequence_length,
-                host_past_key_value_lengths=kv_cache_params.
-                host_past_key_value_lengths,
+                host_past_key_value_lengths=kv_cache_params.host_past_key_value_lengths,
+                host_max_kv_cache_lengths=kv_cache_params.host_max_kv_cache_lengths,
                 context_lengths=attention_params.context_lengths,
                 cache_indirection=kv_cache_params.cache_indirection,
                 host_request_types=attention_params.host_request_types,
@@ -161,7 +159,6 @@ class SmoothQuantAttention(Module):
                 q_scaling=self.q_scaling,
                 rotary_embedding_dim=self.rotary_embedding_dim,
                 position_embedding_type=self.position_embedding_type,
-                multi_block_mode=self.multi_block_mode,
                 kv_orig_quant_scale=kv_quant_scale,
                 kv_quant_orig_scale=kv_dequant_scale,
                 kv_cache_quant_mode=self.quant_mode,

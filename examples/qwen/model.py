@@ -190,7 +190,6 @@ class QWenAttention(Module):
             rotary_embedding_percentage=1.0,
             tp_group=None,
             tp_size=1,
-            multi_block_mode=False,
             quant_mode: QuantMode = QuantMode(0),
             q_scaling=1.0,
             cross_attention=False,
@@ -247,7 +246,6 @@ class QWenAttention(Module):
             self.q_scaling *= self.num_layers
 
         self.position_embedding_type = position_embedding_type
-        self.multi_block_mode = multi_block_mode
 
         self.relative_attention = relative_attention
         self.max_distance = max_distance
@@ -546,6 +544,7 @@ class QWenAttention(Module):
             past_key_value=kv_cache_params.get_first_past_key_value(),
             sequence_length=attention_params.sequence_length,
             host_past_key_value_lengths=kv_cache_params.host_past_key_value_lengths,
+            host_max_kv_cache_lengths=kv_cache_params.host_max_kv_cache_lengths,
             context_lengths=attention_params.context_lengths,
             cache_indirection=kv_cache_params.cache_indirection,
             host_request_types=attention_params.host_request_types,
@@ -558,11 +557,9 @@ class QWenAttention(Module):
             rotary_embedding_scale_type=self.neox_rotary_style,
             rotary_embedding_max_positions=self.max_position_embeddings,
             position_embedding_type=PositionEmbeddingType.rope_gpt_neox,
-            multi_block_mode=self.multi_block_mode,
             kv_orig_quant_scale=kv_orig_quant_scale,
             kv_quant_orig_scale=kv_quant_orig_scale,
-            kv_cache_quant_mode=QuantMode.from_description(
-                use_int8_kv_cache=self.use_int8_kv_cache),
+            kv_cache_quant_mode=QuantMode.from_description(use_int8_kv_cache=self.use_int8_kv_cache),
             kv_cache_block_pointers=kv_cache_params.get_first_kv_cache_block_pointers(),
             max_context_length=attention_params.max_context_length,
             mask_type=self.attention_mask_type.value,
@@ -929,16 +926,19 @@ class QWenModel(Module):
             hidden_states = recv(hidden_states, self.mapping.prev_pp_rank())
         self.register_network_output(f"embd", hidden_states)
 
-        for layer, past, pointer in zip(
-                self.layers, kv_cache_params.past_key_value,
-                kv_cache_params.kv_cache_block_pointers):
+        for layer, past, pointer, host_max_kv_cache_length in zip(
+                self.layers,
+                kv_cache_params.past_key_value,
+                kv_cache_params.kv_cache_block_pointers,
+                kv_cache_params.host_max_kv_cache_lengths
+            ):
             hidden_states = layer(
                 hidden_states,
                 use_cache=use_cache,
                 kv_cache_params=KeyValueCacheParams(
                     past_key_value=[past],
-                    host_past_key_value_lengths=kv_cache_params.
-                    host_past_key_value_lengths,
+                    host_past_key_value_lengths=kv_cache_params.host_past_key_value_lengths,
+                    host_max_kv_cache_lengths=host_max_kv_cache_length,
                     kv_cache_block_pointers=[pointer],
                     cache_indirection=kv_cache_params.cache_indirection),
                 attention_params=attention_params,
@@ -1138,10 +1138,9 @@ class QWenForCausalLM(QWenModel, GenerationMixin):
                 model_inputs['last_token_ids'],
                 KeyValueCacheParams(
                     past_key_value=model_inputs['past_key_value'],
-                    host_past_key_value_lengths=model_inputs[
-                        'host_past_key_value_lengths'],
-                    kv_cache_block_pointers=model_inputs[
-                        'kv_cache_block_pointers_list'],
+                    host_past_key_value_lengths=model_inputs['host_past_key_value_lengths'],
+                    host_max_kv_cache_lengths=model_inputs['host_max_kv_cache_lengths'],
+                    kv_cache_block_pointers=model_inputs['kv_cache_block_pointers_list'],
                     cache_indirection=model_inputs['cache_indirection'],
                 ),
                 AttentionParams(

@@ -94,19 +94,19 @@
 ### 运行指南（fp16模型）
 1. 编译。
 
-    - 对于24G显存用户，可以直接编译fp16（注：`--remove_input_padding`和`--enable_context_fmha`为可选参数，可以一定程度上节省显存）。
+    - 对于24G显存用户，想要编译7B模型，可以直接编译fp16（注：`--remove_input_padding`和`--enable_context_fmha`为可选参数，可以一定程度上节省显存）。
 
     ```bash
     python3 build.py --remove_input_padding --enable_context_fmha
     ```
     
-    - 对于16G显存用户，可以试试int8 (weight only)。
+    - 对于16G显存用户，想要编译7B模型，可以试试int8 (weight only)。
 
     ```bash
     python3 build.py --use_weight_only --weight_only_precision=int8
     ```
     
-    - 对于12G显存用户，可以试试int4 (weight only)
+    - 对于12G显存用户，想要编译7B模型，可以试试int4 (weight only)
     ```bash
     python3 build.py --use_weight_only --weight_only_precision=int4
     ```
@@ -209,7 +209,6 @@ python3 build.py --use_weight_only --weight_only_precision=int8 --int8_kv_cache
 1. 需要安装[auto-gptq](https://github.com/PanQiWei/AutoGPTQ)模块，并且升级transformers模块版本，最低要求4.32.0。（注：安装完模块后可能会提示tensorrt_llm与其他模块版本不兼容，可以忽略该警告）
 ```bash
 pip install auto-gptq optimum
-pip install transformers -U
 ```
 
 2. 手动获取标定权重（可选）
@@ -271,6 +270,7 @@ model_lookup = {
     ("mpt", ): "mpt",
     ("gpt2", ): "gpt2",
     ("chatglm", ): "chatglm",
+    ("qwen", ): "qwen",
 }
 ```
 - before
