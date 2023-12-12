@@ -557,7 +557,3 @@ python build.py --use_weight_only \
 4. web_demo运行效果（测试平台：RTX 4080, qwen-7b-chat, int4 weight only)
 
 https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956
-
-### 群聊信息
-
-![飞书群](https://github.com/Tlntin/Qwen-TensorRT-LLM/assets/28218658/b0d27064-c4c4-4420-9b58-2604142750d4)
