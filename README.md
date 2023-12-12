@@ -236,6 +236,7 @@
       docker pull registry.cn-guangzhou.aliyuncs.com/tlntin/tensorrt_llm:v0.6.1
       docker tag registry.cn-guangzhou.aliyuncs.com/tlntin/tensorrt_llm:v0.6.1 tensorrt_llm/release
       ```
+    - AutoDL镜像，同样不含triton，版本为0.6.1，无卡用户可以体验玩玩，[链接](https://www.codewithgpu.com/i/NVIDIA/TensorRT-LLM/tensorrt_llm)
 
       
 
