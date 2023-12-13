@@ -803,21 +803,12 @@ def load_from_gptq_qwen(
 
         for suf in suffixs:
             qkv_part = model_params[prefix + "c_attn." + suf].cpu()
-            q_part, k_part, v_part = qkv_part.split(qkv_part.shape[1] // 3, dim=1)
-            qkv_part = torch.cat([q_part, k_part, v_part], dim=0)
-            dim = qkv_part.shape
-            qkv_part = qkv_part.reshape(3, dim[0] // 3, dim[1])
-            split_qkv = qkv_part.split(dim[1] // mapping.tp_size, dim=2)[
-                mapping.tp_rank
-            ]
-            split_qkv = torch.cat(
-                [
-                    split_qkv[0, :, :].squeeze(0),
-                    split_qkv[1, :, :].squeeze(0),
-                    split_qkv[2, :, :].squeeze(0),
-                ],
-                dim=1,
-            )
+            q_emb = qkv_part.shape[1] // 3
+            model_emb = qkv_part.shape[0]
+            qkv_part = qkv_part.reshape(model_emb, 3, q_emb)
+            split_qkv = split(qkv_part, mapping.tp_size, mapping.rank, dim=2)
+            split_qkv = split_qkv.reshape(model_emb, 3 * (q_emb // mapping.tp_size))
+            split_qkv = torch.from_numpy(split_qkv)
             # dype: int32, int32, float16
             split_qkv_suf.append(split_qkv)
 
