@@ -838,9 +838,6 @@ def load_from_gptq_qwen(
         tensorrt_llm_qwen.layers[idx].attention.qkv.qweight.value = th_qweight.numpy()
         tensorrt_llm_qwen.layers[idx].attention.qkv.zero.value = th_zero.numpy() 
         tensorrt_llm_qwen.layers[idx].attention.qkv.scale.value = th_scale.to(torch_dtype).numpy()
-
-    
-
     for k, v in tqdm(model_params.items(), ncols=80, desc="loading other weight..."):
         if isinstance(v, list):
             v = [torch_to_numpy(vv.to(torch_dtype).detach().cpu()) for vv in v]
@@ -982,6 +979,29 @@ def load_from_awq_qwen(tensorrt_llm_qwen: QWenForCausalLM,
         int4_weight = packer(qweight_int8.cpu())
         int4_weight = preprocessor(int4_weight, torch.quint4x2) # int8 save as uint4
         return int4_weight.cpu().numpy()
+    
+    def process_and_assign_attn_weight(model_params, mPrefix, mOp, tp_dim=0):
+        weight = model_params[mPrefix + ".weight"].to(torch_dtype)
+        q_emb = weight.shape[0] // 3
+        model_emb = weight.shape[1]
+        weight = weight.reshape(3, q_emb, model_emb)
+        # [k, n] = weight.shape
+        split_v = split(weight, mapping.tp_size, mapping.rank, dim=tp_dim)
+        split_v = split_v.reshape(3 * (q_emb // mapping.tp_size), model_emb)
+        amax = model_params[mPrefix + ".weight_quantizer._amax"].reshape(
+            (q_emb * 3, int(model_emb / group_size))).to(torch_dtype)
+        amax = amax.reshape(3, q_emb, model_emb // group_size)
+        split_amax = split(amax, mapping.tp_size, mapping.rank, dim=tp_dim)
+        split_amax = split_amax.reshape(3 * (q_emb // mapping.tp_size), model_emb // group_size)
+        split_v = torch.from_numpy(split_v).T.contiguous()
+        split_amax = torch.from_numpy(split_amax).T.contiguous()
+        pre_quant_scale = model_params[
+            mPrefix + ".input_quantizer._pre_quant_scale"].reshape((1, model_emb)).to(torch_dtype)
+        #  split_pre_scale = split(pre_quant_scale, mapping.tp_size, mapping.rank, dim=tp_dim)
+        split_scale = split_amax / 8.0
+        mOp.qweight.value = AWQ_quantize_pack_preprocess(split_v, split_scale)
+        mOp.scale.value = split_scale.cpu().numpy()
+        mOp.pre_quant_scale.value = pre_quant_scale.cpu().numpy()
 
     def process_and_assign_weight(model_params, mPrefix, mOp, tp_dim=0):
         weight = model_params[mPrefix + ".weight"].T.contiguous()
@@ -1103,7 +1123,7 @@ def load_from_awq_qwen(tensorrt_llm_qwen: QWenForCausalLM,
         # )
         mPrefix = prefix + "attn.c_attn"
         mOp = tensorrt_llm_qwen.layers[layer_idx].attention.qkv
-        process_and_assign_weight(model_params, mPrefix, mOp, 1)
+        process_and_assign_attn_weight(model_params, mPrefix, mOp, 1)
 
         # Attention QKV Liner Bias
         th_bias = model_params[prefix + "attn.c_attn.bias"].cpu().to(torch_dtype).contiguous()
@@ -1118,20 +1138,20 @@ def load_from_awq_qwen(tensorrt_llm_qwen: QWenForCausalLM,
         mOp = tensorrt_llm_qwen.layers[layer_idx].attention.dense
         process_and_assign_weight(model_params, mPrefix, mOp, 0)
 
-        # MLP up_proj (mlp.gate) Linear
+        # MLP down_proj (mlp.w1) Linear
+        mPrefix = prefix + "mlp.w1"
+        mOp = tensorrt_llm_qwen.layers[layer_idx].mlp.w1
+        process_and_assign_weight(model_params, mPrefix, mOp, 1)
+
+        # MLP up_proj (mlp.w2) Linear
         mPrefix = prefix + "mlp.w2"
         mOp = tensorrt_llm_qwen.layers[layer_idx].mlp.w2
         process_and_assign_weight(model_params, mPrefix, mOp, 1)
 
-        # MLP down_proj (mlp.proj) Linear
-        mPrefix = prefix + "mlp.w1"
-        mOp = tensorrt_llm_qwen.layers[layer_idx].mlp.w1
-        process_and_assign_weight(model_params, mPrefix, mOp, 0)
-
-        # MLP gate_proj (mlp.fc) Linear
+        # MLP gate_proj (mlp.c_proj) Linear
         mPrefix = prefix + "mlp.c_proj"
         mOp = tensorrt_llm_qwen.layers[layer_idx].mlp.c_proj
-        process_and_assign_weight(model_params, mPrefix, mOp, 1)
+        process_and_assign_weight(model_params, mPrefix, mOp, 0)
 
     v = model_params['transformer.ln_f.weight']
     if mapping.is_last_pp_rank():
