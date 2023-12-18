@@ -186,6 +186,7 @@ def parse_arguments():
     parser.add_argument("--ffn_dim_multiplier", type=int, default=1)
     parser.add_argument("--inter_size", type=int, default=11008)
     parser.add_argument("--hidden_act", type=str, default="silu")
+    parser.add_argument("--seq_length", type=int, default=8192)
     parser.add_argument(
         "--max_batch_size", type=int, default=default_config.trt_max_batch_size
     )
@@ -420,9 +421,7 @@ def parse_arguments():
             args.hf_model_dir,
             trust_remote_code=True,
         )
-        args.inter_size = (
-            hf_config.intermediate_size
-        )  # override the inter_size for QWen
+        args.inter_size = hf_config.intermediate_size # override the inter_size for QWen
         args.n_embd = hf_config.hidden_size
         args.n_head = hf_config.num_attention_heads
         if hasattr(hf_config, "num_key_value_heads"):
@@ -433,6 +432,7 @@ def parse_arguments():
         args.hidden_act = "silu"
         args.kv_channels = hf_config.kv_channels
         args.rotary_emb_base = hf_config.rotary_emb_base
+        args.seq_length = hf_config.seq_length
     assert (
         args.use_gpt_attention_plugin is not None
     ), "QWen must use gpt attention plugin"
@@ -493,7 +493,7 @@ def build_rank_engine(
         num_heads=args.n_head,
         num_kv_heads=args.n_kv_head,
         hidden_size=args.n_embd,
-        seq_length=default_config.seq_length,
+        seq_length=args.seq_length,
         vocab_size=args.vocab_size,
         hidden_act=args.hidden_act,
         max_position_embeddings=args.n_positions,

@@ -13,23 +13,17 @@ class DefaultConfig:
     hf_max_batch_size = 1
 
     # Maximum batch size for TRT-LLM backend.
-    trt_max_batch_size = 2
+    trt_max_batch_size = 1
 
     # choice the model format, base or chat
     #  choices=["chatml", "raw"],
     chat_format = "chatml"
 
     # Maximum input length.
-    max_input_len = 2048
+    max_input_len = 6144
 
     # Maximum number of generate new tokens.
     max_new_tokens = 2048
-
-    # Maximum sequence length.
-    # for Qwen-7B-Chat V1.0, the seq_length is 2048
-    # for Qwen-7B-Chat V1.1, the seq_length is 8192
-    # for Qwen-14B-Chat, the seq_length is 2048
-    seq_length = 2048
 
     # Top p for sampling.
     top_p = 0.8
