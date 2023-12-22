@@ -501,7 +501,7 @@ def load_from_hf_qwen(
     # rank=0,
     # tensor_parallel=1,
     max_position_embeddings=8192,
-    rotary_emb_base=10000,
+    rotary_base=10000,
     kv_channels=128,
     dtype="float32",
     multi_query_mode=False,
@@ -544,7 +544,7 @@ def load_from_hf_qwen(
 
     torch_dtype = str_dtype_to_torch(dtype)
     # set for rope embedding
-    # inv_freq = 1.0 / (rotary_emb_base ** (
+    # inv_freq = 1.0 / (rotary_base ** (
     #     torch.arange(0, kv_channels, 2).float() / kv_channels)
     # )
     # value_table = torch.matmul(
@@ -808,7 +808,8 @@ def load_from_gptq_qwen(
             qkv_part = qkv_part.reshape(model_emb, 3, q_emb)
             split_qkv = split(qkv_part, mapping.tp_size, mapping.rank, dim=2)
             split_qkv = split_qkv.reshape(model_emb, 3 * (q_emb // mapping.tp_size))
-            split_qkv = torch.from_numpy(split_qkv)
+            if isinstance(split_qkv, np.ndarray):
+                split_qkv = torch.from_numpy(split_qkv)
             # dype: int32, int32, float16
             split_qkv_suf.append(split_qkv)
 

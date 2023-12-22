@@ -431,7 +431,7 @@ def parse_arguments():
         args.vocab_size = hf_config.vocab_size
         args.hidden_act = "silu"
         args.kv_channels = hf_config.kv_channels
-        args.rotary_emb_base = hf_config.rotary_emb_base
+        args.rotary_base = hf_config.rotary_emb_base
         args.seq_length = hf_config.seq_length
     assert (
         args.use_gpt_attention_plugin is not None
@@ -581,7 +581,7 @@ def build_rank_engine(
             # args.world_size,
             max_position_embeddings=args.n_positions,
             kv_channels=args.kv_channels,
-            rotary_emb_base=args.rotary_emb_base,
+            rotary_base=args.rotary_base,
             dtype=args.dtype,
             multi_query_mode=multi_query_mode,
         )
