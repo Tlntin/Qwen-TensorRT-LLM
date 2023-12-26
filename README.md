@@ -229,7 +229,7 @@
 
 ### 准备工作
 1. 下载镜像。
-    - 官方triton镜像23.12，对应TensorRT-LLM版本为0.7.0，需要自己在trtion容器中编译镜像，[参考教程](https://github.com/triton-inference-server/tensorrtllm_backend/tree/v0.7.0?tab=readme-ov-file#prepare-tensorrt-llm-engines)
+    - 官方triton镜像23.12，对应TensorRT-LLM版本为0.7.0，不含TensorRT-LLM开发包，需要自己在trtion容器中编译，[参考教程](https://github.com/triton-inference-server/tensorrtllm_backend/tree/v0.7.0?tab=readme-ov-file#prepare-tensorrt-llm-engines)
       ```bash
       docker pull nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3
       docker tag nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3 tensorrt_llm/release
