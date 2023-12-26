@@ -3,8 +3,8 @@
 ### 背景介绍
 - 介绍本工作是 <a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023">NVIDIA TensorRT Hackathon 2023</a> 的参赛题目，本项目使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。相关代码已经放在[release/0.1.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.1.0)分支，感兴趣的同学可以去该分支学习完整流程。
 - 本项目[release/0.5.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.5.0)分支和TensorRT-LLM官方仓库[release/0.5.0](https://github.com/NVIDIA/TensorRT-LLM/tree/release/0.5.0)分支对齐，所有功能均在该分支上面进行测试。
-- main分支目前和TensorRT-LLM官方仓库[v0.6.1](https://github.com/NVIDIA/TensorRT-LLM/releases/tag/v0.6.1)对齐，该版本已经支持Qwen，但是可能支持的功能特性还有不足，故我们决定继续更新该仓库。
-- 最新triton容器23.11还未完整支持tensorrt-llm 0.6.1，需要用triton的建议先用本项目的[release/0.5.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.5.0)分支。
+- main分支目前和TensorRT-LLM官方仓库[v0.7.0](https://github.com/NVIDIA/TensorRT-LLM/releases/tag/v0.7.0)对齐，该版本已经支持Qwen，但是可能支持的功能特性还有不足，故我们决定继续更新该仓库。
+- 该分支为实验性分支，未经过完整测试，需要生产用的话，建议先用本项目的[release/0.5.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.5.0)分支。
 
 ### 功能概述
 
@@ -228,15 +228,13 @@
 # 运行指南
 
 ### 准备工作
-1. 由于TensorRT-LLM 还未发布0.6.1 docker镜像，需要自己编译docker镜像，可参考该[文档](https://github.com/NVIDIA/TensorRT-LLM/blob/v0.6.1/docs/source/installation.md)，注意：一定要从0.6.1分支开始编译，否则可能会存在不兼容。如果官方后续有发布对应镜像（一般为Triton镜像），可以参考之前的文档进行部署，[参考链接](https://zhuanlan.zhihu.com/p/664545577)。
-
-    - 这里提供一个编译好的TensorRT-LLM镜像（不含triton），版本为0.6.1，理论上支持Compute Capability为7.0/8.0/8.6/8.9/9.0的显卡，不确定自己Compute Capability的，可以去官网[https://developer.nvidia.com/cuda-gpus](https://developer.nvidia.com/cuda-gpus)查询，使用下面的代码拉取镜像，并且重命名一下。
-
+1. 下载镜像。
+    - 官方triton镜像23.12，对应TensorRT-LLM版本为0.7.0，需要自己在trtion容器中编译镜像，[参考教程](https://github.com/triton-inference-server/tensorrtllm_backend/tree/v0.7.0?tab=readme-ov-file#prepare-tensorrt-llm-engines)
       ```bash
-      docker pull registry.cn-guangzhou.aliyuncs.com/tlntin/tensorrt_llm:v0.6.1
-      docker tag registry.cn-guangzhou.aliyuncs.com/tlntin/tensorrt_llm:v0.6.1 tensorrt_llm/release
+      docker pull nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3
+      docker tag nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3 tensorrt_llm/release
       ```
-    - AutoDL镜像，同样不含triton，版本为0.6.1，无卡用户可以体验玩玩，[链接](https://www.codewithgpu.com/i/NVIDIA/TensorRT-LLM/tensorrt_llm)
+    - AutoDL镜像，不含triton，版本为0.6.1，无卡用户可以体验玩玩，[链接](https://www.codewithgpu.com/i/NVIDIA/TensorRT-LLM/tensorrt_llm)
 
       
 

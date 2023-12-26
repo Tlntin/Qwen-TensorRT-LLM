@@ -540,11 +540,11 @@ class QWenAttention(Module):
 
         # return outputs
         context, past_key_value = gpt_attention(
-            tensor=qkv,
+            qkv=qkv,
             past_key_value=kv_cache_params.get_first_past_key_value(),
             sequence_length=attention_params.sequence_length,
             host_past_key_value_lengths=kv_cache_params.host_past_key_value_lengths,
-            host_max_kv_cache_lengths=kv_cache_params.host_max_kv_cache_lengths,
+            host_max_attention_window_sizes=kv_cache_params.host_max_attention_window_sizes,
             context_lengths=attention_params.context_lengths,
             cache_indirection=kv_cache_params.cache_indirection,
             host_request_types=attention_params.host_request_types,
@@ -561,6 +561,7 @@ class QWenAttention(Module):
             kv_quant_orig_scale=kv_quant_orig_scale,
             kv_cache_quant_mode=QuantMode.from_description(use_int8_kv_cache=self.use_int8_kv_cache),
             kv_cache_block_pointers=kv_cache_params.get_first_kv_cache_block_pointers(),
+            host_kv_cache_block_pointers=kv_cache_params.get_first_host_kv_cache_block_pointers(),
             max_context_length=attention_params.max_context_length,
             mask_type=self.attention_mask_type.value,
             host_context_lengths=attention_params.host_context_lengths
@@ -898,7 +899,7 @@ class QWenModel(Module):
                 rms_norm_eps=rms_norm_eps,
                 custom_plugin_paths=custom_plugin_paths
             )
-            for i in self.get_transformer_layers(self.mapping, num_layers)
+            for i in self.mapping.pp_layers(num_layers)
         ])
 
         self.ln_f = RmsNorm(normalized_shape=hidden_size, dtype=dtype)
@@ -926,11 +927,11 @@ class QWenModel(Module):
             hidden_states = recv(hidden_states, self.mapping.prev_pp_rank())
         self.register_network_output(f"embd", hidden_states)
 
-        for layer, past, pointer, host_max_kv_cache_length in zip(
-                self.layers,
-                kv_cache_params.past_key_value,
+        for layer, past, pointer, host_pointer, max_attention_window_size in zip(
+                self.layers, kv_cache_params.past_key_value,
                 kv_cache_params.kv_cache_block_pointers,
-                kv_cache_params.host_max_kv_cache_lengths
+                kv_cache_params.host_kv_cache_block_pointers,
+                kv_cache_params.host_max_attention_window_sizes
             ):
             hidden_states = layer(
                 hidden_states,
@@ -938,8 +939,9 @@ class QWenModel(Module):
                 kv_cache_params=KeyValueCacheParams(
                     past_key_value=[past],
                     host_past_key_value_lengths=kv_cache_params.host_past_key_value_lengths,
-                    host_max_kv_cache_lengths=host_max_kv_cache_length,
+                    host_max_attention_window_sizes=max_attention_window_size,
                     kv_cache_block_pointers=[pointer],
+                    host_kv_cache_block_pointers=[host_pointer],
                     cache_indirection=kv_cache_params.cache_indirection),
                 attention_params=attention_params,
                 all_reduce_workspace=all_reduce_workspace
@@ -1077,9 +1079,8 @@ class QWenForCausalLM(QWenModel, GenerationMixin):
             hidden_states.mark_output('hidden_states_output', self.dtype)
 
         if use_cache and default_net().plugin_config.paged_kv_cache == False:
-            for i, present in zip(
-                    self.get_transformer_layers(self.mapping, self.num_layers),
-                    presents):
+            for i, present in zip(self.mapping.pp_layers(self.num_layers),
+                                  presents):
                 present.mark_output(f'present_key_value_{i}', self.kv_dtype)
             if self.mapping.is_last_pp_rank():
                 return (lm_logits, presents)
@@ -1138,9 +1139,14 @@ class QWenForCausalLM(QWenModel, GenerationMixin):
                 model_inputs['last_token_ids'],
                 KeyValueCacheParams(
                     past_key_value=model_inputs['past_key_value'],
-                    host_past_key_value_lengths=model_inputs['host_past_key_value_lengths'],
-                    host_max_kv_cache_lengths=model_inputs['host_max_kv_cache_lengths'],
-                    kv_cache_block_pointers=model_inputs['kv_cache_block_pointers_list'],
+                    host_past_key_value_lengths=model_inputs[
+                        'host_past_key_value_lengths'],
+                    host_max_attention_window_sizes=model_inputs[
+                        'host_max_attention_window_sizes'],
+                    kv_cache_block_pointers=model_inputs[
+                        'kv_cache_block_pointers_list'],
+                    host_kv_cache_block_pointers=model_inputs[
+                        'host_kv_cache_block_pointers_list'],
                     cache_indirection=model_inputs['cache_indirection'],
                 ),
                 AttentionParams(
