@@ -229,15 +229,22 @@
 
 ### 准备工作
 1. 下载镜像。
-    - 官方triton镜像23.12，对应TensorRT-LLM版本为0.7.0，不含TensorRT-LLM开发包，需要自己在trtion容器中编译，[参考教程](https://github.com/triton-inference-server/tensorrtllm_backend/tree/v0.7.0?tab=readme-ov-file#prepare-tensorrt-llm-engines)
+    - 官方triton镜像23.12，对应TensorRT-LLM版本为0.7.0，不含TensorRT-LLM开发包，需要自己在trtion容器中编译，[参考教程](https://github.com/triton-inference-server/tensorrtllm_backend/tree/v0.7.0?tab=readme-ov-file#prepare-tensorrt-llm-engines)。
       ```bash
       docker pull nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3
       docker tag nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3 tensorrt_llm/release
       ```
-    - AutoDL镜像，不含triton，版本为0.6.1，无卡用户可以体验玩玩，[链接](https://www.codewithgpu.com/i/NVIDIA/TensorRT-LLM/tensorrt_llm)
-
       
+    - （关于上面的triton容器，不含TensorRT-LLM开发包）也可以使用我编译好的，百度网盘自取，链接: https://pan.baidu.com/s/1AIumaT2bhlVW7KuDWYw9tA?pwd=hvvf 提取码: hvvf 
 
+      ```bash
+       pip install tensorrt_llm-0.7.0-cp310-cp310-linux_x86_64.whl
+      ```
+    
+    - AutoDL镜像，不含triton，版本为0.6.1，无卡用户可以体验玩玩，[链接](https://www.codewithgpu.com/i/NVIDIA/TensorRT-LLM/tensorrt_llm)
+    
+      
+    
 2. 拉取本项目代码
 
     ```bash
