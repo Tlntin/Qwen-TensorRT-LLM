@@ -676,6 +676,9 @@ class QWenBlock(Module):
         self.max_position_embeddings = max_position_embeddings
         self.num_layers = num_layers
         self.position_embedding_type = position_embedding_type
+        self.rotary_embedding_base = rotary_base
+        self.rotary_embedding_scaling = rotary_scaling
+        self.neox_rotary_style = neox_rotary_style
 
         self.ln_1 = RmsNorm(
             normalized_shape=hidden_size,
@@ -694,9 +697,9 @@ class QWenBlock(Module):
             attention_mask_type=self.attention_mask_type,
             bias=bias,
             position_embedding_type=self.position_embedding_type,
-            rotary_embedding_base=rotary_base,
-            rotary_embedding_scaling=rotary_scaling,
-            neox_rotary_style=neox_rotary_style,
+            rotary_embedding_base=self.rotary_embedding_base,
+            rotary_embedding_scaling=self.rotary_embedding_scaling,
+            neox_rotary_style=self.neox_rotary_style,
             tp_group=self.tp_group,
             tp_size=self.tp_size,
             use_int8_kv_cache=quant_mode.has_int8_kv_cache(),

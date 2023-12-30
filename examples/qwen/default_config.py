@@ -13,14 +13,14 @@ class DefaultConfig:
     hf_max_batch_size = 1
 
     # Maximum batch size for TRT-LLM backend.
-    trt_max_batch_size = 1
+    trt_max_batch_size = 2
 
     # choice the model format, base or chat
     #  choices=["chatml", "raw"],
     chat_format = "chatml"
 
     # Maximum input length.
-    max_input_len = 6144
+    max_input_len = 1024 * 2
 
     # Maximum number of generate new tokens.
     max_new_tokens = 2048

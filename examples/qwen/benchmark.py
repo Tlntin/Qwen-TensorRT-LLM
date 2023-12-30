@@ -148,15 +148,17 @@ def run_trt_llm(
         # do inference
         input_ids = torch.cat(input_ids, axis=0).cuda()
         input_lengths = torch.IntTensor(input_lengths).type(torch.int32).cuda()
-        output_ids = decoder.generate(
+        output_dict = decoder.generate(
             input_ids=input_ids,
             input_lengths=input_lengths,
             sampling_config=sampling_config,
             max_new_tokens=min(max_new_tokens, global_max_output_len - input_ids.shape[1]),
         )
+        output_ids = output_dict['output_ids']
+        sequence_lengths = output_dict['sequence_lengths']
         pure_output_ids = []
         for i in range(len(batch)):
-            temp_ids = output_ids[i, input_lengths[i]:]
+            temp_ids = output_ids[i, input_lengths[i]: sequence_lengths[i][0]]
             pure_ids = []
             for i in range(len(temp_ids)):
                 if temp_ids[i] in [tokenizer.im_start_id, tokenizer.im_end_id]:

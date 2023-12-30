@@ -17,7 +17,7 @@ from tensorrt_llm.quantization.layers import (
 from tensorrt_llm.layers.attention import AttentionMaskType, PositionEmbeddingType
 from tensorrt_llm.module import Module
 from tensorrt_llm.functional import (ACT2FN, Tensor, allgather, allreduce,
-                          cast, concat, constant, gpt_attention, matmul, mul,
+                          cast, concat, constant, gpt_attention, matmul, mul, RotaryScalingType,
                           shape, slice, softmax, split, expand_dims_like, where, _create_tensor)
 
 # copy from tensorrt_llm/models/layers.py SmoothQuantAttention
@@ -36,6 +36,9 @@ class SmoothQuantAttention(Module):
         bias=False,
         dtype=None,
         position_embedding_type=PositionEmbeddingType.rope_gpt_neox,
+        rotary_embedding_base=10000.0,
+        rotary_embedding_scaling=None,
+        neox_rotary_style=False,
         tp_group=None,
         tp_size=1,
         tp_rank=0,
@@ -71,7 +74,17 @@ class SmoothQuantAttention(Module):
         self.position_embedding_type = position_embedding_type
         self.paged_kv_cache = paged_kv_cache
 
+        self.rotary_embedding_base = rotary_embedding_base
         self.rotary_embedding_dim = 0
+        self.rotary_embedding_scale_type = RotaryScalingType.none
+        self.rotary_embedding_scale = 1.0
+        if rotary_embedding_scaling is not None:
+            assert rotary_embedding_scaling["type"] in ["linear", "dynamic"]
+            self.rotary_embedding_scale_type = RotaryScalingType.linear if rotary_embedding_scaling[
+                "type"] == "linear" else RotaryScalingType.dynamic
+            self.rotary_embedding_scale = rotary_embedding_scaling["factor"]
+            assert self.rotary_embedding_scale > 1.0
+        self.neox_rotary_style = neox_rotary_style
         if self.position_embedding_type.is_rope():
             self.rotary_embedding_dim = hidden_size // num_attention_heads
 
@@ -140,16 +153,16 @@ class SmoothQuantAttention(Module):
                 default_net().plugin_config.gpt_attention_plugin)
             assert self.attention_mask_type == AttentionMaskType.causal, \
                 'Plugin only support masked MHA.'
-            kv_quant_scale = self.kv_orig_quant_scale.value if self.quant_mode.has_int8_kv_cache(
+            kv_orig_quant_scale = self.kv_orig_quant_scale.value if self.quant_mode.has_int8_kv_cache(
             ) else None
-            kv_dequant_scale = self.kv_quant_orig_scale.value if self.quant_mode.has_int8_kv_cache(
+            kv_quant_orig_scale = self.kv_quant_orig_scale.value if self.quant_mode.has_int8_kv_cache(
             ) else None
             context, past_key_value = gpt_attention(
-                tensor=qkv,
+                qkv=qkv,
                 past_key_value=kv_cache_params.get_first_past_key_value(),
                 sequence_length=attention_params.sequence_length,
                 host_past_key_value_lengths=kv_cache_params.host_past_key_value_lengths,
-                host_max_kv_cache_lengths=kv_cache_params.host_max_kv_cache_lengths,
+                host_max_attention_window_sizes=kv_cache_params.host_max_attention_window_sizes,
                 context_lengths=attention_params.context_lengths,
                 cache_indirection=kv_cache_params.cache_indirection,
                 host_request_types=attention_params.host_request_types,
@@ -157,16 +170,20 @@ class SmoothQuantAttention(Module):
                 num_kv_heads=self.num_kv_heads,
                 hidden_size_per_head=self.attention_head_size,
                 q_scaling=self.q_scaling,
-                rotary_embedding_dim=self.rotary_embedding_dim,
-                position_embedding_type=self.position_embedding_type,
-                kv_orig_quant_scale=kv_quant_scale,
-                kv_quant_orig_scale=kv_dequant_scale,
+                rotary_embedding_dim=self.rotary_embedding_dim, # when we use it 0, we will not use rotary embedding in plugin
+                rotary_embedding_base=self.rotary_embedding_base,
+                rotary_embedding_scale_type=self.neox_rotary_style,
+                rotary_embedding_max_positions=self.max_position_embeddings,
+                position_embedding_type=PositionEmbeddingType.rope_gpt_neox,
+                kv_orig_quant_scale=kv_orig_quant_scale,
+                kv_quant_orig_scale=kv_quant_orig_scale,
                 kv_cache_quant_mode=self.quant_mode,
-                max_context_length=attention_params.max_context_length,
-                tp_size=self.tp_size,
-                tp_rank=self.tp_rank,
                 kv_cache_block_pointers=kv_cache_params.get_first_kv_cache_block_pointers(),
-                host_context_lengths=attention_params.host_context_lengths)
+                host_kv_cache_block_pointers=kv_cache_params.get_first_host_kv_cache_block_pointers(),
+                max_context_length=attention_params.max_context_length,
+                mask_type=self.attention_mask_type.value,
+                host_context_lengths=attention_params.host_context_lengths
+        )
         else:
             assert self.paged_kv_cache == False
 
@@ -515,7 +532,9 @@ def smooth_quantize(model, quant_mode, rmsnorm_quantization_plugin_dtype, custom
             bias=layer.bias,
             dtype=layer.dtype,
             position_embedding_type=layer.position_embedding_type,
-            # neox_rotary_style=layer.neox_rotary_style,
+            rotary_embedding_base=layer.rotary_embedding_base,
+            rotary_embedding_scaling=layer.rotary_embedding_scaling,
+            neox_rotary_style=layer.neox_rotary_style,
             tp_group=layer.tp_group,
             tp_size=layer.tp_size,
             quant_mode=quant_mode

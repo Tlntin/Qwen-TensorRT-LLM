@@ -156,7 +156,7 @@ def main(args):
         profiler.start('load HF model')
         model = AutoModelForCausalLM.from_pretrained(
             args.hf_model_dir,
-            device_map='auto',
+            device_map='cuda:0',
             trust_remote_code=True,
         )
         model.generation_config = GenerationConfig.from_pretrained(
@@ -230,25 +230,32 @@ def main(args):
                 max_context_length=max_length,
                 max_new_tokens=min(max_new_tokens, max_output_len - max_length),
             )
-
             if tensorrt_llm_qwen.remove_input_padding:
-                output_ids = tensorrt_llm_qwen.decode_batch(
-                    line_encoded, sampling_config)
+                output_dict = tensorrt_llm_qwen.decode_batch(
+                    line_encoded,
+                    sampling_config,
+                    output_sequence_lengths=True,
+                    return_dict=True,
+                )
             else:
-                output_ids = tensorrt_llm_qwen.decode(
+                output_dict = tensorrt_llm_qwen.decode(
                     line_encoded,
                     input_lengths,
                     sampling_config,
+                    output_sequence_lengths=True,
+                    return_dict=True,
                 )
 
+            output_ids = output_dict['output_ids']
+            sequence_lengths = output_dict['sequence_lengths']
             torch.cuda.synchronize()
 
         # Extract a list of tensors of shape beam_width x output_ids.
         if tensorrt_llm_qwen.mapping.is_first_pp_rank():
             output_beams_list = [
                 tokenizer.batch_decode(output_ids[batch_idx, :,
-                                                  input_lengths[batch_idx]:],
-                                       skip_special_tokens=True)
+                                                  input_lengths[batch_idx]: sequence_lengths[i][0]],
+                                       skip_special_tokens=False)
                 for batch_idx in range(batch_size)
             ]
             return output_beams_list, output_ids[:, :, max_length:].tolist()

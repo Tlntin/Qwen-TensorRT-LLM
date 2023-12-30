@@ -6,7 +6,7 @@ from operator import attrgetter
 from safetensors import safe_open
 import numpy as np
 import torch
-from tqdm import tqdm
+from tqdm import tqdm, trange
 import tensorrt_llm
 from tensorrt_llm._utils import (
     str_dtype_to_torch,
@@ -237,12 +237,10 @@ def load_from_ft(
             split(lm_head_weight, mapping.tp_size, mapping.tp_rank)
         )
 
-    layers_range = list(
-        range(
-            mapping.pp_rank * tensorrt_llm_qwen.num_layers,
-            (mapping.pp_rank + 1) * tensorrt_llm_qwen.num_layers,
-            1,
-        )
+    layers_range = trange(
+        mapping.pp_rank * tensorrt_llm_qwen.num_layers,
+        (mapping.pp_rank + 1) * tensorrt_llm_qwen.num_layers,
+        1,
     )
 
     for i in layers_range:
@@ -725,9 +723,9 @@ def load_from_gptq_qwen(
         if os.path.isdir(quant_ckpt_path):
             model = AutoModelForCausalLM.from_pretrained(
                 quant_ckpt_path,
-                device_map="auto",
+                device_map="cuda:0",
                 trust_remote_code=True
-            ).eval().cpu()
+            ).cpu().eval()
             model_params = {k: v for k, v in model.state_dict().items()}
             torch.cuda.empty_cache()
             del model
@@ -985,8 +983,12 @@ def load_from_awq_qwen(tensorrt_llm_qwen: QWenForCausalLM,
         amax = amax.reshape(3, q_emb, model_emb // group_size)
         split_amax = split(amax, mapping.tp_size, mapping.rank, dim=tp_dim)
         split_amax = split_amax.reshape(3 * (q_emb // mapping.tp_size), model_emb // group_size)
-        split_v = torch.from_numpy(split_v).T.contiguous()
-        split_amax = torch.from_numpy(split_amax).T.contiguous()
+        if isinstance(split_v, np.ndarray):
+            split_v = torch.from_numpy(split_v)
+        if isinstance(split_amax, np.ndarray):
+            split_amax = torch.from_numpy(split_amax)
+        split_v = split_v.T.contiguous()
+        split_amax = split_amax.T.contiguous()
         pre_quant_scale = model_params[
             mPrefix + ".input_quantizer._pre_quant_scale"].reshape((1, model_emb)).to(torch_dtype)
         #  split_pre_scale = split(pre_quant_scale, mapping.tp_size, mapping.rank, dim=tp_dim)

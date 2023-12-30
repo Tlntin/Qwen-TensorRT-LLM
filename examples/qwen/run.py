@@ -126,17 +126,19 @@ class QWenForCausalLMGenerationSession(GenerationSession):
             max_context_length=max_input_length,
             max_new_tokens=max_new_tokens
         )
-        output_ids = self.decode(
+        output_dict = self.decode(
             input_ids,
             input_lengths,
             sampling_config,
+            output_sequence_lengths=True,
+            return_dict=True,
             # stop_words_list=stop_works_list
         )
         with torch.no_grad():
             torch.cuda.synchronize()
             if runtime_rank == 0:
-                outputs = output_ids[:, 0, :]
-                return outputs
+                output_dict['output_ids'] = output_dict['output_ids'][:, 0, :]
+                return output_dict
     
     def chat(
         self,
@@ -170,16 +172,23 @@ class QWenForCausalLMGenerationSession(GenerationSession):
             max_context_length=max_input_length,
             max_new_tokens=max_new_tokens
         )
-        output_ids = self.decode(
-            input_ids, input_lengths, sampling_config, streaming=False,
+        output_dict = self.decode(
+            input_ids,
+            input_lengths,
+            sampling_config,
+            streaming=False,
+            output_sequence_lengths=True,
+            return_dict=True,
         )
         with torch.no_grad():
             torch.cuda.synchronize()
+            output_ids = output_dict['output_ids']
+            sequence_lengths = output_dict['sequence_lengths']
             if runtime_rank == 0:
                 output_texts = [
                     tokenizer.decode(
-                        output_ids[i, 0, input_lengths[i]: ],
-                        skip_special_tokens=True
+                        output_ids[i, 0, input_lengths[i]: sequence_lengths[i][0]],
+                        skip_special_tokens=False
                     )
                     for i in range(output_ids.size(0))
                 ]
@@ -219,14 +228,22 @@ class QWenForCausalLMGenerationSession(GenerationSession):
         )
         with torch.no_grad():
             chunk_lengths = input_lengths.clone()
-            for output_ids in self.decode(
-                input_ids, input_lengths, sampling_config, streaming=True,
+            for output_dict in self.decode(
+                input_ids,
+                input_lengths,
+                sampling_config,
+                streaming=True,
+                output_sequence_lengths=True,
+                return_dict=True
             ):
+                output_ids = output_dict['output_ids']
+                sequence_lengths = output_dict['sequence_lengths']
+                # print("sequence_lengths", sequence_lengths)
                 torch.cuda.synchronize()
                 if runtime_rank == 0:
                     output_texts = []
                     for i in range(output_ids.size(0)):
-                        temp_ids = output_ids[i, 0, chunk_lengths[i]:]
+                        temp_ids = output_ids[i, 0, chunk_lengths[i]: sequence_lengths[i][0]]
                         pure_ids = []
                         for j in range(len(temp_ids)):
                             if temp_ids[j] in [tokenizer.im_start_id, tokenizer.im_end_id]:
@@ -236,7 +253,7 @@ class QWenForCausalLMGenerationSession(GenerationSession):
                             pure_ids = temp_ids
                         if pure_ids.size(0) == 0:
                             continue
-                        temp_text = tokenizer.decode(pure_ids, skip_special_tokens=True)
+                        temp_text = tokenizer.decode(pure_ids, skip_special_tokens=False)
                         # check code is error
                         if b"\xef\xbf\xbd" in temp_text.encode():
                             continue

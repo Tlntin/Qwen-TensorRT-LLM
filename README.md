@@ -433,9 +433,9 @@ python3 run.py --tokenizer_dir=Qwen-1_8B-Chat-Int4
 ```
 
 ### 运行指南（int4-awq篇）
-1. 需要下载并安装[nvidia-ammo](https://developer.nvidia.com/downloads/assets/cuda/files/nvidia-ammo/nvidia_ammo-0.3.0.tar.gz)模块，下面是一个安装代码参考，注意不要安装cuda版，而是安装通用版，否则会有bug。
+1. 需要下载并安装nvidia-ammo模块
 ```bash
-pip install nvidia_ammo-0.3.0-cp310-cp310-linux_x86_64.whl
+pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com nvidia-ammo~=0.5.0
 ```
 2. 修改ammo代码，加上qwen支持（不加上会报错），下面是一个简单的参考案例：
 - 先在vscode，任意写一个python文件，导入下面的函数
