@@ -341,6 +341,8 @@ class QWenAttention(Module):
 
         self.use_dynamic_ntk = use_dynamic_ntk
         self.use_logn_attn = use_logn_attn
+        if self.use_dynamic_ntk:
+            self.rotary_embedding_scale_type = RotaryScalingType.dynamic
 
         # torch implementation
         # logn_list = [
@@ -554,8 +556,8 @@ class QWenAttention(Module):
             q_scaling=self.q_scaling,
             rotary_embedding_dim=self.rotary_embedding_dim, # when we use it 0, we will not use rotary embedding in plugin
             rotary_embedding_base=self.rotary_embedding_base,
-            rotary_embedding_scale_type=self.neox_rotary_style,
-            rotary_embedding_max_positions=self.max_position_embeddings,
+            rotary_embedding_scale_type=self.rotary_embedding_scale_type,
+            rotary_embedding_max_positions=self.seq_length,
             position_embedding_type=PositionEmbeddingType.rope_gpt_neox,
             kv_orig_quant_scale=kv_orig_quant_scale,
             kv_quant_orig_scale=kv_quant_orig_scale,
