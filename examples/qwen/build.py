@@ -3,7 +3,7 @@ import math
 import os
 import time
 import ctypes
-import tensorrt as trt
+# import tensorrt as trt
 import torch
 import torch.multiprocessing as mp
 

@@ -194,3 +194,4 @@ kineto/
 .vscode/
 *.tar.gz
 tmp/
+.idea/
