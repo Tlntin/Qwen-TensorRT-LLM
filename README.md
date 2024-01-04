@@ -35,6 +35,7 @@
 ### 软硬件要求
 
 - Linux最佳，已安装docker，并且安装了nvidia-docker（[安装指南](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)），Windows理论也可以，但是还未测试，感兴趣可以自己研究一下。
+- Windows参考这个教程：[链接](https://zhuanlan.zhihu.com/p/676095460)
 - 有英伟达显卡（30系，40系，V100/A100等），以及一定的显存、内存、磁盘。结合[Qwen官方推理要求](https://github.com/QwenLM/Qwen/blob/main/README_CN.md#%E6%8E%A8%E7%90%86%E6%80%A7%E8%83%BD)，预估出下面的要求，详见表格（仅编译期最大要求），仅供参考：
 
 <table>
