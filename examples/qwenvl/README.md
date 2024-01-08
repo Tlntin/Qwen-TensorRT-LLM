@@ -28,7 +28,7 @@
 	--remove_input_padding \
 	--use_gpt_attention_plugin float16 \
 	--use_gemm_plugin float16 --enable_context_fmha \
-	--use_rmsnorm_plugin --log_level verbose \
+	--use_rmsnorm_plugin --log_level error \
 	--use_lookup_plugin float16 \
 	--max_prompt_embedding_table_size 2048 \
 	--output_dir=trt_engines/Qwen-VL-7B-fp16
