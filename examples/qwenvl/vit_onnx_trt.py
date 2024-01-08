@@ -68,7 +68,7 @@ class ONNX_TRT:
     def generate_trt_engine(self,onnxFile,planFile,minBS=1,optBS=2,maxBS=4):
         import tensorrt as trt
         from time import time
-        logger = trt.Logger(trt.Logger.VERBOSE)
+        logger = trt.Logger(trt.Logger.ERROR)
         builder = trt.Builder(logger)
         network = builder.create_network(
             1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
