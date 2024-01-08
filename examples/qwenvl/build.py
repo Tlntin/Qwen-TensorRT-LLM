@@ -16,7 +16,7 @@ import argparse
 import os
 import time
 import ctypes
-import tensorrt as trt
+# import tensorrt as trt
 import torch
 import torch.multiprocessing as mp
 # for release runing
@@ -35,7 +35,8 @@ from tensorrt_llm.network import net_guard
 from tensorrt_llm.plugin.plugin import ContextFMHAType
 from tensorrt_llm.quantization import QuantMode
 from tensorrt_llm.mapping import Mapping
-from weight import load_from_hf_qwen, load_from_ft,load_from_gptq_qwen
+from weight import (load_from_hf_qwen, load_from_ft,
+                    load_from_gptq_qwen, load_from_awq_qwen)
 from utils.quantization import smooth_quantize
 
 
@@ -548,27 +549,25 @@ def build_rank_engine(builder: Builder,
         )
         print("load smooth quantize ok")
     elif args.use_weight_only:
-        if args.weight_only_precision == 'int8':
-            tensorrt_llm_qwen = weight_only_quantize(tensorrt_llm_qwen,
-                                                      args.quant_mode)
-        elif args.weight_only_precision == 'int4':
-            tensorrt_llm_qwen = weight_only_quantize(tensorrt_llm_qwen,
-                                                      args.quant_mode)
-        elif args.weight_only_precision == 'int4_awq':
-            tensorrt_llm_qwen = weight_only_groupwise_quantize(
-                model=tensorrt_llm_qwen,
-                quant_mode=args.quant_mode,
-                group_size=args.group_size,
-                zero=False,
-                pre_quant_scale=True,
-                exclude_modules=[])
+        quantize_kwargs = {}
+        if args.weight_only_precision == 'int4_awq':
+            quantize_kwargs = {
+                "group_size": args.group_size,
+                "zero": False,
+                "pre_quant_scale": True,
+                "exclude_modules": [],
+            }
         elif args.weight_only_precision == 'int4_gptq':
-            tensorrt_llm_qwen = weight_only_groupwise_quantize(
-                model=tensorrt_llm_qwen,
-                quant_mode=args.quant_mode,
-                group_size=args.group_size,
-                zero=True,
-                pre_quant_scale=False)
+            quantize_kwargs = {
+                "group_size": args.group_size,
+                "zero": True,
+                "pre_quant_scale": False,
+            }
+        tensorrt_llm_qwen = quantize_model(
+            tensorrt_llm_qwen,
+            args.quant_mode,
+            **quantize_kwargs
+        )
         # elif args.enable_fp8 or args.fp8_kv_cache:
         #     logger.info(f'Loading scaling factors from '
         #                 f'{args.quantized_fp8_model_path}')
@@ -578,13 +577,27 @@ def build_rank_engine(builder: Builder,
         #     tensorrt_llm_qwen = fp8_quantize(tensorrt_llm_qwen,
         #                                       quant_mode=args.quant_mode,
         #                                       quant_scales=quant_scales)
- 
-    if args.ft_dir_path is not None:
+
+    if args.ft_dir_path is not None and not args.ft_dir_path.rstrip("/").endswith("-gpu"):
         ft_dir_path = os.path.join(args.ft_dir_path, str(args.tp_size) + "-gpu")
     else:
-        ft_dir_path = None
-    if args.hf_model_dir is not None and \
-        (ft_dir_path is None or not os.path.exists(ft_dir_path)):
+        ft_dir_path = args.ft_dir_path
+
+    if args.per_group:
+        load_func = load_from_awq_qwen if args.weight_only_precision == 'int4_awq' else load_from_gptq_qwen
+        load_func(tensorrt_llm_qwen=tensorrt_llm_qwen,
+                  quant_ckpt_path=args.quant_ckpt_path,
+                  mapping=mapping,
+                  dtype=args.dtype)
+    elif args.hf_model_dir is not None and (
+            ft_dir_path is None or not os.path.exists(ft_dir_path)
+    ):
+        print(
+            "\033[33m",
+            ft_dir_path,
+            "not exists, will get weight from qwen local",
+            "\033[0m",
+        )
         logger.info(f'Loading HF QWen ... from {args.hf_model_dir}')
         tik = time.time()
         hf_qwen = AutoModelForCausalLM.from_pretrained(
@@ -741,6 +754,9 @@ def build(rank, args):
             continue
         int8_trt_flag = args.quant_mode.has_act_and_weight_quant() or (
             not args.paged_kv_cache and args.quant_mode.has_int8_kv_cache())
+        # to fixup a bug
+        if args.use_weight_only:
+            int8_trt_flag = True
         builder_config = builder.create_builder_config(
             name=MODEL_NAME,
             precision=args.dtype,

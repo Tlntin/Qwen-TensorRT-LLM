@@ -3,8 +3,8 @@ import json
 import os
 from pathlib import Path
 from typing import Tuple, List, Union
-import tensorrt as trt
 import torch
+import tensorrt as trt
 from transformers import AutoTokenizer,AutoConfig, PreTrainedTokenizer
 import tensorrt_llm
 import tensorrt_llm.profiler as profiler
@@ -302,6 +302,7 @@ class QWenInfer(object):
         content_list.append({'text': input_text})
         query = self.tokenizer.from_list_format(content_list)
         raw_text, context_tokens = self.make_context(query,history=history)
+        print("raw_text", raw_text)
         # context_tokens = self.tokenizer.encode(query)
         input_ids = torch.tensor([context_tokens]).to('cuda')  
         bos_pos = torch.where(input_ids == self.config.visual['image_start_id']) 

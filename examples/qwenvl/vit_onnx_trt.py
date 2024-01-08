@@ -68,7 +68,7 @@ class ONNX_TRT:
     def generate_trt_engine(self,onnxFile,planFile,minBS=1,optBS=2,maxBS=4):
         import tensorrt as trt
         from time import time
-        logger = trt.Logger(trt.Logger.ERROR)
+        logger = trt.Logger(trt.Logger.INFO)
         builder = trt.Builder(logger)
         network = builder.create_network(
             1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
@@ -85,6 +85,7 @@ class ONNX_TRT:
                 for error in range(parser.num_errors):
                     print(parser.get_error(error))
             print("Succeeded parsing %s" % onnxFile)
+        print("Begin convert onnx to TensorRT engine, need wait a few minutes")
 
         nBS = -1
         nMinBS = minBS

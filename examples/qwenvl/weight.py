@@ -515,6 +515,10 @@ def load_from_hf_qwen(
     use_weight_only = quant_mode.is_weight_only()
 
     model_params = dict(hf_qwen.named_parameters())
+    model_params = {
+        k: v for k, v in model_params.items()
+        if "visual" not in k
+    }
     # for layer in range(hf_qwen.config.num_hidden_layers):
     #     # prefix = f'model.layers.{layer}.self_attn.'
     #     prefix = f'transformer.h.{layer}.attn.'
@@ -733,6 +737,10 @@ def load_from_gptq_qwen(
             del model
         else:
             raise ValueError("quantized checkpoint format not supported!")
+    model_params = {
+        k: v for k, v in model_params.items()
+        if "visual" not in k
+    }
 
     def unpack_int32_into_int8(w_packed):
         # unpack inputs packed in int32/float32 into uint4 and store them in int8 format
@@ -780,7 +788,6 @@ def load_from_gptq_qwen(
             zeros_x_scales_fp16.contiguous(), # dtype: float16
             scales_fp16.contiguous(), # dtype: float16
         )
-
     layer_ids = [extract_layer_idx(key) for key in model_params.keys()]
     layer_ids = [int(layer_idx) for layer_idx in layer_ids if layer_idx is not None]
     num_hidden_layers = max(layer_ids) + 1
@@ -918,7 +925,7 @@ def load_from_gptq_qwen(
                 tensorrt_llm_qwen.layers[idx].mlp.w2.scale.value = th_scale.to(torch_dtype).numpy()
 
     tok = time.time()
-    t = time.strftime("%h:%m:%s", time.gmtime(tok - tik))
+    t = time.strftime("%H:%M:%S", time.gmtime(tok - tik))
     tensorrt_llm.logger.info(f"weights loaded. total time: {t}")
 
 
