@@ -20,10 +20,9 @@
 
 ### 支持的模型
 
-- base模型（实验性）：[Qwen-1_8B](https://huggingface.co/Qwen/Qwen-1_8B)、[Qwen-7B](https://huggingface.co/Qwen/Qwen-7B)、[Qwen-14B](https://huggingface.co/Qwen/Qwen-14B)、[Qwen-72B](https://huggingface.co/Qwen/Qwen-72B)（实验性）
-- chat模型（推荐）：[Qwen-1_8B-Chat](https://huggingface.co/Qwen/Qwen-1_8B-Chat)、[Qwen-7B-Chat](https://huggingface.co/Qwen/Qwen-7B-Chat)、[Qwen-14B-Chat](https://huggingface.co/Qwen/Qwen-14B-Chat)、[Qwen-72B-Chat](https://huggingface.co/Qwen/Qwen-72B-Chat)（实验性）
+- base模型（实验性）：[Qwen-1_8B](https://huggingface.co/Qwen/Qwen-1_8B)、[Qwen-7B](https://huggingface.co/Qwen/Qwen-7B)、[Qwen-14B](https://huggingface.co/Qwen/Qwen-14B)、[Qwen-72B](https://huggingface.co/Qwen/Qwen-72B)（实验性）、[QWen-VL](https://huggingface.co/Qwen/Qwen-VL)
+- chat模型（推荐）：[Qwen-1_8B-Chat](https://huggingface.co/Qwen/Qwen-1_8B-Chat)、[Qwen-7B-Chat](https://huggingface.co/Qwen/Qwen-7B-Chat)、[Qwen-14B-Chat](https://huggingface.co/Qwen/Qwen-14B-Chat)、[Qwen-72B-Chat](https://huggingface.co/Qwen/Qwen-72B-Chat)（实验性）、[QWen-VL-Chat](https://huggingface.co/Qwen/Qwen-VL-Chat)
 - chat-int4模型：[Qwen-1_8B-Chat-Int4](https://huggingface.co/Qwen/Qwen-1_8B-Chat-Int4)、[Qwen-7B-Chat-Int4](https://huggingface.co/Qwen/Qwen-7B-Chat-Int4)、[Qwen-14B-Chat-Int4](https://huggingface.co/Qwen/Qwen-14B-Chat-Int4)、、[Qwen-72B-Chat-Int4](https://huggingface.co/Qwen/Qwen-72B-Chat-Int4)（实验性）
-- 其他模型支持（实验性）：chatglm3-6b-32k、chatglm2-6b和chatglm3-6b的Tensor Parallel支持。
 
 ### 相关教程：
 - 本项目配套B站教程：[TensorRT-LLM实战指南](https://www.bilibili.com/video/BV12M411D7uS/)
