@@ -639,14 +639,6 @@ def build_rank_engine(builder: Builder,
             dtype=args.dtype,
             multi_query_mode=multi_query_mode
         )
-    elif args.per_group:
-        # load_func = load_from_awq_llama if args.weight_only_precision == 'int4_awq' else load_from_gptq_llama
-        load_func = load_from_gptq_qwen
-        load_func(tensorrt_llm_qwen=tensorrt_llm_qwen,
-                  quant_ckpt_path=args.quant_ckpt_path,
-                  mapping=mapping,
-                  dtype=args.dtype)
-        
     else:
         raise ValueError(
             "You must specify either --hf_model_dir or --ft_dir_path")
