@@ -21,7 +21,7 @@
 
     **NOTE:** `max_prompt_embedding_table_size = query_token_num * max_batch_size`, so if you changes the max_batch_size, prompt table size must be reset accordingly.
     ```bash
-    CUDA_VISIBLE_DEVICES=0 python3 build.py  \
+    python3 build.py  \
 	--hf_model_dir=./Qwen-VL-Chat \
 	--dtype float16 --max_batch_size 8 \
 	--max_input_len 512 --max_new_tokens 1024 \
@@ -35,7 +35,26 @@
     ```
     The built Qwen engines lie in `./trt_engines/Qwen-VL-7B-fp16`.
 
-3. Qwen-VL(gptq-int4)
+3. Qwen-VL(int8 weight only) 
+    **NOTE:** `max_prompt_embedding_table_size = query_token_num * max_batch_size`, so if you changes the max_batch_size, prompt table size must be reset accordingly.
+    ```bash
+    python3 build.py  \
+	--hf_model_dir=./qwen/Qwen-VL/ \
+	--dtype float16 --max_batch_size 8 \
+	--max_input_len 512 --max_new_tokens 1024 \
+	--remove_input_padding \
+	--use_gpt_attention_plugin float16 \
+	--use_gemm_plugin float16 --enable_context_fmha \
+	--use_rmsnorm_plugin --log_level error \
+	--use_lookup_plugin float16 \
+	--max_prompt_embedding_table_size 2048 \
+    --use_weight_only --weight_only_precision int8 \
+	--output_dir=trt_engines_int8/Qwen-VL-7B-int8
+    ```
+    - The built Qwen engines lie in `./trt_engines_int8/Qwen-VL-7B-int8`.
+
+4. Qwen-VL(gptq-int4)
+    **NOTE:** `max_prompt_embedding_table_size = query_token_num * max_batch_size`, so if you changes the max_batch_size, prompt table size must be reset accordingly.
     - install some python package
     ```bash
     pip install auto-gptq optimum
@@ -48,8 +67,8 @@
     ```
    
     - build engine
-    ```bash
-    python3 build.py \
+   ```bash
+   python3 build.py \
 	--hf_model_dir=./Qwen-VL-Chat \
 	--dtype float16 --max_batch_size 4 \
 	--max_input_len 512 --max_new_tokens 1024 \
@@ -63,13 +82,30 @@
     --weight_only_precision int4_gptq \
     --per_group \
     --quant_ckpt_path ./Qwen-VL-Chat-My-Int4/gptq_model-4bit-128g.safetensors \
-	--output_dir=trt_engines/Qwen-VL-7B-fp16 
-    ```
+	--output_dir=trt_engines/Qwen-VL-7B-int4-gptq 
+   ```
 
-4. Run Qwen-VL pipeline
+5. Run Qwen-VL pipeline
+    - fp16 run
     ```bash
-    CUDA_VISIBLE_DEVICES=0 python run.py \
+    python run.py \
 	--tokenizer_dir=./Qwen-VL-Chat \
 	--qwen_engine_dir=./trt_engines/Qwen-VL-7B-fp16/ \
 	--vit_engine_dir=./plan/
     ```
+   
+   - int8 weight only run
+   ```bash
+   python run.py \
+   --tokenizer_dir=./Qwen-VL-Chat \
+   --qwen_engine_dir=trt_engines_int8/Qwen-VL-7B-int8 \
+   --vit_engine_dir=./plan/
+   ```
+   
+    - int4 gptq run
+   ```bash
+   python run.py \
+   --tokenizer_dir=./Qwen-VL-Chat \
+   --qwen_engine_dir=trt_engines/Qwen-VL-7B-int4-gptq \
+   --vit_engine_dir=./plan/ 
+   ```
