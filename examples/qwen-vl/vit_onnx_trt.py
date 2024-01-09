@@ -45,14 +45,20 @@ class ONNX_TRT:
         
         image_pre_obj = Preprocss(self.image_size)
         torch_dtype = str_dtype_to_torch("float16")
-        model =  AutoModelForCausalLM.from_pretrained(pretrained_model_path ,device_map="cuda",torch_dtype=torch_dtype,fp16=True,trust_remote_code=True,).eval()
+        model = AutoModelForCausalLM.from_pretrained(
+            pretrained_model_path,
+            device_map="cpu",
+            torch_dtype=torch_dtype,
+            # fp16=True,
+            trust_remote_code=True
+        ).eval()
         image_url = ['https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg']
         device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
         image = image_pre_obj.encode(image_url).to(device)
         if not os.path.exists('./input_pt'):
             os.mkdir('./input_pt')
-            torch.save(image,'./input_pt/image.pt')
-        model_visual = model.transformer.visual
+            torch.save(image, './input_pt/image.pt')
+        model_visual = model.transformer.visual.to(device).to(torch_dtype)
         model_visual.eval()
         
         torch.onnx.export(model_visual,
