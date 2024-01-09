@@ -113,7 +113,7 @@ class ONNX_TRT:
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--onnxFile',type=str, default='./onnx/visual_encoder/visual_encoder.onnx',help='')#onnx/visual_encoder
-    parser.add_argument('--pretrained_model_path',type=str, default='./qwen/Qwen-VL',help='')
+    parser.add_argument('--pretrained_model_path',type=str, default='./qwen/Qwen-VL-Chat',help='')
     parser.add_argument('--planFile',type=str, default='./plan/visual_encoder/visual_encoder_fp16.plan',help='')
     parser.add_argument('--only_trt', action='store_true', help='Run only convert the onnx to TRT engine.')
     parser.add_argument('--minBS',type=int, default=1)

@@ -15,7 +15,7 @@
     ```
     Moreover, it will save test image tensor to `image.pt` and visual query tokens to `query_tokens.pt` for later pipeline inference.
 
-2. QwenVL(fp16)
+3. QwenVL(fp16)
 
 - Build TRT-LLM engines (only need to add --max_prompt_embedding_table_size)
 
@@ -35,7 +35,7 @@
     ```
     The built Qwen engines lie in `./trt_engines/Qwen-VL-7B-fp16`.
 
-3. Qwen-VL(int8 weight only) 
+4. Qwen-VL(int8 weight only) 
     **NOTE:** `max_prompt_embedding_table_size = query_token_num * max_batch_size`, so if you changes the max_batch_size, prompt table size must be reset accordingly.
     ```bash
     python3 build.py  \
@@ -53,7 +53,7 @@
     ```
     - The built Qwen engines lie in `./trt_engines_int8/Qwen-VL-7B-int8`.
 
-4. Qwen-VL(gptq-int4)
+5. Qwen-VL(gptq-int4)
     **NOTE:** `max_prompt_embedding_table_size = query_token_num * max_batch_size`, so if you changes the max_batch_size, prompt table size must be reset accordingly.
     - install some python package
     ```bash
@@ -85,7 +85,7 @@
 	--output_dir=trt_engines/Qwen-VL-7B-int4-gptq 
    ```
 
-5. Run Qwen-VL pipeline
+6. Run Qwen-VL pipeline
     - fp16 run
     ```bash
     python run.py \
