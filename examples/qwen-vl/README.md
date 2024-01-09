@@ -2,16 +2,16 @@
 1. Download Qwen-VL
     ```bash
     git lfs install
-    git clone https://huggingface.co/Qwen/Qwen-VL
+    git clone https://huggingface.co/Qwen/Qwen-VL-Chat
     ```
 2. ViT
 - Generate ONNX model and TRT engine for ViT
     ```bash
-    python vit_onnx_trt.py --pretrained_model_path ./qwen/Qwen-VL
+    python vit_onnx_trt.py --pretrained_model_path ./Qwen-VL-Chat
     ```
     The exported ONNX files lies in `./onnx/visual_encoder` and the built engine lie in `./plan/visual_encoder`. And you have onnx files already and convert TRT engine only, use:
     ```bash
-    python vit_onnx_trt.py --pretrained_model_path ./qwen/Qwen-VL --only_trt
+    python vit_onnx_trt.py --pretrained_model_path ./Qwen-VL-Chat --only_trt
     ```
     Moreover, it will save test image tensor to `image.pt` and visual query tokens to `query_tokens.pt` for later pipeline inference.
 
@@ -39,7 +39,7 @@
     **NOTE:** `max_prompt_embedding_table_size = query_token_num * max_batch_size`, so if you changes the max_batch_size, prompt table size must be reset accordingly.
     ```bash
     python3 build.py  \
-	--hf_model_dir=./qwen/Qwen-VL/ \
+	--hf_model_dir=./Qwen-VL-Chat \
 	--dtype float16 --max_batch_size 8 \
 	--max_input_len 512 --max_new_tokens 1024 \
 	--remove_input_padding \
