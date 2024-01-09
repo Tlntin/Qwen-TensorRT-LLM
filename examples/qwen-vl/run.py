@@ -61,14 +61,18 @@ class QWenInfer(object):
             gen_config = json.load(f)
         top_k = gen_config['top_k']
         top_p = gen_config['top_p']
+        #print("top_k: ", top_k,  " top_p: ", top_p)
         chat_format = gen_config['chat_format']
-        if chat_format == "raw":
-            eos_token_id = gen_config['eos_token_id']
-            pad_token_id = gen_config['pad_token_id']
-        elif chat_format == "chatml":
-            pad_token_id = eos_token_id = tokenizer.im_end_id
-        else:
-            raise Exception("unkown chat format ", chat_format)
+        #if chat_format == "raw":
+        #    eos_token_id = gen_config['eos_token_id']
+        #    pad_token_id = gen_config['pad_token_id']
+        #elif chat_format == "chatml":
+        #    pad_token_id = eos_token_id = tokenizer.im_end_id
+        #else:
+        #    raise Exception("unkown chat format ", chat_format)
+        eos_token_id = gen_config['eos_token_id']
+        pad_token_id = gen_config['pad_token_id']
+        #print("eos_token_id: ", eos_token_id, " pad_token_id: ", pad_token_id)
 
         use_gpt_attention_plugin = config['plugin_config']['gpt_attention_plugin']
         remove_input_padding = config['plugin_config']['remove_input_padding']
@@ -183,6 +187,7 @@ class QWenInfer(object):
         else:
             tasks = torch.zeros([input_ids.size(0)], dtype=torch.int32).cuda()  
         return [prompt_table, tasks, task_vocab_size]
+
     def make_context(
         self,
         query: str,
@@ -302,7 +307,8 @@ class QWenInfer(object):
         content_list.append({'text': input_text})
         query = self.tokenizer.from_list_format(content_list)
         raw_text, context_tokens = self.make_context(query,history=history)
-        print("raw_text", raw_text)
+        print("raw_text: ", raw_text)
+        print('context_tokens: ', context_tokens)
         # context_tokens = self.tokenizer.encode(query)
         input_ids = torch.tensor([context_tokens]).to('cuda')  
         bos_pos = torch.where(input_ids == self.config.visual['image_start_id']) 
@@ -386,7 +392,7 @@ def parse_arguments():
     parser.add_argument(
         '--input_text',
         type=str,
-        default="Descibe the picture"
+        default="这是什么"
     )
     parser.add_argument(
         '--images_path',
@@ -427,6 +433,7 @@ def parse_arguments():
         default=1
     )
     return parser.parse_args()
+
 def vit_process(image_path,engine_dir,log_level,stream):
     tensorrt_llm.logger.set_level(log_level)
     vit_path = os.path.join(engine_dir,
@@ -474,12 +481,6 @@ def vit_process(image_path,engine_dir,log_level,stream):
     return image_embeds
     
 
-    
-
-
-    
-
-
 if __name__ == '__main__':
     args = parse_arguments()
 
@@ -489,10 +490,3 @@ if __name__ == '__main__':
     qinfer= QWenInfer(args.tokenizer_dir,args.qwen_engine_dir,args.log_level,args.output_csv,args.output_npy,args.num_beams)
     qinfer.qwen_model_init()
     qinfer.qwen_infer(image_embeds,args.images_path,args.input_text,args.max_new_tokens,history=[])
-    
-    
-    
-    
-    
-    
-    
