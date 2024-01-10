@@ -63,16 +63,21 @@ class QWenInfer(object):
         top_p = gen_config['top_p']
         #print("top_k: ", top_k,  " top_p: ", top_p)
         chat_format = gen_config['chat_format']
-        #if chat_format == "raw":
-        #    eos_token_id = gen_config['eos_token_id']
-        #    pad_token_id = gen_config['pad_token_id']
-        #elif chat_format == "chatml":
-        #    pad_token_id = eos_token_id = tokenizer.im_end_id
-        #else:
-        #    raise Exception("unkown chat format ", chat_format)
-        eos_token_id = gen_config['eos_token_id']
-        pad_token_id = gen_config['pad_token_id']
+        if chat_format == "raw":
+            eos_token_id = gen_config['eos_token_id']
+            pad_token_id = gen_config['pad_token_id']
+        elif chat_format == "chatml":
+            pad_token_id = eos_token_id = tokenizer.im_end_id
+        else:
+            raise Exception("unkown chat format ", chat_format)
         #print("eos_token_id: ", eos_token_id, " pad_token_id: ", pad_token_id)
+
+        if chat_format == "raw":
+            stop_words_ids = [tokenizer.encode("Human:"), [tokenizer.eod_id]]
+        elif chat_format == "chatml":
+            stop_words_ids = [[tokenizer.im_end_id], [tokenizer.im_start_id]]
+        else:
+            raise NotImplementedError(f"Unknown chat format {chat_format!r}")
 
         use_gpt_attention_plugin = config['plugin_config']['gpt_attention_plugin']
         remove_input_padding = config['plugin_config']['remove_input_padding']
@@ -122,12 +127,15 @@ class QWenInfer(object):
             #use_prompt_tuning = use_prompt_tuning,
         )
         sampling_config = SamplingConfig(
+            #max_new_tokens=512,
             end_id=eos_token_id,
             pad_id=pad_token_id,
             num_beams=1,
             top_k = top_k,
             top_p = top_p,
             temperature = 1.0,
+            #stop_words_list = stop_words_ids,
+            repetition_penalty=1,
         )
 
         engine_name = get_engine_name('qwen', dtype, tp_size, pp_size, runtime_rank)
@@ -333,6 +341,7 @@ class QWenInfer(object):
                                         self.model_config.remove_input_padding)#[prompt_table, tasks, task_vocab_size]
     
         output_ids,Qwen_time = self.generate_for_qwenvl(input_ids,max_new_tokens,prompt_table,tasks,task_vocab_size)
+        #print('outputs: ', output_ids)
             
     
         runtime_rank = tensorrt_llm.mpi_rank()
@@ -392,6 +401,7 @@ def parse_arguments():
     parser.add_argument(
         '--input_text',
         type=str,
+        #default="这是什么，请详细描述"
         default="这是什么"
     )
     parser.add_argument(
