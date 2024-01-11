@@ -1,5 +1,5 @@
 # Guide to QWen-VL pipeline
-1. Download Qwen-VL
+1. Download Qwen-VL-Chat
     ```bash
     git lfs install
     git clone https://huggingface.co/Qwen/Qwen-VL-Chat
@@ -48,10 +48,10 @@
 	--use_rmsnorm_plugin --log_level error \
 	--use_lookup_plugin float16 \
 	--max_prompt_embedding_table_size 2048 \
-    --use_weight_only --weight_only_precision int8 \
-	--output_dir=trt_engines_int8/Qwen-VL-7B-int8
+        --use_weight_only --weight_only_precision int8 \
+	--output_dir=trt_engines/Qwen-VL-7B-int8
     ```
-    - The built Qwen engines lie in `./trt_engines_int8/Qwen-VL-7B-int8`.
+    - The built Qwen engines lie in `./trt_engines/Qwen-VL-7B-int8`.
 
 5. Qwen-VL(gptq-int4)
     **NOTE:** `max_prompt_embedding_table_size = query_token_num * max_batch_size`, so if you changes the max_batch_size, prompt table size must be reset accordingly.
@@ -79,9 +79,9 @@
 	--use_lookup_plugin float16 \
 	--max_prompt_embedding_table_size 2048 \
 	--use_weight_only \
-    --weight_only_precision int4_gptq \
-    --per_group \
-    --quant_ckpt_path ./Qwen-VL-Chat-My-Int4/gptq_model-4bit-128g.safetensors \
+        --weight_only_precision int4_gptq \
+        --per_group \
+        --quant_ckpt_path ./Qwen-VL-Chat-My-Int4/gptq_model-4bit-128g.safetensors \
 	--output_dir=trt_engines/Qwen-VL-7B-int4-gptq 
    ```
 
@@ -94,18 +94,18 @@
 	--vit_engine_dir=./plan/
     ```
    
-   - int8 weight only run
-   ```bash
-   python run.py \
-   --tokenizer_dir=./Qwen-VL-Chat \
-   --qwen_engine_dir=trt_engines_int8/Qwen-VL-7B-int8 \
-   --vit_engine_dir=./plan/
-   ```
+    - int8 weight only run
+    ```bash
+    python run.py \
+         --tokenizer_dir=./Qwen-VL-Chat \
+         --qwen_engine_dir=trt_engines/Qwen-VL-7B-int8 \
+         --vit_engine_dir=./plan/
+    ```
    
     - int4 gptq run
-   ```bash
-   python run.py \
-   --tokenizer_dir=./Qwen-VL-Chat \
-   --qwen_engine_dir=trt_engines/Qwen-VL-7B-int4-gptq \
-   --vit_engine_dir=./plan/ 
-   ```
+    ```bash
+    python run.py \
+        --tokenizer_dir=./Qwen-VL-Chat \
+        --qwen_engine_dir=trt_engines/Qwen-VL-7B-int4-gptq \
+        --vit_engine_dir=./plan/ 
+    ```
