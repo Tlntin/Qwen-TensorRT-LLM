@@ -87,7 +87,7 @@ class ONNX_TRT:
                             'input':{0:'batch'}
                         }
                         )
-    def generate_trt_engine(self,onnxFile,planFile,minBS=1,optBS=2,maxBS=4,use_polygraph=False):
+    def generate_trt_engine(self,onnxFile,planFile,use_polygraph,minBS=1,optBS=2,maxBS=4):
         import tensorrt as trt
         from time import time
 
@@ -170,13 +170,13 @@ class ONNX_TRT:
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--onnxFile',type=str, default='./onnx/visual_encoder/visual_encoder.onnx',help='')#onnx/visual_encoder
-    parser.add_argument('--pretrained_model_path',type=str, default='./qwen/Qwen-VL-Chat',help='')
+    parser.add_argument('--pretrained_model_path',type=str, default='./Qwen-VL-Chat',help='')
     parser.add_argument('--planFile',type=str, default='./plan/visual_encoder/visual_encoder_fp16.plan',help='')
     parser.add_argument('--only_trt', action='store_true', help='Run only convert the onnx to TRT engine.')
     parser.add_argument('--minBS',type=int, default=1)
     parser.add_argument('--optBS',type=int, default=1)
     parser.add_argument('--maxBS',type=int, default=4)
-    parser.add_argument('--use_polygraph',type=bool, default=False)
+    parser.add_argument('--use_polygraph', action='store_true', help='if use polygraph tools get engine.')
     args = parser.parse_args()
     return args
     
@@ -199,7 +199,7 @@ if __name__ == '__main__':
         onnx_trt_obj.generate_trt_engine(args.onnxFile,args.planFile,args.minBS,args.optBS,args.maxBS,args.use_polygraph)
     else:
         onnx_trt_obj.export_onnx(args.onnxFile,args.pretrained_model_path)
-        onnx_trt_obj.generate_trt_engine(args.onnxFile,args.planFile,args.minBS,args.optBS,args.maxBS,args.use_polygraph)
+        onnx_trt_obj.generate_trt_engine(args.onnxFile,args.planFile,args.use_polygraph,args.minBS,args.optBS,args.maxBS)
         
     
         
