@@ -53,7 +53,25 @@
     ```
     - The built Qwen engines lie in `./trt_engines/Qwen-VL-7B-int8`.
 
-5. Qwen-VL(gptq-int4)
+5. Qwen-VL(int4 weight only) 
+    **NOTE:** `max_prompt_embedding_table_size = query_token_num * max_batch_size`, so if you changes the max_batch_size, prompt table size must be reset accordingly.
+    ```bash
+    python3 build.py  \
+	--hf_model_dir=./Qwen-VL-Chat \
+	--dtype float16 --max_batch_size 4 \
+	--max_input_len 512 --max_new_tokens 1024 \
+	--remove_input_padding \
+	--use_gpt_attention_plugin float16 \
+	--use_gemm_plugin float16 --enable_context_fmha \
+	--use_rmsnorm_plugin --log_level error \
+	--use_lookup_plugin float16 \
+	--max_prompt_embedding_table_size 2048 \
+        --use_weight_only --weight_only_precision int4 \
+	--output_dir=trt_engines/Qwen-VL-7B-int4
+    ```
+    - The built Qwen engines lie in `./trt_engines/Qwen-VL-7B-int4`.
+
+6. Qwen-VL(gptq-int4)
     **NOTE:** `max_prompt_embedding_table_size = query_token_num * max_batch_size`, so if you changes the max_batch_size, prompt table size must be reset accordingly.
     - install some python package
     ```bash
@@ -85,7 +103,7 @@
 	--output_dir=trt_engines/Qwen-VL-7B-int4-gptq 
    ```
 
-6. Run Qwen-VL pipeline
+7. Run Qwen-VL pipeline
     - fp16 run
     ```bash
     python run.py \
@@ -99,6 +117,14 @@
     python run.py \
          --tokenizer_dir=./Qwen-VL-Chat \
          --qwen_engine_dir=trt_engines/Qwen-VL-7B-int8 \
+         --vit_engine_dir=./plan/
+    ```
+   
+    - int4 weight only run
+    ```bash
+    python run.py \
+         --tokenizer_dir=./Qwen-VL-Chat \
+         --qwen_engine_dir=trt_engines/Qwen-VL-7B-int4 \
          --vit_engine_dir=./plan/
     ```
    

@@ -91,6 +91,11 @@ class ONNX_TRT:
         import tensorrt as trt
         from time import time
 
+        ## There are two ways to convert an engine
+        ## 1. the first is to use the polygraph tool, which can use fp16;
+        ## 2. the second is to use the native trt api, which must use fp32, if use fp16 the accuracy loss is great
+        ## 
+        ## todo: the difference between the two ways!!
         if use_polygraph:
             print("we are using polygraph tools get engine file !!!")
             #preview_features = [trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805]
@@ -118,6 +123,7 @@ class ONNX_TRT:
             save_engine(trt_engine, planFile)
 
         else:
+            print("we are using tensorrt api get engine file !!!")
             logger = trt.Logger(trt.Logger.INFO)
             builder = trt.Builder(logger)
             network = builder.create_network(
