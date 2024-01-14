@@ -38,6 +38,7 @@ from tensorrt_llm.mapping import Mapping
 from weight import (load_from_hf_qwen, load_from_ft,
                     load_from_gptq_qwen, load_from_awq_qwen)
 from utils.quantization import smooth_quantize
+from default_config import default_config
 
 
 MODEL_NAME = "qwen"
@@ -139,14 +140,20 @@ def parse_arguments():
     parser.add_argument(
         '--hf_model_dir',
         type=str,
-        default=None,
+        default=default_config.hf_model_dir,
     )
     parser.add_argument(
         '--ft_dir_path',
         type=str,
-        default=None,
+        default=default_config.ft_dir_path,
     )
-    parser.add_argument('--quant_ckpt_path', type=str, default=None)
+    parser.add_argument('--quant_ckpt_path', 
+            type=str,
+            default=os.path.join(
+            default_config.int4_gptq_model_dir,
+            "gptq_model-4bit-128g.safetensors",
+        ),
+    )
     parser.add_argument(
         '--dtype',
         type=str,
@@ -182,9 +189,9 @@ def parse_arguments():
     parser.add_argument('--ffn_dim_multiplier', type=int, default=1)
     parser.add_argument('--inter_size', type=int, default=11008)
     parser.add_argument('--hidden_act', type=str, default='silu')
-    parser.add_argument('--max_batch_size', type=int, default=1)
-    parser.add_argument('--max_input_len', type=int, default=1024)
-    parser.add_argument('--max_new_tokens', type=int, default=1024)
+    parser.add_argument('--max_batch_size', type=int, default=default_config.trt_max_batch_size)
+    parser.add_argument('--max_input_len', type=int, default=default_config.max_input_len)
+    parser.add_argument('--max_new_tokens', type=int, default=default_config.max_new_tokens)
     parser.add_argument('--seq_length',type=int, default=1024)
     parser.add_argument('--max_beam_width', type=int, default=1)
     parser.add_argument('--rotary_base', type=float, default=10000.0)
@@ -220,7 +227,7 @@ def parse_arguments():
     parser.add_argument(
         '--output_dir',
         type=str,
-        default="trt_engines/fp16/Qwen-VL-7B",
+        default=default_config.qwen_engine_dir,
         help=
         'The path to save the serialized engine files, timing cache file and model configs'
     )

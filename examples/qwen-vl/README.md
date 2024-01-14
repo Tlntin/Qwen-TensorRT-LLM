@@ -24,7 +24,6 @@
     python3 build.py  \
 	--hf_model_dir=./Qwen-VL-Chat \
 	--dtype float16 --max_batch_size 4 \
-	--max_input_len 512 --max_new_tokens 1024 \
 	--remove_input_padding \
 	--use_gpt_attention_plugin float16 \
 	--use_gemm_plugin float16 --enable_context_fmha \
@@ -41,7 +40,6 @@
     python3 build.py  \
 	--hf_model_dir=./Qwen-VL-Chat \
 	--dtype float16 --max_batch_size 4 \
-	--max_input_len 512 --max_new_tokens 1024 \
 	--remove_input_padding \
 	--use_gpt_attention_plugin float16 \
 	--use_gemm_plugin float16 --enable_context_fmha \
@@ -59,7 +57,6 @@
     python3 build.py  \
 	--hf_model_dir=./Qwen-VL-Chat \
 	--dtype float16 --max_batch_size 4 \
-	--max_input_len 512 --max_new_tokens 1024 \
 	--remove_input_padding \
 	--use_gpt_attention_plugin float16 \
 	--use_gemm_plugin float16 --enable_context_fmha \
@@ -89,7 +86,6 @@
    python3 build.py \
 	--hf_model_dir=./Qwen-VL-Chat \
 	--dtype float16 --max_batch_size 4 \
-	--max_input_len 512 --max_new_tokens 1024 \
 	--remove_input_padding \
 	--use_gpt_attention_plugin float16 \
 	--use_gemm_plugin float16 --enable_context_fmha \

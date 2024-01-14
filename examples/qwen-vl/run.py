@@ -18,7 +18,7 @@ from build import get_engine_name  # isort:skip
 
 from tensorrt_llm.quantization import QuantMode
 import csv
-
+from default_config import default_config
 
 def trt_dtype_to_torch(dtype):
     if dtype == trt.float16:
@@ -36,7 +36,7 @@ class QWenInfer(object):
         self.tokenizer_dir = tokenizer_dir
         self.qwen_engine_dir = qwen_engine_dir
         self.log_level = log_level
-        self.global_max_input_len = 2048
+        self.global_max_output_len = default_config.max_input_len + default_config.max_new_tokens
         self.decoder = None
         self.tokenizer = None
         self.config = None
@@ -270,6 +270,7 @@ class QWenInfer(object):
             raise NotImplementedError(f"Unknown chat format {chat_format!r}")
 
         return raw_text, context_tokens
+
     def generate_for_qwenvl(
         self,
         input_tokens,
@@ -287,7 +288,7 @@ class QWenInfer(object):
         max_input_length = torch.max(input_lengths).item()
         max_new_tokens = min(
             max_new_tokens,
-            self.global_max_input_len - max_input_length
+            self.global_max_output_len - max_input_length
         )
         self.decoder.setup(
             batch_size=input_lengths.size(0),
@@ -379,22 +380,22 @@ class QWenInfer(object):
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max_new_tokens', type=int, default=200)
+    parser.add_argument('--max_new_tokens', type=int, default=512)
     parser.add_argument('--log_level', type=str, default='info')
     parser.add_argument(
         '--vit_engine_dir',
         type=str,
-        default='qwen_outputs',
+        default=default_config.vit_engine_dir,
     )
     parser.add_argument(
         '--qwen_engine_dir',
         type=str,
-        default='qwen_outputs',
+        default=default_config.qwen_engine_dir,
     )
     parser.add_argument(
         '--tokenizer_dir',
         type=str,
-        default=".",
+        default=default_config.tokenizer_dir,
         help="Directory containing the tokenizer.model."
 
     )
