@@ -263,7 +263,6 @@ class QWenForCausalLMGenerationSession(GenerationSession):
                         yield output_texts
 
 
-
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--max_new_tokens', type=int, default=200)

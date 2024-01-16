@@ -60,6 +60,7 @@ def parse_text(text):
     text = "".join(lines)
     return text
 
+
 def predict(input_text, chatbot, top_p, temperature, max_generate_length, history):
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
