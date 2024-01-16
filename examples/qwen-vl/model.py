@@ -140,6 +140,7 @@ def trt_dtype_to_str(dtype: trt.DataType) -> str:
     trt_to_str_dtype_dict = {v: k for k, v in _str_to_trt_dtype_dict.items()}
     return trt_to_str_dtype_dict[dtype]
 
+
 class RmsNorm(Module):
     """
     Copy from tensorrt_llm.functional, for reduce some warning;
@@ -180,6 +181,7 @@ class RmsNorm(Module):
             custom_plugin_paths=self.custom_plugin_paths
         )
 
+
 class QWenAttention(Module):
     def __init__(
             self,
@@ -211,20 +213,15 @@ class QWenAttention(Module):
             use_dynamic_ntk=True,
             use_logn_attn=True,
             
-        ):
+    ):
         super().__init__()
         self.cross_attention = cross_attention
-       
-
         self.seq_length = seq_length
         self.hidden_size = hidden_size
         self.split_size = hidden_size
         self.num_heads = num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
-
-        
         self.scale_attn_weights = True
-
         self.projection_size = hidden_size
         self.hidden_size_per_attention_head = (
             self.projection_size // num_attention_heads
@@ -324,10 +321,10 @@ class QWenAttention(Module):
             self.rel_attn_table = Parameter(shape=(num_attention_heads //
                                                    tp_size, num_buckets),
                                             dtype=dtype)
-
-
         self.use_dynamic_ntk = use_dynamic_ntk
         self.use_logn_attn = use_logn_attn
+        if self.use_dynamic_ntk:
+            self.rotary_embedding_scale_type = RotaryScalingType.dynamic
 
     def forward(
             self,
@@ -344,8 +341,6 @@ class QWenAttention(Module):
 
         assert isinstance(hidden_states, Tensor)
         qkv = self.qkv(hidden_states)
-        
-        
         kv_orig_quant_scale = self.kv_orig_quant_scale.value if self.use_int8_kv_cache else None
         kv_quant_orig_scale = self.kv_quant_orig_scale.value if self.use_int8_kv_cache else None
 
@@ -365,8 +360,8 @@ class QWenAttention(Module):
             q_scaling=self.q_scaling,
             rotary_embedding_dim=self.rotary_embedding_dim, # when we use it 0, we will not use rotary embedding in plugin
             rotary_embedding_base=self.rotary_embedding_base,
-            rotary_embedding_scale_type=self.neox_rotary_style,
-            rotary_embedding_max_positions=self.max_position_embeddings,
+            rotary_embedding_scale_type=self.rotary_embedding_scale_type,
+            rotary_embedding_max_positions=self.seq_length,
             position_embedding_type=PositionEmbeddingType.rope_gpt_neox,
             kv_orig_quant_scale=kv_orig_quant_scale,
             kv_quant_orig_scale=kv_quant_orig_scale,
@@ -375,16 +370,15 @@ class QWenAttention(Module):
             kv_cache_block_pointers=kv_cache_params.get_first_kv_cache_block_pointers(),
             host_kv_cache_block_pointers=kv_cache_params.get_first_host_kv_cache_block_pointers(),
             max_context_length=attention_params.max_context_length,
-            mask_type=self.attention_mask_type.value,
+            mask_type=self.attention_mask_type,
             host_context_lengths=attention_params.host_context_lengths
         )
-
         context = self.dense(context, workspace=workspace)
-
         if use_cache:
             return (context, past_key_value)
         else:
             return context
+
 
 class QWenMLP(Module):
     def __init__(
@@ -572,6 +566,7 @@ class QWenBlock(Module):
             return (hidden_states, presents)
         return hidden_states
 
+
 class RotaryEmbedding(Module):
     def __init__(self, per_head_dim=128, max_position_dim = 8192, seq_length=2048, base=10000.0) -> None:
         self.per_head_dim = per_head_dim
@@ -694,7 +689,6 @@ class QWenModel_VL(Module):
                 if use_parallel_embedding else None,
                 sharding_dim=embedding_sharding_dim,
                 tp_rank=mapping.tp_rank)
-       
 
         self.layers = ModuleList([
             QWenBlock(
@@ -987,8 +981,7 @@ class QWenForCausalLM_VL(QWenModel_VL, GenerationMixin):
             1, max_batch_size * max_beam_width,
             max(max_input_len * max_batch_size, max_beam_width * max_batch_size)
         ]
-        [1, 1, max_input_len]
-
+        # [1, 1, max_input_len]
         prompt_embedding_table = None
         tasks = None
         prompt_vocab_size = None
