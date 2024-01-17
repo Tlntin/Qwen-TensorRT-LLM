@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import os.path
 import torch
 import json
 import time
@@ -10,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 from run import Vit, QWenInfer, parse_arguments
+from vit_onnx_trt import Preprocss
 from default_config import default_config
 import copy
 import re
@@ -24,10 +26,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 args = parse_arguments()
-# stream = torch.cuda.current_stream().cuda_stream
-# vit = Vit(args.vit_engine_dir, args.log_level)
-# image_embeds = vit.run(args.input_dir, stream)
-# qinfer = QWenInfer(args.tokenizer_dir,args.qwen_engine_dir,args.log_level,args.output_csv,args.output_npy,args.num_beams)
+image_preprocess = Preprocss(image_size=448)
+vit = Vit(args.vit_engine_dir, args.log_level)
 qinfer = QWenInfer(args.tokenizer_dir,args.qwen_engine_dir, args.log_level)
 qinfer.qwen_model_init()
 
@@ -56,12 +56,14 @@ class ModelList(BaseModel):
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant", "system", "function"]
     content: Optional[str]
+    images: Optional[List[str]] = []
     function_call: Optional[Dict] = None
 
 
 class DeltaMessage(BaseModel):
     role: Optional[Literal["user", "assistant", "system"]] = None
     content: Optional[str] = ""
+    images: Optional[List[str]] = []
 
 
 class ChatCompletionRequest(BaseModel):
@@ -201,8 +203,11 @@ def parse_messages(messages, functions):
 
     _messages = messages
     messages = []
+    image_list = []
     for m_idx, m in enumerate(_messages):
         role, content, func_call = m.role, m.content, m.function_call
+        if len(m.images) > 0:
+            image_list.extend(m.images)
         if content:
             content = content.lstrip("\n").rstrip()
         if role == "function":
@@ -254,7 +259,6 @@ def parse_messages(messages, functions):
         messages = messages[:-1]
 
     if len(messages) % 2 != 0:
-        print(376)
         raise HTTPException(status_code=400, detail="Invalid request")
 
     history = []  # [(Q1, A1), (Q2, A2), ..., (Q_last_turn, A_last_turn)]
@@ -278,7 +282,8 @@ def parse_messages(messages, functions):
     if system:
         assert query is not _TEXT_COMPLETION_CMD
         query = f"{system}\n\nQuestion: {query}"
-    return query, history
+    return query, history, image_list
+
 
 def parse_response(response):
     func_name, func_args = "", ""
@@ -376,9 +381,23 @@ async def create_chat_completion(request: ChatCompletionRequest):
         if "Observation:" not in stop_words:
             stop_words.append("Observation:")
 
-    query, history = parse_messages(request.messages, request.functions)
-    # print("query: ", query)
-    # print("history: ", history)
+    query, history, images = parse_messages(request.messages, request.functions)
+    # print("Debug query: ", query)
+    # print("Debug history: ", history)
+    # print("Debug images: ", images)
+
+    # Todo process image url
+    image_list = [
+        image for image in images
+        if os.path.exists(image)
+    ]
+    if len(images) > 0:
+        images = image_preprocess.encode(image_list)
+        images_path = [{"image": image} for image in image_list]
+        input_vit = vit.run(images=images)
+    else:
+        images_path = None
+        input_vit = None
 
     if request.stream:
         if request.functions:
@@ -386,7 +405,15 @@ async def create_chat_completion(request: ChatCompletionRequest):
                 status_code=400,
                 detail="Invalid request: Function calling is not yet implemented for stream mode.",
             )
-        generate = predict(query, system, history, max_new_tokens, request.model)
+        generate = predict(
+            query,
+            system,
+            history,
+            max_new_tokens,
+            request.model,
+            input_vit=input_vit,
+            images_path=images_path,
+        )
         return EventSourceResponse(
             generate, media_type="text/event-stream"
         )
@@ -403,7 +430,9 @@ async def create_chat_completion(request: ChatCompletionRequest):
         response = qinfer.qwen_infer(
             input_text=query_text,
             max_new_tokens=max_new_tokens,
-            history=history
+            history=history,
+            input_vit=input_vit,
+            images_path=images_path,
         )
     response = trim_stop_words(response, stop_words)
     if request.functions:
@@ -422,8 +451,15 @@ async def create_chat_completion(request: ChatCompletionRequest):
     )
 
 
-async def predict(query: str, system: str, history: List[List[str]], max_new_tokens,  model_id: str):
-
+async def predict(
+    query: str,
+    system: str,
+    history: List[List[str]],
+    max_new_tokens,
+    model_id: str,
+    input_vit=None,
+    images_path=None
+):
     choice_data = ChatCompletionResponseStreamChoice(
         index=0,
         delta=DeltaMessage(role="assistant"),
@@ -437,6 +473,9 @@ async def predict(query: str, system: str, history: List[List[str]], max_new_tok
     yield "{}".format(
         chunk.model_dump_json(exclude_unset=True)
     )
+    # if images_path is not None:
+    #     content_list = images_path + [{'text': query}]
+    #     query = qinfer.tokenizer.from_list_format(content_list)
     # print("Debug system", system)
     # print("Debug query", query)
     # print("Debug history", history)
@@ -445,6 +484,7 @@ async def predict(query: str, system: str, history: List[List[str]], max_new_tok
         history=history,
         system=system,
         max_new_tokens=max_new_tokens,
+        input_vit=input_vit,
     ):
         if len(new_text) == 0:
             continue

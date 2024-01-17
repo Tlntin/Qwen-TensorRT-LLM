@@ -195,3 +195,4 @@ kineto/
 *.tar.gz
 tmp/
 .idea/
+*.jpeg

@@ -344,19 +344,12 @@ class QWenInfer(object):
         history=None,
         system: str = "You are a helpful assistant.",
         input_vit=None,
-        images_path=None,
 
     ):
-        if images_path is None:
-            content_list = []
-        else:
-            content_list = images_path
         if history is None:
             history = []
-        content_list.append({'text': input_text})
-        query = self.tokenizer.from_list_format(content_list)
         raw_text, context_tokens = self.make_context(
-            query,
+            input_text,
             system=system,
             history=history,
             max_input_length=self.global_max_input_length
@@ -443,25 +436,17 @@ class QWenInfer(object):
         history=None,
         system: str = "You are a helpful assistant.",
         input_vit=None,
-        images_path=None,
-
     ):
-        if images_path is None:
-            content_list = []
-        else:
-            content_list = images_path
         if history is None:
             history = []
-        content_list.append({'text': input_text})
-        query = self.tokenizer.from_list_format(content_list)
         raw_text, context_tokens = self.make_context(
-            query,
+            input_text,
             system=system,
             history=history,
             max_input_length=self.global_max_input_length
         )
         # print("raw_text: ", raw_text)
-        print('context_tokens: ', len(context_tokens))
+        # print('context_tokens: ', len(context_tokens))
         # context_tokens = self.tokenizer.encode(query)
         input_ids = torch.tensor([context_tokens]).to('cuda')
         bos_pos = torch.where(input_ids == self.config.visual['image_start_id'])
@@ -477,6 +462,8 @@ class QWenInfer(object):
                                           device='cuda')
             fake_prompt_id = fake_prompt_id.reshape(input_vit.shape[0],
                                                     input_vit.shape[1])
+
+            # because input_ids batch=1, need to fixup
             for idx, (i, a, b) in enumerate(img_pos):
                 input_ids[i][a + 1: b] = fake_prompt_id[idx]
         input_ids = input_ids.contiguous().to(torch.int32).cuda()
@@ -612,15 +599,17 @@ class Vit:
         self.session_vit = Session.from_serialized_engine(engine_buffer)
         self.device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
 
-    def run(self, image_paths: list, stream):
-        images_list = []
-        for img in image_paths:
-            for v in img.values():
-                image = torch.load(v)
-                if image.device.type == 'cpu':
-                    image = image.to(self.device)
-                images_list.append(image)
-        images = torch.cat(images_list)
+    def run(self, image_paths=None, images: torch.Tensor = None):
+        stream = torch.cuda.current_stream().cuda_stream
+        if images is None and image_paths is not None:
+            images_list = []
+            for img in image_paths:
+                for v in img.values():
+                    image = torch.load(v)
+                    images_list.append(image)
+            images = torch.cat(images_list)
+        if images.device.type == 'cpu':
+            images = images.to(self.device)
         batch_size = images.size(0)
         images = images.expand(batch_size, -1, -1, -1).contiguous()
         visual_inputs = {'input': images.float()}
@@ -649,16 +638,18 @@ class Vit:
 
 if __name__ == '__main__':
     args = parse_arguments()
-
-    stream = torch.cuda.current_stream().cuda_stream
     vit = Vit(args.vit_engine_dir, args.log_level)
-    image_embeds = vit.run(args.input_dir, stream)
+    image_embeds = vit.run(args.input_dir)
     qinfer = QWenInfer(args.tokenizer_dir, args.qwen_engine_dir, args.log_level,
                        args.output_csv, args.output_npy, args.num_beams)
     qinfer.qwen_model_init()
+    if args.images_path is None:
+        content_list = [{"text": args.input_text}]
+    else:
+        content_list = args.images_path + [{"text": args.input_text}]
+    query = qinfer.tokenizer.from_list_format(content_list)
     qinfer.qwen_infer(
-        input_text=args.input_text,
+        input_text=query,
         max_new_tokens=args.max_new_tokens,
         input_vit=image_embeds,
-        images_path=args.images_path,
     )

@@ -99,15 +99,17 @@ def _launch_demo(args):
     def predict(_chatbot, task_history):
         chat_query = _chatbot[-1][0]
         query = task_history[-1][0]
-        print("User: " + _parse_text(query))
+        # print("User: " + _parse_text(query))
         history_cp = copy.deepcopy(task_history)
         full_response = ""
 
         history_filter = []
         pic_idx = 1
         pre = ""
+        image_list = []
         for i, (q, a) in enumerate(history_cp):
             if isinstance(q, (tuple, list)):
+                image_list.append(q[0])
                 q = f'Picture {pic_idx}: <img>{q[0]}</img>'
                 pre += q + '\n'
                 pic_idx += 1
@@ -116,18 +118,18 @@ def _launch_demo(args):
                 history_filter.append((pre, a))
                 pre = ""
         history, message = history_filter[:-1], history_filter[-1][0]
-        content_list = [{'text': query}]
-        if len(history) == 0:
-            input_text = tokenizer.from_list_format(content_list)
-        else:
-            input_text = query
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
         ]
-        for (message, response) in history:
-            messages.append({"role": "user", "content": message})
-            messages.append({"role": "assistant", "content": response})
-        messages.append({"role": "user", "content": input_text})
+        for (query1, response1) in history:
+            messages.append({"role": "user", "content": query1})
+            messages.append({"role": "assistant", "content": response1})
+
+        message_dict = {"role": "user", "content": message}
+        if len(image_list) > 0:
+            message_dict["images"] = image_list
+        messages.append(message_dict)
+        # print("Image list: ", image_list)
 
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -152,6 +154,7 @@ def _launch_demo(args):
             full_response = _parse_text(response_text)
 
         response = full_response
+        # print("response", response)
         history.append((message, response_text))
         image = tokenizer.draw_bbox_on_latest_picture(response, history)
         if image is not None:
@@ -167,7 +170,7 @@ def _launch_demo(args):
         # full_response = _parse_text(response)
 
         task_history[-1] = (query, full_response)
-        print("Qwen-VL-Chat: " + _parse_text(full_response))
+        # print("Qwen-VL-Chat: " + _parse_text(full_response))
         yield _chatbot
 
     def regenerate(_chatbot, task_history):
