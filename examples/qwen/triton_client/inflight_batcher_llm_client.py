@@ -323,13 +323,13 @@ if __name__ == "__main__":
         input_lengths = [[len(ii)] for ii in input_ids]
         input_lengths_data = np.array(input_lengths, dtype=np.int32)
         request_output_len = [[FLAGS.request_output_len]]
-        request_output_len_data = np.array(request_output_len, dtype=np.uint32)
+        request_output_len_data = np.array(request_output_len, dtype=np.int32)
         eos_ids = [[eos_id]]
-        end_id_data = np.array(eos_ids, dtype=np.uint32)
+        end_id_data = np.array(eos_ids, dtype=np.int32)
         pad_ids = [[pad_id]]
-        pad_id_data = np.array(pad_ids, dtype=np.uint32)
+        pad_id_data = np.array(pad_ids, dtype=np.int32)
         beam_width = [[FLAGS.beam_width]]
-        beam_width_data = np.array(beam_width, dtype=np.uint32)
+        beam_width_data = np.array(beam_width, dtype=np.int32)
         temperature = [[FLAGS.temperature]]
         temperature_data = np.array(temperature, dtype=np.float32)
         if FLAGS.streaming:

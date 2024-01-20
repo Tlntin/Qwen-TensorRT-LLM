@@ -34,19 +34,33 @@ input [
         dims: [ -1 ]
     },
     {
+        name: "REQUEST_OUTPUT_LEN"
+        data_type: TYPE_INT32
+        dims: [ -1 ]
+    },
+    {
         name: "BAD_WORDS_DICT"
         data_type: TYPE_STRING
         dims: [ -1 ]
+        optional: true
     },
     {
         name: "STOP_WORDS_DICT"
         data_type: TYPE_STRING
         dims: [ -1 ]
+        optional: true
     },
     {
-        name: "REQUEST_OUTPUT_LEN"
-        data_type: TYPE_UINT32
+        name: "EMBEDDING_BIAS_WORDS"
+        data_type: TYPE_STRING
         dims: [ -1 ]
+        optional: true
+    },
+    {
+        name: "EMBEDDING_BIAS_WEIGHTS"
+        data_type: TYPE_FP32
+        dims: [ -1 ]
+        optional: true
     }
 ]
 output [
@@ -71,8 +85,13 @@ output [
         dims: [ 2, -1 ]
     },
     {
+        name: "EMBEDDING_BIAS"
+        data_type: TYPE_FP32
+        dims: [ -1 ]
+    },
+    {
         name: "REQUEST_OUTPUT_LEN"
-        data_type: TYPE_UINT32
+        data_type: TYPE_INT32
         dims: [ -1 ]
     }
 ]
@@ -91,9 +110,16 @@ parameters {
   }
 }
 
+parameters {
+  key: "add_special_tokens"
+  value: {
+    string_value: "False"
+  }
+}
+
 instance_group [
     {
-        count: 1
+        count: 10
         kind: KIND_CPU
     }
 ]
