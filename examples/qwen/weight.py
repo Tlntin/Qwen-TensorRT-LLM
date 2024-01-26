@@ -916,7 +916,7 @@ def load_from_gptq_qwen(
                 tensorrt_llm_qwen.layers[idx].mlp.w2.scale.value = th_scale.to(torch_dtype).numpy()
 
     tok = time.time()
-    t = time.strftime("%h:%m:%s", time.gmtime(tok - tik))
+    t = time.strftime("%H:%M:%S", time.gmtime(tok - tik))
     tensorrt_llm.logger.info(f"weights loaded. total time: {t}")
 
 

@@ -93,13 +93,39 @@
 	--use_lookup_plugin float16 \
 	--max_prompt_embedding_table_size 2048 \
 	--use_weight_only \
-        --weight_only_precision int4_gptq \
-        --per_group \
-        --quant_ckpt_path ./Qwen-VL-Chat-My-Int4/gptq_model-4bit-128g.safetensors \
+    --weight_only_precision int4_gptq \
+    --per_group \
+    --quant_ckpt_path ./Qwen-VL-Chat-My-Int4/gptq_model-4bit-128g.safetensors \
 	--output_dir=trt_engines/Qwen-VL-7B-int4-gptq 
    ```
 
-7. Run Qwen-VL pipeline
+7. Qwen-VL-Int4(raw official gptq-int4)
+    **NOTE:** `max_prompt_embedding_table_size = query_token_num * max_batch_size`, so if you changes the max_batch_size, prompt table size must be reset accordingly.
+    - install some python package
+    ```bash
+    pip install auto-gptq optimum
+    pip install transformers -U
+    ```
+   
+    - build engine
+   ```bash
+   python3 build.py \
+	--hf_model_dir=./Qwen-VL-Chat-Int4 \
+   --quant_ckpt_path=./Qwen-VL-Chat-Int4 \
+	--dtype float16 --max_batch_size 4 \
+	--remove_input_padding \
+	--use_gpt_attention_plugin float16 \
+	--use_gemm_plugin float16 --enable_context_fmha \
+	--use_rmsnorm_plugin --log_level error \
+	--use_lookup_plugin float16 \
+	--max_prompt_embedding_table_size 2048 \
+	--use_weight_only \
+    --weight_only_precision int4_gptq \
+    --per_group \
+	--output_dir=trt_engines/Qwen-VL-7B-int4-gptq 
+   ```
+
+8. Run Qwen-VL pipeline
     - fp16 run
     ```bash
     python run.py \
@@ -129,5 +155,13 @@
     python run.py \
         --tokenizer_dir=./Qwen-VL-Chat \
         --qwen_engine_dir=trt_engines/Qwen-VL-7B-int4-gptq \
-        --vit_engine_dir=./plan/ 
+        --vit_engine_dir=./plan/
+    ```
+   
+    - raw official int4 gptq run
+    ```bash
+    python run.py \
+        --tokenizer_dir=./Qwen-VL-Chat-Int4 \
+        --qwen_engine_dir=trt_engines/Qwen-VL-7B-int4-gptq \
+        --vit_engine_dir=./plan/
     ```

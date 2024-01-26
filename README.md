@@ -4,7 +4,6 @@
 - 介绍本工作是 <a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023">NVIDIA TensorRT Hackathon 2023</a> 的参赛题目，本项目使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。相关代码已经放在[release/0.1.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.1.0)分支，感兴趣的同学可以去该分支学习完整流程。
 - 本项目[release/0.5.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.5.0)分支和TensorRT-LLM官方仓库[release/0.5.0](https://github.com/NVIDIA/TensorRT-LLM/tree/release/0.5.0)分支对齐，所有功能均在该分支上面进行测试。
 - main分支目前和TensorRT-LLM官方仓库[v0.7.0](https://github.com/NVIDIA/TensorRT-LLM/releases/tag/v0.7.0)对齐，该版本已经支持Qwen，但是可能支持的功能特性还有不足，故我们决定继续更新该仓库。
-- 该分支为实验性分支，未经过完整测试，需要生产用的话，建议先用本项目的[release/0.5.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.5.0)分支。
 
 ### 功能概述
 
@@ -22,7 +21,7 @@
 
 - base模型（实验性）：[Qwen-1_8B](https://huggingface.co/Qwen/Qwen-1_8B)、[Qwen-7B](https://huggingface.co/Qwen/Qwen-7B)、[Qwen-14B](https://huggingface.co/Qwen/Qwen-14B)、[Qwen-72B](https://huggingface.co/Qwen/Qwen-72B)（实验性）、[QWen-VL](https://huggingface.co/Qwen/Qwen-VL)
 - chat模型（推荐）：[Qwen-1_8B-Chat](https://huggingface.co/Qwen/Qwen-1_8B-Chat)、[Qwen-7B-Chat](https://huggingface.co/Qwen/Qwen-7B-Chat)、[Qwen-14B-Chat](https://huggingface.co/Qwen/Qwen-14B-Chat)、[Qwen-72B-Chat](https://huggingface.co/Qwen/Qwen-72B-Chat)（实验性）、[QWen-VL-Chat](https://huggingface.co/Qwen/Qwen-VL-Chat)
-- chat-int4模型：[Qwen-1_8B-Chat-Int4](https://huggingface.co/Qwen/Qwen-1_8B-Chat-Int4)、[Qwen-7B-Chat-Int4](https://huggingface.co/Qwen/Qwen-7B-Chat-Int4)、[Qwen-14B-Chat-Int4](https://huggingface.co/Qwen/Qwen-14B-Chat-Int4)、、[Qwen-72B-Chat-Int4](https://huggingface.co/Qwen/Qwen-72B-Chat-Int4)（实验性）
+- chat-int4模型：[Qwen-1_8B-Chat-Int4](https://huggingface.co/Qwen/Qwen-1_8B-Chat-Int4)、[Qwen-7B-Chat-Int4](https://huggingface.co/Qwen/Qwen-7B-Chat-Int4)、[Qwen-14B-Chat-Int4](https://huggingface.co/Qwen/Qwen-14B-Chat-Int4)、、[Qwen-72B-Chat-Int4](https://huggingface.co/Qwen/Qwen-72B-Chat-Int4)（实验性）、[Qwen-VL-Chat-Int4](https://huggingface.co/Qwen/Qwen-VL-Chat-Int4)
 
 ### 相关教程：
 - 本项目配套B站教程：[TensorRT-LLM实战指南](https://www.bilibili.com/video/BV12M411D7uS/)
@@ -401,9 +400,10 @@ python3 build.py --use_weight_only --weight_only_precision=int8 --int8_kv_cache
 ```
 
 ### 运行指南（int4-gptq篇）
-1. 需要安装[auto-gptq](https://github.com/PanQiWei/AutoGPTQ)模块，并且升级transformers模块版本，最低要求4.32.0。（注：安装完模块后可能会提示tensorrt_llm与其他模块版本不兼容，可以忽略该警告）
+1. 需要安装[auto-gptq](https://github.com/PanQiWei/AutoGPTQ)模块，并且升级transformers模块版本到最新版（建议optimum和transformers都用最新版，否则可能有乱码问题），参考[issue/68](https://github.com/Tlntin/Qwen-TensorRT-LLM/issues/68)。（注：安装完模块后可能会提示tensorrt_llm与其他模块版本不兼容，可以忽略该警告）
 ```bash
 pip install auto-gptq optimum
+pip install transformers -U
 ```
 
 2. 手动获取标定权重（可选）
