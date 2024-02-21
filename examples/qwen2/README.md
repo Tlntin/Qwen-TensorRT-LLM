@@ -337,9 +337,9 @@ python summarize.py --backend=trt_llm \
 
 #### INT4-AWQ
 To run the AWQ Qwen1.5 example, the following steps are required:
-1. Download and install the [nvidia-ammo](https://developer.nvidia.com/downloads/assets/cuda/files/nvidia-ammo/nvidia_ammo-0.3.0.tar.gz) module. An installation code is required below. For reference, be careful not to install the cuda version, but the universal version, otherwise there will be bugs.
+1. install nvidia_ammo with pip. 
 ```bash
-pip install nvidia_ammo-0.3.0-cp310-cp310-linux_x86_64.whl
+pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com nvidia-ammo~=0.5.0
 ```
 2. Modify the ammo code and add Qwen1.5 support (an error will be reported if not added). Here is a simple reference case:
 - First, write a python file in vscode and import the following function
