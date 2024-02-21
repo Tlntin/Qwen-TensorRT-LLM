@@ -30,7 +30,7 @@ The TensorRT-LLM Qwen1.5 example code locates at [examples/Qwen2](./). It takes 
 
 ### Build TensorRT engine(s)
 
-Need to prepare the HF Qwen1.5 checkpoint first by following the guides here [Qwen1.5-7B-Chat](https://huggingface.co/Qwen1.5/Qwen1.5-7B-Chat) or [Qwen1.5-14B-Chat](https://huggingface.co/Qwen1.5/Qwen1.5-14B-Chat)
+Need to prepare the HF Qwen1.5 checkpoint first by following the guides here [Qwen1.5-7B-Chat](https://huggingface.co/Qwen/Qwen1.5-7B-Chat) or [Qwen1.5-14B-Chat](https://huggingface.co/Qwen/Qwen1.5-14B-Chat)
 
 Create a `tmp/Qwen1.5` directory to store the weights downloaded from huaggingface.
 ```bash
