@@ -544,10 +544,10 @@ class Qwen2DecoderLayer(Module):
         if use_cache:
             attention_output, presents = attention_output
 
-        # self.register_network_output(
-        #     "attention_output",
-        #     identity_op(attention_output)
-        # )
+        self.register_network_output(
+            "attention_output",
+            identity_op(attention_output)
+        )
         hidden_states = residual + attention_output
 
         residual = hidden_states

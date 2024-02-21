@@ -167,17 +167,17 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
     else:
         vals = vals.cpu().numpy()
 
-    if "ln_1.weight" in key or "ln_1.bias" in key or \
-            "attention.dense.bias" in key or \
-            "ln_2.weight" in key or "ln_2.bias" in key or \
-            "mlp.c_proj.bias" in key or "ln_f.weight" in key:
+    if "input_layernorm.weight" in key or "ln_1.bias" in key or \
+            "self_attn.o_proj.bias" in key or \
+            "post_attention_layernorm.weight" in key or \
+            "mlp.down_proj.bias" in key or "norm.weight" in key:
         # "final_layernorm.weight" in key or "final_layernorm.bias" in key:
 
         # shared weights, only need to convert the weights of rank 0
         if tp_rank == 0:
             save_val(vals[0], saved_dir, key)
 
-    elif "attention.dense.weight" in key or "mlp.c_proj.weight" in key:
+    elif "self_attn.o_proj.weight" in key or "mlp.down_proj.weight" in key:
         cat_dim = 0
         val = np.concatenate(vals, axis=cat_dim)
         split_vals = np.split(val, split_factor, axis=cat_dim)
@@ -190,7 +190,8 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
             write_int8(vals_i8, saved_dir, base_key, cat_dim, tp_rank,
                        split_factor)
 
-    elif "mlp.w1.weight" in key or "mlp.w2.weight" in key or "mlp.w1.bias" in key or "mlp.w2.bias" in key:
+    elif "mlp.gate_proj.weight" in key or "mlp.up_proj.weight" in key \
+            or "mlp.gate_proj.bias" in key or "mlp.gate_proj.bias" in key:
         if split_gated_activation:
             splits = [np.split(val, 2, axis=-1) for val in vals]
             vals, gates = list(zip(*splits))
@@ -215,7 +216,7 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
             split_vals = np.split(gate, split_factor, axis=cat_dim)
             save_split(split_vals, saved_dir, key, tp_rank, split_factor)
 
-    elif "attention.qkv.bias" in key:
+    elif "self_attn.qkv.bias" in key:
         if local_dim is None:
             local_dim = vals[0].shape[-1] // 3
 
@@ -238,7 +239,7 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
             split_vals = np.split(val, split_factor, axis=-1)
         save_split(split_vals, saved_dir, key, tp_rank, split_factor)
 
-    elif "attention.qkv.weight" in key:
+    elif "self_attn.qkv.weight" in key:
         hidden_dim = vals[0].shape[0]
         if local_dim is None:
             local_dim = vals[0].shape[-1] // 3
@@ -282,7 +283,7 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
     #       or "attention.key_value.weight" in key
     #       or "attention.key_value.bias" in key):
     #     pass
-    elif "attention.dense.smoother" in key or "mlp.c_proj.smoother" in key:
+    elif "self_attn.o_proj.smoother" in key or "mlp.down_proj.smoother" in key:
         split_vals = np.split(vals, split_factor, axis=0)
         save_split(split_vals, saved_dir, key, tp_rank, split_factor)
     else:

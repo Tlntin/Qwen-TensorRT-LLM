@@ -22,8 +22,9 @@ from tensorrt_llm.functional import (ACT2FN, Tensor, allgather, allreduce,
 
 # copy from tensorrt_llm/models/layers.py SmoothQuantAttention
 # we need to set qkv bias to True
-class SmoothQuantAttention(Module):
 
+
+class SmoothQuantAttention(Module):
     def __init__(
         self,
         hidden_size,
@@ -121,7 +122,7 @@ class SmoothQuantAttention(Module):
             gather_output=False,
             quant_mode=qkv_quant_mode)
 
-        self.dense = SmoothQuantRowLinear(hidden_size,
+        self.o_proj = SmoothQuantRowLinear(hidden_size,
                                           hidden_size,
                                           bias=bias,
                                           dtype=dtype,
@@ -278,7 +279,7 @@ class SmoothQuantAttention(Module):
                 past_key_value = quantize_tensor(
                     past_key_value, self.kv_quantization_scale.value)
 
-        context = context / self.dense.smoother.value
+        context = context / self.o_proj.smoother.value
         if self.quant_mode.has_act_and_weight_quant():
             if self.quant_mode.has_act_static_scaling():
                 # Avoid quantiztion layers as it breaks int8 plugins
@@ -289,12 +290,13 @@ class SmoothQuantAttention(Module):
                 # quantized tensor and scaling factors per token
                 context = quantize_per_token(context)
 
-        context = self.dense(context, workspace)
+        context = self.o_proj(context, workspace)
 
         if use_cache:
             return (context, past_key_value)
 
         return context
+
 
 class SmoothQuantMLP(Module):
 
@@ -311,7 +313,7 @@ class SmoothQuantMLP(Module):
         if hidden_act not in ACT2FN:
             raise ValueError(
                 'unsupported activation function: {}'.format(hidden_act))
-        self.w1 = SmoothQuantColumnLinear(
+        self.up_proj = SmoothQuantColumnLinear(
             hidden_size,
             ffn_hidden_size,
             bias=bias,
@@ -322,7 +324,7 @@ class SmoothQuantMLP(Module):
             quant_mode=quant_mode
         )
 
-        self.w2 = SmoothQuantColumnLinear(
+        self.gate_proj = SmoothQuantColumnLinear(
             hidden_size,
             ffn_hidden_size,
             bias=bias,
@@ -333,7 +335,7 @@ class SmoothQuantMLP(Module):
             quant_mode=quant_mode
         )
 
-        self.c_proj = SmoothQuantRowLinear(
+        self.down_proj = SmoothQuantRowLinear(
             ffn_hidden_size,
             hidden_size,
             bias=bias,
@@ -353,10 +355,10 @@ class SmoothQuantMLP(Module):
             self.register_parameter('quantization_scaling_factor', None)
 
     def forward(self, hidden_states):
-        a1 = self.w1(hidden_states)
-        a2 = self.w2(hidden_states)
-        inter = a1 * ACT2FN[self.hidden_act](a2)
-        inter = inter / self.c_proj.smoother.value
+        a1 = self.gate_proj(hidden_states)
+        a2 = self.up_proj(hidden_states)
+        inter = a2 * ACT2FN[self.hidden_act](a1)
+        inter = inter / self.down_proj.smoother.value
         if self.quant_mode.has_act_and_weight_quant():
             if self.quant_mode.has_act_static_scaling():
                 # Avoid quantiztion layers as it breaks int8 plugins
@@ -368,7 +370,7 @@ class SmoothQuantMLP(Module):
                 # Quantize per token outputs tuple:
                 # quantized tensor and scaling factors per token
                 inter = quantize_per_token(inter)
-        output = self.c_proj(inter)
+        output = self.down_proj(inter)
         return output
 
 
@@ -512,16 +514,16 @@ def smooth_quantize(model, quant_mode, rmsnorm_quantization_plugin_dtype, custom
     if custom_plugin_paths is None:
         custom_plugin_paths = []
     for layer in model.layers:
-        assert hasattr(layer, "ln_1"), "The layer has no ln_1"
-        layer.ln_1 = SmoothQuantRmsNorm(
+        assert hasattr(layer, "input_layernorm"), "The layer has no input_layernorm attr"
+        layer.input_layernorm = SmoothQuantRmsNorm(
             normalized_shape=layer.hidden_size,
             plugin_dtype=rmsnorm_quantization_plugin_dtype,
             custom_plugin_paths=custom_plugin_paths,
             dtype=layer.dtype,
             quant_mode=quant_mode
         )
-        assert hasattr(layer, "attention"), "The layer has no attention"
-        layer.attention = SmoothQuantAttention(
+        assert hasattr(layer, "self_attn"), "The layer has no self_attn attr"
+        layer.self_attn = SmoothQuantAttention(
             layer.hidden_size,
             layer.num_attention_heads,
             max_position_embeddings=layer.max_position_embeddings,
@@ -542,7 +544,7 @@ def smooth_quantize(model, quant_mode, rmsnorm_quantization_plugin_dtype, custom
         assert hasattr(layer, "mlp"), "The layer has no mlp"
         layer.mlp = SmoothQuantMLP(
             hidden_size=layer.hidden_size,
-            ffn_hidden_size=layer.mlp_hidden_size // 2,
+            ffn_hidden_size=layer.mlp_hidden_size,
             hidden_act=layer.hidden_act,
             dtype=layer.dtype,
             bias=layer.bias,
@@ -550,8 +552,8 @@ def smooth_quantize(model, quant_mode, rmsnorm_quantization_plugin_dtype, custom
             tp_size=layer.tp_size,
             quant_mode=quant_mode
         )
-        assert hasattr(layer, "ln_2"), "The layer has no ln_2"
-        layer.ln_2 = SmoothQuantRmsNorm(
+        assert hasattr(layer, "post_attention_layernorm"), "The layer has no post_attention_layernorm attr"
+        layer.post_attention_layernorm = SmoothQuantRmsNorm(
             normalized_shape=layer.hidden_size,
             plugin_dtype=rmsnorm_quantization_plugin_dtype,
             custom_plugin_paths=custom_plugin_paths,

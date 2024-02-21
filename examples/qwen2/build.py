@@ -468,16 +468,19 @@ def parse_arguments():
 
 
 def build_rank_engine(
-    builder: Builder,
-    builder_config: tensorrt_llm.builder.BuilderConfig,
-    engine_name,
-    rank,
-    multi_query_mode,
-    args,
+        builder: Builder,
+        builder_config: tensorrt_llm.builder.BuilderConfig,
+        engine_name,
+        rank,
+        multi_query_mode,
+        args,
 ):
     """
-    @brief: Build the engine on the given rank.
+    @param builder.
+    @param builder_config: Build config for the engine on the given rank.
+    @param engine_name: engine path
     @param rank: The rank to build the engine.
+    @param multi_query_mode:
     @param args: The cmd line arguments.
     @return: The built engine.
     """
@@ -607,10 +610,7 @@ def build_rank_engine(
             tensorrt_llm_qwen,
             dir_path,
             mapping,
-            # rank,
-            # args.world_size,
             dtype=args.dtype,
-            multi_query_mode=multi_query_mode,
         )
     else:
         raise ValueError("You must specify either --hf_model_dir or --ft_dir_path")

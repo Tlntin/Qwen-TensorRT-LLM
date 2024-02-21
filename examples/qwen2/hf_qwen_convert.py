@@ -15,6 +15,7 @@ from smoothquant import capture_activation_range, smooth_gemm, smooth_gemm_mlp
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM  # transformers-4.10.0-py3
 from transformers import AutoTokenizer, GenerationConfig
+from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer
 # for debug
 from utils.convert import split_and_save_weight
 from tensorrt_llm._utils import str_dtype_to_torch, torch_to_numpy
@@ -32,7 +33,7 @@ class ProgArgs:
     processes: int = 1
     calibrate_kv_cache: bool = False
     smoothquant: float = None
-    model: str = "qwen"
+    model: str = "qwen2"
     storage_type: str = "fp32"
     dataset_cache_dir: str = None
 
@@ -75,6 +76,7 @@ class ProgArgs:
             "--calibrate-kv-cache",
             "-kv",
             action="store_true",
+            default=None,
             help=
             "Generate scaling factors for KV cache. Used for storing KV cache in int8."
         )
@@ -88,10 +90,10 @@ class ProgArgs:
             " A good first try is 0.5. Must be in [0, 1]")
         parser.add_argument(
             "--model",
-            default="qwen",
+            default="qwen2",
             type=str,
             help="Specify GPT variants to convert checkpoints correctly",
-            choices=["qwen", "gpt2", "santacoder", "starcoder"])
+            choices=["qwen2", "gpt2", "santacoder", "starcoder"])
         parser.add_argument(
             "--storage-type",
             "-t",
@@ -110,28 +112,46 @@ class ProgArgs:
 
 @torch.no_grad()
 def smooth_qwen_model(model, scales, alpha, qwen_smoother):
+    qwen_qkv_para = {}
     # Smooth the activation and weights with smoother = $\diag{s}$
     for name, module in model.named_modules():
-        # if not isinstance(module, QWenBlock):
-        if not str(type(module)).endswith("QWenBlock'>"):
+        # qkv/dense in Attention
+        if not isinstance(module, Qwen2DecoderLayer):
             continue
-
-        # qkv_proj
-        layer_name = name + ".attn.c_attn"
+        # if isinstance(module, Qwen2Attention):
+        layer_name_q = name + ".self_attn.q_proj"
+        layer_name_k = name + ".self_attn.k_proj"
+        layer_name_v = name + ".self_attn.v_proj"
+        layer_name_qkv = name + ".self_attn.qkv"
+        qkv_weight = torch.cat(
+            [
+                module.self_attn.q_proj.weight,
+                module.self_attn.k_proj.weight,
+                module.self_attn.v_proj.weight
+            ],
+            dim=0
+        )
         smoother = smooth_gemm(
-            module.attn.c_attn.weight,
-            scales[layer_name]["x"],
-            module.ln_1.weight,
+            qkv_weight,
+            scales[layer_name_q]["x"],
+            module.input_layernorm.weight,
             alpha=alpha
         )
-        scales[layer_name]["x"] = scales[layer_name]["x"] / smoother
-        scales[layer_name]["w"] = module.attn.c_attn.weight.abs().max(dim=1)[0]
-
-
+        scales[layer_name_qkv]["x"] = scales[layer_name_q]["x"] / smoother
+        scales[layer_name_qkv]["w"] = qkv_weight.abs().max(dim=1)[0]
+        scales[layer_name_qkv]["y"] = torch.cat(
+            [
+                scales[layer_name_q]["y"],
+                scales[layer_name_k]["y"],
+                scales[layer_name_v]["y"]
+            ],
+            dim=0
+        )
+        qwen_qkv_para[layer_name_qkv] = qkv_weight.transpose(0, 1)
         # attention dense
-        layer_name = name + ".attn.c_proj"
+        layer_name = name + ".self_attn.o_proj"
         smoother3 = smooth_gemm(
-            module.attn.c_proj.weight,
+            module.self_attn.o_proj.weight,
             scales[layer_name]["x"],
             None,
             alpha=alpha,
@@ -139,45 +159,75 @@ def smooth_qwen_model(model, scales, alpha, qwen_smoother):
         qwen_smoother[layer_name] = smoother3.float()
 
         scales[layer_name]["x"] = scales[layer_name]["x"] / smoother3
-        scales[layer_name]["w"] = module.attn.c_proj.weight.abs().max(dim=1)[0]
-
+        scales[layer_name]["w"] = module.self_attn.o_proj.weight.abs().max(dim=1)[0]
+        # elif isinstance(module, Qwen2MLP):
         # mlp w1 / w2, because then use some input hidden_states as input, so we need to smooth it with same scale
-        mlp_w1_name = name + ".mlp.w1"
-        mlp_w2_name = name + ".mlp.w2"
+        mlp_gate_name = name + ".mlp.gate_proj"
+        mlp_up_name = name + ".mlp.up_proj"
         smoother2 = smooth_gemm_mlp(
-            module.mlp.w1.weight,
-            module.mlp.w2.weight,
-            scales[mlp_w1_name]["x"],
-            module.ln_2.weight,
+            module.mlp.up_proj.weight,
+            module.mlp.gate_proj.weight,
+            scales[mlp_up_name]["x"],
+            module.post_attention_layernorm.weight,
             alpha=alpha
         )
-        scales[mlp_w1_name]["x"] = scales[mlp_w1_name]["x"] / smoother2
-        scales[mlp_w2_name]["x"] = scales[mlp_w2_name]["x"] / smoother2
-        scales[mlp_w1_name]["w"] = module.mlp.w1.weight.abs().max(dim=1)[0]
-        scales[mlp_w2_name]["w"] = module.mlp.w2.weight.abs().max(dim=1)[0]
+        scales[mlp_up_name]["x"] = scales[mlp_up_name]["x"] / smoother2
+        scales[mlp_gate_name]["x"] = scales[mlp_gate_name]["x"] / smoother2
+        scales[mlp_up_name]["w"] = module.mlp.up_proj.weight.abs().max(dim=1)[0]
+        scales[mlp_gate_name]["w"] = module.mlp.gate_proj.weight.abs().max(dim=1)[0]
 
-        # mlp c_proj
-        layer_name = name + ".mlp.c_proj"
+        # mlp down_proj
+        layer_name = name + ".mlp.down_proj"
         smoother4 = smooth_gemm(
-            module.mlp.c_proj.weight,
+            module.mlp.down_proj.weight,
             scales[layer_name]["x"],
             None,
             alpha=alpha
         )
         qwen_smoother[layer_name] = smoother4.float()
         scales[layer_name]["x"] = scales[layer_name]["x"] / smoother4
-        scales[layer_name]["w"] = module.mlp.c_proj.weight.abs().max(dim=1)[0]
+        scales[layer_name]["w"] = module.mlp.down_proj.weight.abs().max(dim=1)[0]
+    return qwen_qkv_para
 
 
 # SantaCoder separates Q projection from KV projection
-def concat_qkv_weight_bias(q, hf_key, hf_model):
-    kv = hf_model.state_dict()[hf_key.replace("q_attn", "kv_attn")]
-    return torch.cat([q, kv], dim=-1)
+def concat_qkv_weight(q, hf_key, model_params: dict, scales: dict):
+    name_q = hf_key
+    name_k = hf_key.replace("q_proj", "k_proj")
+    name_v = hf_key.replace("q_proj", "v_proj")
+    k = model_params[name_k]
+    v = model_params[name_v]
+    name_q = name_q.replace(".weight", "")
+    name_k = name_k.replace(".weight", "")
+    name_v = name_v.replace(".weight", "")
+    name_qkv = name_q.replace("q_proj", "qkv")
+    qkv_weight = torch.cat([q, k, v], dim=0)
+    if scales.get(name_q, None) is not None:
+        scales[name_qkv]["x"] = scales[name_q]["x"]
+        scales[name_qkv]["w"] = qkv_weight.abs().max(dim=1)[0]
+        scales[name_qkv]["y"] = torch.cat(
+            [
+                scales[name_q]["y"],
+                scales[name_k]["y"],
+                scales[name_v]["y"]
+            ],
+            dim=0
+        )
+    return qkv_weight.transpose(0, 1)
+
+
+def concat_qkv_bias(q, hf_key, model_params: dict):
+    k = model_params[hf_key.replace("q_proj", "k_proj")]
+    v = model_params[hf_key.replace("q_proj", "v_proj")]
+    return torch.cat([q, k, v], dim=0)
 
 
 # StarCoder uses nn.Linear for these following ops whose weight matrix is transposed compared to transformer.Conv1D
 def transpose_weights(hf_name, param):
-    weight_to_transpose = ["attn.c_attn", "attn.c_proj", "mlp.c_proj", "mlp.w1", "mlp.w2"]
+    weight_to_transpose = [
+        "self_attn.qkv", "self_attn.o_proj",
+        "mlp.down_proj", "mlp.gate_proj", "mlp.up_proj"
+    ]
     if any([k in hf_name for k in weight_to_transpose]):
         if len(param.shape) == 2:
             param = param.transpose(0, 1)
@@ -187,10 +237,10 @@ def transpose_weights(hf_name, param):
 def qwen_to_ft_name(orig_name):
     global_weights = {
         # 
-        "transformer.wte.weight": "vocab_embedding.weight",
+        "model.embed_tokens.weight": "embed_tokens.weight",
         # "transformer.wpe.weight": "model.wpe",
         # "transformer.ln_f.bias": "model.final_layernorm.bias",
-        "transformer.ln_f.weight": "ln_f.weight",
+        "model.norm.weight": "norm.weight",
         "lm_head.weight": "lm_head.weight"
     }
 
@@ -199,25 +249,21 @@ def qwen_to_ft_name(orig_name):
 
     _, _, layer_id, *weight_name = orig_name.split(".")
     layer_id = int(layer_id)
-    weight_name = "transformer." + ".".join(weight_name)
+    weight_name = ".".join(weight_name)
 
     per_layer_weights = {
-        # "transformer.ln_1.bias": "input_layernorm.bias",
-        "transformer.ln_1.weight": "ln_1.weight",
-        # "transformer.ln_2.bias": "post_attention_layernorm.bias",
-        "transformer.ln_2.weight": "ln_2.weight",
-        "transformer.attn.c_attn.weight": "attention.qkv.weight",
-        "transformer.attn.c_attn.bias": "attention.qkv.bias",
-        # "transformer.attn.q_attn.weight": "attention.query.weight",
-        # "transformer.attn.q_attn.bias": "attention.query.bias",
-        # "transformer.attn.kv_attn.weight": "attention.key_value.weight",
-        # "transformer.attn.kv_attn.bias": "attention.key_value.bias",
-        # "transformer.attn.c_proj.bias": "attention.dense.bias",
-        "transformer.attn.c_proj.weight": "attention.dense.weight",
-        "transformer.mlp.w1.weight": "mlp.w1.weight",
-        "transformer.mlp.w2.weight": "mlp.w2.weight",
-        "transformer.mlp.c_proj.weight": "mlp.c_proj.weight",
-
+        "input_layernorm.weight": "input_layernorm.weight",
+        "post_attention_layernorm.weight": "post_attention_layernorm.weight",
+        "self_attn.q_proj.weight": "self_attn.q_proj.weight",
+        "self_attn.q_proj.bias": "self_attn.q_proj.bias",
+        "self_attn.k_proj.weight": "self_attn.k_proj.weight",
+        "self_attn.k_proj.bias": "self_attn.k_proj.bias",
+        "self_attn.v_proj.weight": "self_attn.v_proj.weight",
+        "self_attn.v_proj.bias": "self_attn.v_proj.bias",
+        "self_attn.o_proj.weight": "self_attn.o_proj.weight",
+        "mlp.gate_proj.weight": "mlp.gate_proj.weight",
+        "mlp.up_proj.weight": "mlp.up_proj.weight",
+        "mlp.down_proj.weight": "mlp.down_proj.weight",
     }
     return f"layers.{layer_id}.{per_layer_weights[weight_name]}"
 
@@ -235,13 +281,14 @@ def hf_qwen_converter(args: ProgArgs):
         device_map="auto",  # if you gpu memory is not enough, you can set device_map="cpu"
         trust_remote_code=True,
         torch_dtype=str_dtype_to_torch(args.storage_type),
-    ).half() # if you gpu memory is not enough, you can set .half() to .float()
+    ).half()  # if you gpu memory is not enough, you can set .half() to .float()
     model.generation_config = GenerationConfig.from_pretrained(
         args.in_file,
         trust_remote_code=True
     )
     act_range = {}
     qwen_smoother = {}
+    qwen_qkv_para = {}
     if args.smoothquant is not None or args.calibrate_kv_cache:
         os.environ["TOKENIZERS_PARALLELISM"] = os.environ.get(
             "TOKENIZERS_PARALLELISM", "false")
@@ -261,23 +308,25 @@ def hf_qwen_converter(args: ProgArgs):
         gen_config_path = os.path.join(args.in_file, 'generation_config.json')
         with open(gen_config_path, 'r') as f:
             gen_config = json.load(f)
-        chat_format = gen_config['chat_format']
         max_input_len = default_config.max_input_len
         # pad_id = tokenizer.encode(tokenizer.pad_token, add_special_tokens=False)[0]
         # end_id = tokenizer.encode(tokenizer.eos_token, add_special_tokens=False)[0]
-        tokenizer.pad_token_id = tokenizer.im_end_id
         # use this prompt to make chat model do summarize
         system_prompt = "You are a useful assistant, please directly output the corresponding summary according to the article entered by the user."
         act_range = capture_activation_range(
-            model, 
+            model,
             tokenizer,
             dataset,
             system_prompt=system_prompt,
-            chat_format=chat_format,
             max_input_len=max_input_len,
         )
         if args.smoothquant is not None:
-            smooth_qwen_model(model, act_range, args.smoothquant, qwen_smoother)
+            qwen_qkv_para = smooth_qwen_model(
+                model,
+                act_range,
+                args.smoothquant,
+                qwen_smoother
+            )
 
     config = configparser.ConfigParser()
     config["qwen"] = {}
@@ -300,9 +349,9 @@ def hf_qwen_converter(args: ProgArgs):
     #     "model.lm_head.weight"
     # ]
     global_ft_weights = [
-        "vocab_embedding.weight",
-        "ln_f.weight",
-        "lm_head.weight"
+        "embed_tokens.weight",
+        "norm.weight",
+        "lm_head.weight",
     ]
 
     int8_outputs = None
@@ -312,12 +361,14 @@ def hf_qwen_converter(args: ProgArgs):
         int8_outputs = "all"
 
     starmap_args = []
+    model_params = dict(model.named_parameters())
+    model_params["lm_head.weight"] = model.lm_head.weight
     for name, param in tqdm(
-            model.named_parameters(),
-            desc="convert and save",
-            total=len(list(model.parameters())),
-            ncols=80,
-        ):
+        model_params.items(),
+        desc="convert and save",
+        total=len(list(model.parameters())),
+        ncols=80,
+    ):
         if "weight" not in name and "bias" not in name:
             continue
         ft_name = qwen_to_ft_name(name)
@@ -348,12 +399,31 @@ def hf_qwen_converter(args: ProgArgs):
             torch_to_numpy(param.to(storage_type).cpu()).tofile(
                 saved_dir / f"{ft_name}.bin")
         else:
-            if 'q_attn' in name:
-                param = concat_qkv_weight_bias(param, name, model)
-                ft_name = ft_name.replace("query", "query_key_value")
+            if 'self_attn.q_proj.weight' in name:
+                temp_name = name.replace(".weight", "").replace(
+                    ".q_proj",
+                    ".qkv"
+                )
+                if args.smoothquant is None:
+                    param = concat_qkv_weight(param, name, model_params, act_range)
+                else:
+                    param = qwen_qkv_para[temp_name]
+                if args.smoothquant or args.calibrate_kv_cache:
+                    temp_act_range = act_range[temp_name]
+                else:
+                    temp_act_range = act_range.get(name.replace(".weight", ""))
+                ft_name = ft_name.replace("q_proj", "qkv")
+            elif 'self_attn.q_proj.bias' in name:
+                param = concat_qkv_bias(param, name, model_params)
+                ft_name = ft_name.replace("q_proj", "qkv")
+                temp_act_range = act_range.get(name.replace(".weight", ""))
+            elif "self_attn.k_proj" in name or "self_attn.v_proj" in name:
+                continue
+            else:
+                temp_act_range = act_range.get(name.replace(".weight", ""))
             # Needed by QKV projection weight split. With multi_query_mode one does not simply take
             # out_dim and divide it by 3 to get local_dim becuase out_dim = local_dim + 2 * head_size
-            local_dim = model.transformer.h[0].attn.embed_dim if multi_query_mode else None
+            local_dim = model.model.layers[0].self_attn.q_proj.weight.shape[1] if multi_query_mode else None
             starmap_arg = (
                 0,
                 saved_dir,
@@ -361,7 +431,7 @@ def hf_qwen_converter(args: ProgArgs):
                 ft_name,
                 param.to(storage_type),
                 storage_type,
-                act_range.get(name.replace(".weight", "")),
+                temp_act_range,
                 {
                     "int8_outputs": int8_outputs,
                     "multi_query_mode": multi_query_mode,
