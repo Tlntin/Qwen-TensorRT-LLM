@@ -382,7 +382,7 @@ if export_path:
 ```python
 if export_path:
     with torch.inference_mode():
-        if qformat == "int4_awq" and model_type == "Qwen1.5":
+        if qformat == "int4_awq" and model_type == "qwen2":
             torch.save(model.state_dict(), export_path)
         else:
             export_model_config(
