@@ -147,7 +147,7 @@ python build.py --hf_model_dir ./tmp/Qwen1.5/14B \
 
 
 #### INT8 weight only + INT8 KV cache
-For INT8 KV cache, [`hf_Qwen1.5_convert.py`](./hf_Qwen1.5_convert.py) features a
+For INT8 KV cache, [`hf_qwen_convert.py`](./hf_Qwen1.5_convert.py) features a
 `--calibrate-kv-cache, -kv` option. Setting `-kv` will calibrate the model,
 and then export the scaling factors needed for INT8 KV cache inference.
 
@@ -155,7 +155,7 @@ and then export the scaling factors needed for INT8 KV cache inference.
 Example:
 
 ```bash
-python3 hf_Qwen1.5_convert.py \
+python3 hf_qwen_convert.py \
     -i ./tmp/Qwen1.5/7B/ \
     -o ./tmp/Qwen1.5/7B/int8_kv_cache/ \
     --calibrate-kv-cache -t float16
@@ -211,7 +211,7 @@ The smoothquant supports both Qwen1.5 v1 and Qwen1.5 v2. Unlike the FP16 build w
 
 Example:
 ```bash
-python3 hf_Qwen1.5_convert.py -i ./tmp/Qwen1.5/7B -o ./tmp/Qwen1.5/7B/sq0.5/ -sq 0.5 --tensor-parallelism 1 --storage-type float16
+python3 hf_qwen_convert.py -i ./tmp/Qwen1.5/7B -o ./tmp/Qwen1.5/7B/sq0.5/ -sq 0.5 --tensor-parallelism 1 --storage-type float16
 ```
 
 [`build.py`](./build.py) add new options for the support of INT8 inference of SmoothQuant models.
