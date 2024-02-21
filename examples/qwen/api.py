@@ -456,7 +456,7 @@ def text_complete_last_message(history, stop_words_ids, sampling_config):
     stop_words_ids = torch.tensor(_stop_words_ids, dtype=torch.int32, device="cuda")
     input_lengths=torch.tensor([input_ids.shape[-1]], dtype=torch.int32, device="cuda")
     # output = model.generate(input_ids, stop_words_ids=stop_words_ids, **gen_kwargs).tolist()[0]
-    output_ids = decoder.generate(
+    output_dict = decoder.generate(
         input_ids=input_ids,
         input_lengths=input_lengths,
         sampling_config=sampling_config,
@@ -466,10 +466,15 @@ def text_complete_last_message(history, stop_words_ids, sampling_config):
         ),
         stop_works_list=stop_words_ids,
     )
-    output = tokenizer.decode(output_ids[0, input_ids.shape[-1]:], errors="ignore")
+    output_ids = output_dict['output_ids']
+    sequence_lengths = output_dict['sequence_lengths']
+    output = tokenizer.decode(
+        output_ids[0, input_ids.shape[-1]: sequence_lengths[0][0]],
+        errors="ignore"
+    )
     # assert output.startswith(prompt)
     # output = output[len(prompt) :]
-    output = trim_stop_words(output, ["<|endoftext|>", im_end])
+    # output = trim_stop_words(output, ["<|endoftext|>", im_end])
     # print(f"<completion>\n{prompt}\n<!-- *** -->\n{output}\n</completion>")
     return output
 
