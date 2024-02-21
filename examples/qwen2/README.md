@@ -349,7 +349,7 @@ from tensorrt_llm.models.quantized.ammo import quantize_and_export
 - Then control + left mouse button, click the `quantize_and_export` function to view its internal implementation.
 - Find "model_lookup" , add the following question code to support Qwen1.5
 ```bash
-    ("Qwen2", ): "Qwen2",
+    ("qwen2", ): "qwen2",
 ```
 - After modification, it looks like this:
 ```bash
@@ -361,7 +361,7 @@ model_lookup = {
     ("mpt", ): "mpt",
     ("gpt2", ): "gpt2",
     ("chatglm", ): "chatglm",
-    ("Qwen2", ): "Qwen2",
+    ("qwen2", ): "qwen2",
 }
 ```
 - Second, change save code
