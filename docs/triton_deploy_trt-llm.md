@@ -9,7 +9,7 @@
 2. 拉取镜像。进入[Nvidia镜像中心](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tritonserver/tags)找到tritonserver的镜像，选择和TensorRT-LLM（简称trtllm）有关的容器，然后拷贝镜像地址，最后使用`docker pull`来拉取该镜像。
 ![8adef9e1313d515b8144b2813f20d582.png](https://s2.loli.net/2024/03/08/2x6Swubef9QAdCV.png)
 ```bash
-docker pull nvcr.io/nvidia/tritonserver:24.02-trtllm-python-py3
+docker pull nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3
 ```
 - 测试发现这个容器部署的时候会有问题，自己编译官方容器反而就可以，原因貌似是tritonserver目前只能用2.39而不能用2.41，参考[issues/246](https://github.com/triton-inference-server/tensorrtllm_backend/issues/246)，下面是编译命令。
 ```bash
