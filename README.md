@@ -17,7 +17,7 @@
 - 支持cli命令行对话。
 - 支持langchain接入。
 
-### 支持的模型
+### 支持的模型（qwen/qwen1.5/qwen-vl)
 
 - base模型（实验性）：[Qwen-1_8B](https://huggingface.co/Qwen/Qwen-1_8B)、[Qwen-7B](https://huggingface.co/Qwen/Qwen-7B)、[Qwen-14B](https://huggingface.co/Qwen/Qwen-14B)、[Qwen-72B](https://huggingface.co/Qwen/Qwen-72B)（实验性）、[QWen-VL](https://huggingface.co/Qwen/Qwen-VL)
 - chat模型（推荐）：[Qwen-1_8B-Chat](https://huggingface.co/Qwen/Qwen-1_8B-Chat)、[Qwen-7B-Chat](https://huggingface.co/Qwen/Qwen-7B-Chat)、[Qwen-14B-Chat](https://huggingface.co/Qwen/Qwen-14B-Chat)、[Qwen-72B-Chat](https://huggingface.co/Qwen/Qwen-72B-Chat)（实验性）、[QWen-VL-Chat](https://huggingface.co/Qwen/Qwen-VL-Chat)
@@ -229,16 +229,20 @@
 
 ### 准备工作
 1. 下载镜像。
-    - 官方triton镜像23.12，对应TensorRT-LLM版本为0.7.0，不含TensorRT-LLM开发包，需要自己在trtion容器中编译，[参考教程](https://github.com/triton-inference-server/tensorrtllm_backend/tree/v0.7.0?tab=readme-ov-file#prepare-tensorrt-llm-engines)。
+    - 官方triton镜像23.12，对应TensorRT-LLM版本为0.7.0，不含TensorRT-LLM开发包。
       ```bash
       docker pull nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3
       docker tag nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3 tensorrt_llm/release
       ```
       
-    - （关于上面的triton容器，不含TensorRT-LLM开发包）也可以使用我编译好的，百度网盘自取，链接: https://pan.baidu.com/s/1AIumaT2bhlVW7KuDWYw9tA?pwd=hvvf 提取码: hvvf 
+    - 安装pytorch2.1.0，目前还不支持2.2。
 
       ```bash
-       pip install tensorrt_llm-0.7.0-cp310-cp310-linux_x86_64.whl
+       pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu121
+      ```
+    - 使用pip直接安装官方编译好的tensorrt_llm
+      ```bash
+      pip install tensorrt_llm==0.7.0 --extra-index-url https://pypi.nvidia.com --extra-index-url https://download.pytorch.org/whl/cu121
       ```
     
     - AutoDL镜像，不含triton，版本为0.6.1，无卡用户可以体验玩玩，[链接](https://www.codewithgpu.com/i/NVIDIA/TensorRT-LLM/tensorrt_llm)
