@@ -3,10 +3,13 @@
 ### 选择正确的环境
 1. 选择版本。查询nvidia[官方文档](https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html)，可以看到目前最新的容器是23.12。
 - 在**NVIDIA Driver**这一行，它推荐的英伟达驱动版本是545以上，对于数据卡，可以适当降低。如果你是游戏卡，驱动版本没有545，也不想升级，那么建议至少不要低太多，比如535其实也可以。
+![020016f0975ebec6eae195bf77b61044.png](https://s2.loli.net/2024/03/08/anRjJh4AeIF6icf.png)
 - 在**Triton Inference Server**这一行，可以看到它内置了triton server版本是2.41，需要的TensorRT-LLM版本是0.7.0。
+![7ea2f2f9645f9019920a6704a91cd7c3.png](https://s2.loli.net/2024/03/08/Ou47LTKDyXidmS2.png)
 2. 拉取镜像。进入[Nvidia镜像中心](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tritonserver/tags)找到tritonserver的镜像，选择和TensorRT-LLM（简称trtllm）有关的容器，然后拷贝镜像地址，最后使用`docker pull`来拉取该镜像。
+![8adef9e1313d515b8144b2813f20d582.png](https://s2.loli.net/2024/03/08/2x6Swubef9QAdCV.png)
 ```bash
-docker pull nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3
+docker pull nvcr.io/nvidia/tritonserver:24.02-trtllm-python-py3
 ```
 - 测试发现这个容器部署的时候会有问题，自己编译官方容器反而就可以，原因貌似是tritonserver目前只能用2.39而不能用2.41，参考[issues/246](https://github.com/triton-inference-server/tensorrtllm_backend/issues/246)，下面是编译命令。
 ```bash
@@ -33,7 +36,7 @@ git clone https://github.com/NVIDIA/TensorRT-LLM.git -b v0.7.0
 ```
 - 也可以选择我的项目，目前main分支就是0.7.0，后续可能会打成tag，建议实际访问项目地址，查看是否有0.7.0的tag。
 ```bash
-git clone https://github.com/Tlntin/Qwen-TensorRT-LLM
+git clone https://github.com/Tlntin/Qwen-TensorRT-LLM -b v0.7.0
 ```
 - 下面演示是以我的项目为主，在triton_server上面部署Qwen-1.8B-Chat（毕竟这个模型比较小）
 4. 拉取tensorrtllm_backend。这个是用来编排tensorrt-llm服务的，需要和TensorRT-LLM版本一致，这里同样选择0.7.0（第二步如果是手动编译的容器，就可以省略该步骤）
@@ -89,10 +92,15 @@ cat /tensorrtllm_backend/tools/version.txt
 apt update
 apt install git-lfs
 ```
-8. 直接pip安装TensorRT-LLM （如果是自己编译的容器，这步可以省略）
+8. 安装pytorch2.1.0，目前还不支持2.2。
+```bash
+pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu121
+```
+9. 直接通过pip安装TensorRT-LLM （如果是自己编译的容器，这步可以省略）
 ```bash
 pip install tensorrt_llm==0.7.0 --extra-index-url https://pypi.nvidia.com --extra-index-url https://download.pytorch.org/whl/cu121
 ```
+
 
 ### 编译Engine
 - 参考我项目的[readme](https://github.com/Tlntin/Qwen-TensorRT-LLM)
@@ -133,6 +141,7 @@ python3 run.py
 
 ### 部署Triton
 - 参考tensorrtllm_backend 0.7.0的[readme](https://github.com/triton-inference-server/tensorrtllm_backend/tree/v0.7.0)
+- 同时参考llama的[详细部署教程](https://github.com/triton-inference-server/tensorrtllm_backend/blob/v0.7.0/docs/llama.md)
 1. 进入容器
 ```bash
 docker exec -it triton /bin/bash
@@ -224,11 +233,12 @@ python3 scripts/launch_triton_server.py --world_size=1 --model_repo=/tensorrtllm
 - 请求
 ```bash
 curl -X POST localhost:8000/v2/models/ensemble/generate \
--d '{"text_input": "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n你好，你叫什么？<|im_end|>\n<|im_start|>assistant\n", "max_tokens": 50, "bad_words": "\n", "stop_words": "", "end_id": [151643], "pad_id": [151643]}'
+-d '{"text_input": "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n你好，你叫什么？<|im_end|>\n<|im_start|>assistant\n", "max_tokens": 100, "bad_words": "", "stop_words": "", "end_id": [151645], "pad_id": [151645]}'
+
 ```
 - 输出结果
 ```text
-{"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"你好，我是来自阿里云的大规模语言模型，我叫通义千问。"}% 
+{"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"你好，我是来自阿里云的大规模语言模型，我叫通义千问。"}%    
 ```
 
 ### 调用服务
@@ -252,6 +262,56 @@ Human: 你叫什么？
 Output: 我是来自阿里云的大规模语言模型，我叫通义千问。
 ```
 
+##### http流式调用
+1. 前提
+- 编译的Engine开启了`paged_kv_cache`
+- 部署triton时，`tensorrt_llm/config.pbtxt`里面的`gpt_model_type`对应的value为inflight_batching
+2. 运行命令
+```bash
+curl -X POST localhost:8000/v2/models/ensemble/generate_stream \
+-d '{"text_input": "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n你好，你叫什么？<|im_end|>\n<|im_start|>assistant\n", "max_tokens": 100, "bad_words": "", "stop_words": "", "end_id": [151645], "pad_id": [151645], "stream": true}'
+```
+3. 输出结果：
+```bash
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":0.0,"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"你好"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"，"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"我是"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"来自"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"阿里"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"云"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"的大"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"规模"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"语言"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"模型"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"，"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"我"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"叫"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"通"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"义"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"千"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"问"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":"。"}
+
+data: {"cum_log_probs":0.0,"model_name":"ensemble","model_version":"1","output_log_probs":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sequence_end":false,"sequence_id":0,"sequence_start":false,"text_output":""}
+
+```
 
 ### 关闭triton服务
 ```bash

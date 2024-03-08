@@ -84,13 +84,13 @@ class TritonPythonModel:
         with open(gen_config_path, 'r') as f:
             gen_config = json.load(f)
         chat_format = gen_config['chat_format']
-        if chat_format == "raw":
-            self.eos_id = gen_config['eos_token_id']
-            self.pad_id = gen_config['pad_token_id']
-        elif chat_format == "chatml":
-            self.pad_id = self.eos_id = self.tokenizer.im_end_id
-        else:
-            raise Exception("unkown chat format ", chat_format)
+        # if chat_format == "raw":
+        self.eos_id = gen_config['eos_token_id']
+        self.pad_id = gen_config['pad_token_id']
+        # elif chat_format == "chatml":
+        #     self.pad_id = self.eos_id = self.tokenizer.im_end_id
+        # else:
+        #     raise Exception("unkown chat format ", chat_format)
         eos_token = self.tokenizer.decode(self.eos_id)
         self.tokenizer.eos_token = self.tokenizer.pad_token = eos_token
 

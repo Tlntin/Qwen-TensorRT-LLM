@@ -246,6 +246,7 @@ class TritonPythonModel:
             #Get the response sender for the BLS
             if self.decoupled:
                 bls_response_sender = request.get_response_sender()
+            print("self.decopled", self.decoupled)
 
             try:
                 # Get the bls input tensors
@@ -255,7 +256,7 @@ class TritonPythonModel:
                 #Check the batch dimension
                 for name, tensor in bls_input_tensors_map.items():
                     batch_dim = tensor.as_numpy().shape[0]
-                    print("Debug name {}, shape: {}", name, tensor.as_numpy().shape)
+                    # print("Debug name {}, shape: {}", name, tensor.as_numpy().shape)
                     if batch_dim != 1:
 
                         err_str = "Inflight batching backend expects requests with batch size of 1."
@@ -329,6 +330,7 @@ class TritonPythonModel:
 
                     bls_response = pb_utils.InferenceResponse(
                         output_tensors=bls_output_tensors)
+                    print("bls reponse", bls_response)
 
                     if self.decoupled:
                         bls_response_sender.send(bls_response)

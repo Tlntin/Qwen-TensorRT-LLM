@@ -29,7 +29,7 @@ backend: "tensorrtllm"
 max_batch_size: 4
 
 model_transaction_policy {
-  decoupled: true
+  decoupled: True
 }
 
 dynamic_batching {
@@ -225,7 +225,7 @@ instance_group [
 parameters: {
   key: "max_beam_width"
   value: {
-    string_value: "${max_beam_width}"
+    string_value: "1"
   }
 }
 parameters: {
@@ -237,7 +237,7 @@ parameters: {
 parameters: {
   key: "gpt_model_type"
   value: {
-    string_value: "V1"
+    string_value: "inflight_batching"
   }
 }
 parameters: {

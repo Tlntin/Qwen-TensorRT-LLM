@@ -84,6 +84,7 @@ class TritonPythonModel:
             self.eos_id = gen_config['eos_token_id']
             self.pad_id = gen_config['pad_token_id']
         elif chat_format == "chatml":
+            print("im_end_id", self.tokenizer.im_end_id)
             self.pad_id = self.eos_id = self.tokenizer.im_end_id
         else:
             raise Exception("unkown chat format ", chat_format)
@@ -189,5 +190,7 @@ class TritonPythonModel:
                 output = self.tokenizer.decode(
                     tokens[:seq_len],
                     skip_special_tokens=self.skip_special_tokens)
+                # print("output_ids", tokens[:seq_len])
+                # print("output", output)
                 outputs.append(output.encode('utf8'))
         return outputs
