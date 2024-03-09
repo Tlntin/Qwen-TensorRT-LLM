@@ -24,9 +24,14 @@
 - chat-int4模型：[Qwen-1_8B-Chat-Int4](https://huggingface.co/Qwen/Qwen-1_8B-Chat-Int4)、[Qwen-7B-Chat-Int4](https://huggingface.co/Qwen/Qwen-7B-Chat-Int4)、[Qwen-14B-Chat-Int4](https://huggingface.co/Qwen/Qwen-14B-Chat-Int4)、、[Qwen-72B-Chat-Int4](https://huggingface.co/Qwen/Qwen-72B-Chat-Int4)（实验性）、[Qwen-VL-Chat-Int4](https://huggingface.co/Qwen/Qwen-VL-Chat-Int4)
 
 ### 相关教程：
-- 本项目配套B站教程：[TensorRT-LLM实战指南](https://www.bilibili.com/video/BV12M411D7uS/)
+- 本项目配套B站教程：
+
+  <a href="https://www.bilibili.com/video/BV12M411D7uS/"><img src="https://s2.loli.net/2024/03/09/mO47upAkFgyVn6o.png" alt="bilibili"></a>
+
 - 本项目配套博客适配概述：[如何在 NVIDIA TensorRT-LLM 中支持 Qwen 模型](https://developer.nvidia.com/zh-cn/blog/qwen-model-support-nvidia-tensorrt-llm)
+
 - [TensorRT-LLM的模型量化：实现与性能科普视频](https://www.bilibili.com/video/BV1Pw411h7nM/?spm=a2c22.12281976.0.0.6ee62084utHBCm)
+
 - [Triton23.12部署TensorRT-LLM,实现http查询](./docs/triton_deploy_trt-llm.md)
 
 
