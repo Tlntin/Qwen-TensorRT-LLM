@@ -26,7 +26,7 @@
 ### 相关教程：
 - 本项目配套B站教程：
 
-  <a href="https://www.bilibili.com/video/BV12M411D7uS/"><img src="https://s2.loli.net/2024/03/09/mO47upAkFgyVn6o.png" alt="bilibili"></a>
+  <a href="https://www.bilibili.com/video/BV12M411D7uS/"><img src="images/course.png" alt="bilibili"></a>
 
 - 本项目配套博客适配概述：[如何在 NVIDIA TensorRT-LLM 中支持 Qwen 模型](https://developer.nvidia.com/zh-cn/blog/qwen-model-support-nvidia-tensorrt-llm)
 
@@ -573,3 +573,9 @@ python build.py --use_weight_only \
 4. web_demo运行效果（测试平台：RTX 4080, qwen-7b-chat, int4 weight only)
 
 https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956
+
+
+
+## Stargazers over time
+
+ [![Stargazers over time](https://starchart.cc/Tlntin/Qwen-TensorRT-LLM.svg?variant=adaptive)](https://starchart.cc/Tlntin/Qwen-TensorRT-LLM)
