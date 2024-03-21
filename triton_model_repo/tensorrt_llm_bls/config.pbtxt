@@ -185,7 +185,7 @@ parameters: {
 
 instance_group [
   {
-    count: 1
+    count: 10
     kind : KIND_CPU
   }
 ]
