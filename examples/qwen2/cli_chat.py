@@ -26,7 +26,7 @@ def parse_arguments():
     parser.add_argument(
         '--stream',
         type=bool,
-        default=False,
+        default=True,
         help="return text with stream")
     return parser.parse_args()
 
@@ -64,8 +64,8 @@ if __name__ == "__main__":
                 input_text=input_text, 
                 history=history,
                 max_new_tokens=args.max_output_len,
-            )
-            print(f'Output: {response[0]}')
+            )[0]
+            print(f'Output: {response}')
         else:
             print("Output: ", end='')
 

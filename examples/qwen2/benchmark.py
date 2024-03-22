@@ -11,8 +11,9 @@ from transformers import (
     AutoModelForCausalLM, PreTrainedTokenizerBase, AutoTokenizer
 )
 from tqdm import tqdm, trange
-from run import get_model, Qwen2ForCausalLMGenerationSession
+from run_old import get_model, Qwen2ForCausalLMGenerationSession
 from default_config import default_config
+import tensorrt_llm
 
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
@@ -84,6 +85,7 @@ def run_trt_llm(
     tokenizer_dir: str,
     n: int,
     max_batch_size: int,
+    log_level = "error",
 ) -> float:
     global_max_input_len = default_config.max_input_len
     global_max_output_len = default_config.max_input_len + default_config.max_new_tokens
@@ -93,20 +95,18 @@ def run_trt_llm(
                 max_batch_size, default_config.trt_max_batch_size
             )
         )
+    runtime_rank = tensorrt_llm.mpi_rank()
     (
-        model_config, sampling_config, runtime_mapping, runtime_rank,
-        serialize_path, remove_input_padding, 
+
+        engine, model_config, sampling_config, runtime_mapping,
         tokenizer, eos_token_id, pad_token_id, stop_token_ids
-    ) = get_model(
-        tokenizer_dir=tokenizer_dir,
-        engine_dir=engine_dir,
-    )
-    with open(serialize_path, 'rb') as f:
-        engine_buffer = f.read()
+    ) = get_model(tokenizer_dir, engine_dir, log_level, rank=runtime_rank)
+
+    engine_buffer = engine.engine
     decoder = Qwen2ForCausalLMGenerationSession(
         model_config,
         engine_buffer,
-        runtime_mapping
+        runtime_mapping,
     )
 
     # Add the requests to the engine.
