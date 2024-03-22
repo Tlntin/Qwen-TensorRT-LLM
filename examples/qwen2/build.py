@@ -33,6 +33,8 @@ from default_config import default_config
 
 
 MODEL_NAME = "qwen2"
+os.environ["HF_ENDPOINT"] = "https://ai.gitee.com/huggingface"
+os.environ["HF_HOME"] = "~/.cache/gitee-ai"
 
 # 2 routines: get_engine_name, serialize_engine
 # are direct copy from gpt example, TODO: put in utils?
@@ -548,25 +550,7 @@ def build_rank_engine(
         # 'trtllm_modules_to_hf_modules': args.lora_config.trtllm_modules_to_hf_modules,
         # 'disable_weight_only_quant_plugin': args.disable_weight_only_quant_plugin
     }
-    pretrained_config = PretrainedConfig.from_dict(pretrained_config_dict)
-    plugin_config = PluginConfig.from_arguments(args)
-    build_config = BuildConfig.from_dict(
-        {
-            'max_input_len': args.max_input_len,
-            'max_output_len': args.max_output_len,
-            'max_batch_size': args.max_batch_size,
-            'max_beam_width': args.max_beam_width,
-            'max_num_tokens': args.max_num_tokens,
-            'max_prompt_embedding_table_size': args.max_prompt_embedding_table_size,
-            # 'gather_context_logits': args.gather_context_logits,
-            # 'gather_generation_logits': args.gather_generation_logits,
-            'strongly_typed': args.strongly_typed,
-            'builder_opt': args.builder_opt,
-            # 'profiling_verbosity': args.profiling_verbosity,
-            'enable_debug_output': args.enable_debug_output,
-        },
-        plugin_config=plugin_config
-    )
+    
     kv_dtype = str_dtype_to_trt(args.dtype)
     mapping = Mapping(
         world_size=args.world_size,
@@ -609,6 +593,17 @@ def build_rank_engine(
     )
 
     if args.use_smooth_quant:
+        pretrained_config_dict['quantization']['sq_use_plugin'] = True
+        if args.per_channel:
+            if args.per_token:
+                pretrained_config_dict['quantization']['quant_algo'] = 'W8A8_SQ_PER_CHANNEL_PER_TOKEN_PLUGIN'
+            else:
+                pretrained_config_dict['quantization']['quant_algo'] = 'W8A8_SQ_PER_CHANNEL_PER_TENSOR_PLUGIN'
+        else:
+            if args.per_token:
+                pretrained_config_dict['quantization']['quant_algo'] = 'W8A8_SQ_PER_TENSOR_PER_TOKEN_PLUGIN'
+            else:
+                pretrained_config_dict['quantization']['quant_algo'] = 'W8A8_SQ_PER_TENSOR_PLUGIN'
         if not args.per_token:
             print("warning per_channel should be set when using smooth quantize")
         if not args.per_channel:
@@ -621,6 +616,10 @@ def build_rank_engine(
         )
         print("load smooth quantize ok")
     elif args.use_weight_only:
+        if args.weight_only_precision == 'int8':
+            pretrained_config_dict['quantization']['quant_algo'] = 'W8A16'
+        elif args.weight_only_precision == 'int4':
+            pretrained_config_dict['quantization']['quant_algo'] = 'W4A16'
         quantize_kwargs = {}
         if args.weight_only_precision == 'int4_awq':
             quantize_kwargs = {
@@ -635,11 +634,20 @@ def build_rank_engine(
                 "zero": True,
                 "pre_quant_scale": False,
             }
+            pretrained_config_dict['quantization'].update({
+                "group_size": args.group_size,
+                "has_zero_point": True,
+                "pre_quant_scale": False,
+                'quant_algo': 'W4A16_GPTQ'
+            })
         tensorrt_llm_qwen = quantize_model(
             tensorrt_llm_qwen,
             args.quant_mode,
             **quantize_kwargs
         )
+    
+    if args.int8_kv_cache:
+        pretrained_config_dict['quantization']['kv_cache_quant_algo'] = 'INT8'
 
     if not args.ft_dir_path.rstrip("/").endswith("-gpu"):
         ft_dir_path = os.path.join(args.ft_dir_path, str(args.tp_size) + "-gpu")
@@ -766,6 +774,25 @@ def build_rank_engine(
             to_onnx(network.trt_network, model_path)
 
     # Network -> Engine
+    pretrained_config = PretrainedConfig.from_dict(pretrained_config_dict)
+    plugin_config = PluginConfig.from_arguments(args)
+    build_config = BuildConfig.from_dict(
+        {
+            'max_input_len': args.max_input_len,
+            'max_output_len': args.max_output_len,
+            'max_batch_size': args.max_batch_size,
+            'max_beam_width': args.max_beam_width,
+            'max_num_tokens': args.max_num_tokens,
+            'max_prompt_embedding_table_size': args.max_prompt_embedding_table_size,
+            # 'gather_context_logits': args.gather_context_logits,
+            # 'gather_generation_logits': args.gather_generation_logits,
+            'strongly_typed': args.strongly_typed,
+            'builder_opt': args.builder_opt,
+            # 'profiling_verbosity': args.profiling_verbosity,
+            'enable_debug_output': args.enable_debug_output,
+        },
+        plugin_config=plugin_config
+    )
     engine = builder.build_engine(network, builder_config)
     engine_config = EngineConfig(pretrained_config, build_config, __version__)
     return Engine(engine_config, engine)
