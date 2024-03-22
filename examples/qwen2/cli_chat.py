@@ -1,15 +1,16 @@
 import os
 import argparse
-from run import get_model
-from run import Qwen2ForCausalLMGenerationSession
+from run_old import get_model
+from run_old import Qwen2ForCausalLMGenerationSession
 from default_config import default_config
+import tensorrt_llm
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max_new_tokens', type=int, default=default_config.max_new_tokens)
+    parser.add_argument('--max_output_len', type=int, default=default_config.max_new_tokens)
     parser.add_argument('--log_level', type=str, default='error')
     parser.add_argument(
         '--engine_dir',
@@ -25,7 +26,7 @@ def parse_arguments():
     parser.add_argument(
         '--stream',
         type=bool,
-        default=True,
+        default=False,
         help="return text with stream")
     return parser.parse_args()
 
@@ -33,13 +34,13 @@ def parse_arguments():
 if __name__ == "__main__":
     # get model info
     args = parse_arguments()
+    runtime_rank = tensorrt_llm.mpi_rank()
     (
-        model_config, sampling_config, runtime_mapping, runtime_rank,
-        serialize_path, remove_input_padding, 
+
+        engine, model_config, sampling_config, runtime_mapping,
         tokenizer, eos_token_id, pad_token_id, stop_token_ids
-    ) = get_model(args.tokenizer_dir, args.engine_dir, args.log_level)
-    with open(serialize_path, 'rb') as f:
-        engine_buffer = f.read()
+    ) = get_model(args.tokenizer_dir, args.engine_dir, args.log_level, rank=runtime_rank)
+    engine_buffer = engine.engine
     decoder = Qwen2ForCausalLMGenerationSession(
         model_config,
         engine_buffer,
@@ -47,7 +48,7 @@ if __name__ == "__main__":
     )
     history = []
     response = ''
-    print("欢迎使用Qwen聊天机器人，输入exit退出，输入clear清空历史记录")
+    print("\n欢迎使用Qwen聊天机器人，输入exit退出，输入clear清空历史记录")
     while True:
         input_text = input("Input: ")
         if input_text in ["exit", "quit", "exit()", "quit()"]:
@@ -62,7 +63,7 @@ if __name__ == "__main__":
                 sampling_config=sampling_config,
                 input_text=input_text, 
                 history=history,
-                max_new_tokens=args.max_new_tokens,
+                max_new_tokens=args.max_output_len,
             )
             print(f'Output: {response[0]}')
         else:
@@ -76,7 +77,7 @@ if __name__ == "__main__":
                 sampling_config=sampling_config,
                 input_text=input_text,
                 history=history,
-                max_new_tokens=args.max_new_tokens,
+                max_new_tokens=args.max_output_len,
             ):
                 print(new_text[0], end='', flush=True)
                 response += new_text[0]

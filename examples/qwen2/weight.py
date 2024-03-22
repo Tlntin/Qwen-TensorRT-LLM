@@ -193,7 +193,7 @@ def load_from_ft(
     w_type = np_dtype if not use_smooth_quant else np.int8
 
     if mapping.is_first_pp_rank():
-        tensorrt_llm_qwen.embed_tokens.weight.value = fromfile(
+        tensorrt_llm_qwen.embed_tokens.vocab_embedding.weight.value = fromfile(
             dir_path, "embed_tokens.weight.bin", [vocab_size, hidden_size]
         )
 
@@ -269,7 +269,7 @@ def load_from_ft(
                 (
                     processed_torch_weights,
                     torch_weight_scales,
-                ) = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
+                ) = torch.ops.trtllm.symmetric_quantize_last_axis_of_batched_matrix(
                     torch.tensor(t), plugin_weight_only_quant_type
                 )
                 # workaround for trt not supporting int8 inputs in plugins currently
@@ -327,7 +327,7 @@ def load_from_ft(
             (
                 processed_torch_weights,
                 torch_weight_scales,
-            ) = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
+            ) = torch.ops.trtllm.symmetric_quantize_last_axis_of_batched_matrix(
                 torch.tensor(t), plugin_weight_only_quant_type
             )
             # workaround for trt not supporting int8 inputs in plugins currently
@@ -364,7 +364,7 @@ def load_from_ft(
             (
                 processed_torch_weights,
                 torch_weight_scales,
-            ) = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
+            ) = torch.ops.trtllm.symmetric_quantize_last_axis_of_batched_matrix(
                 torch.tensor(t), plugin_weight_only_quant_type
             )
             # workaround for trt not supporting int8 inputs in plugins currently
@@ -403,7 +403,7 @@ def load_from_ft(
             (
                 processed_torch_weights,
                 torch_weight_scales,
-            ) = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
+            ) = torch.ops.trtllm.symmetric_quantize_last_axis_of_batched_matrix(
                 torch.tensor(t), plugin_weight_only_quant_type
             )
             # workaround for trt not supporting int8 inputs in plugins currently
@@ -450,7 +450,7 @@ def load_from_ft(
             (
                 processed_torch_weights,
                 torch_weight_scales,
-            ) = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
+            ) = torch.ops.trtllm.symmetric_quantize_last_axis_of_batched_matrix(
                 torch.tensor(t), plugin_weight_only_quant_type
             )
             # workaround for trt not supporting int8 inputs in plugins currently
@@ -522,7 +522,7 @@ def load_from_hf_qwen(
         else:
             v = torch_to_numpy(v.to(torch_dtype).detach().cpu())
         if "model.embed_tokens.weight" in k:
-            tensorrt_llm_qwen.embed_tokens.weight.value = v
+            tensorrt_llm_qwen.embed_tokens.vocab_embedding.weight.value = v
         elif "model.norm.weight" in k:
             tensorrt_llm_qwen.norm.weight.value = v
         elif "lm_head.weight" in k:
@@ -568,7 +568,7 @@ def load_from_hf_qwen(
                     (
                         processed_torch_weights,
                         torch_weight_scales,
-                    ) = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
+                    ) = torch.ops.trtllm.symmetric_quantize_last_axis_of_batched_matrix(
                         torch.tensor(v), plugin_weight_only_quant_type
                     )
                     # workaround for trt not supporting int8 inputs in plugins currently
@@ -608,7 +608,7 @@ def load_from_hf_qwen(
                     (
                         processed_torch_weights,
                         torch_weight_scales,
-                    ) = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
+                    ) = torch.ops.trtllm.symmetric_quantize_last_axis_of_batched_matrix(
                         torch.tensor(v), plugin_weight_only_quant_type
                     )
                     # workaround for trt not supporting int8 inputs in plugins currently
@@ -627,7 +627,7 @@ def load_from_hf_qwen(
                     (
                         processed_torch_weights,
                         torch_weight_scales,
-                    ) = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
+                    ) = torch.ops.trtllm.symmetric_quantize_last_axis_of_batched_matrix(
                         torch.tensor(v), plugin_weight_only_quant_type
                     )
                     # workaround for trt not supporting int8 inputs in plugins currently
@@ -644,7 +644,7 @@ def load_from_hf_qwen(
                     (
                         processed_torch_weights,
                         torch_weight_scales,
-                    ) = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
+                    ) = torch.ops.trtllm.symmetric_quantize_last_axis_of_batched_matrix(
                         torch.tensor(v), plugin_weight_only_quant_type
                     )
                     # workaround for trt not supporting int8 inputs in plugins currently
@@ -661,7 +661,7 @@ def load_from_hf_qwen(
                     (
                         processed_torch_weights,
                         torch_weight_scales,
-                    ) = torch.ops.fastertransformer.symmetric_quantize_last_axis_of_batched_matrix(
+                    ) = torch.ops.trtllm.symmetric_quantize_last_axis_of_batched_matrix(
                         torch.tensor(v), plugin_weight_only_quant_type
                     )
                     # workaround for trt not supporting int8 inputs in plugins currently
@@ -702,7 +702,7 @@ def load_from_gptq_qwen(
         if os.path.isdir(quant_ckpt_path):
             model = AutoModelForCausalLM.from_pretrained(
                 quant_ckpt_path,
-                device_map="cuda:0",
+                device_map="cuda",
                 trust_remote_code=True
             ).cpu().eval()
             model_params = {k: v for k, v in model.state_dict().items()}
@@ -832,7 +832,7 @@ def load_from_gptq_qwen(
         if "model.embed_tokens.weight" in k:
             if mapping.is_first_pp_rank():
                 tensorrt_llm.logger.info(f"converting: {k}")
-                tensorrt_llm_qwen.embed_tokens.weight.value = v
+                tensorrt_llm_qwen.embed_tokens.vocab_embedding.weight.value = v
         elif "model.norm.weight" in k:
             if mapping.is_last_pp_rank():
                 tensorrt_llm_qwen.norm.weight.value = v
@@ -1067,7 +1067,7 @@ def load_from_awq_qwen(
     if v.shape[0] % 64 != 0:
         v = torch.nn.functional.pad(v, [0, 0, 0, 64 - v.shape[0] % 64])
     if mapping.is_first_pp_rank():
-        tensorrt_llm_qwen.embed_tokens.weight.value = v.to(
+        tensorrt_llm_qwen.embed_tokens.vocab_embedding.weight.value = v.to(
             torch_dtype).cpu().numpy()
 
     # 2. lm_head
