@@ -163,7 +163,7 @@ def main(args):
             )
         if not args.hf_device_map_auto:
             model.cuda()
-        if model_name == 'qwen':
+        if model_name in ["qwen", "qwen2", "QwenForCausalLM","Qwen2ForCausalLM"]:
             model.generation_config = GenerationConfig.from_pretrained(
                 args.hf_model_dir, trust_remote_code=True)
         profiler.stop('load HF model')
@@ -211,7 +211,7 @@ def main(args):
             #         max_input_length=test_token_num,
             #     )
             #     input_ids = torch.tensor(input_id_list)
-            elif model_name == 'qwen2':
+            elif model_name in ["qwen2", "Qwen2ForCausalLM"]:
                 # use make_content to generate prompt
                 system_prompt = "You are a useful assistant, please directly output the corresponding summary according to the article entered by the user."
                 messages = [
@@ -583,8 +583,8 @@ if __name__ == '__main__':
         help='tokenizer path; defaults to hf_model_dir if left unspecified'
     )
     parser.add_argument('--vocab_file')
-    parser.add_argument('--test_hf', action='store_true')
-    parser.add_argument('--test_trt_llm', action='store_true', default=True)
+    parser.add_argument('--test_hf', action='store_true', default=True)
+    parser.add_argument('--test_trt_llm', action='store_true', default=False)
     parser.add_argument(
         '--data_type',
         type=str,

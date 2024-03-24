@@ -514,6 +514,7 @@ class Qwen2DecoderLayer(Module):
         self.hidden_size = hidden_size
         self.mlp_hidden_size = mlp_hidden_size
         self.bias = bias
+        self.dense_context_fmha=dense_context_fmha
         self.hidden_act = hidden_act
         self.dtype = dtype
         self.attention_mask_type = attention_mask_type
@@ -551,7 +552,7 @@ class Qwen2DecoderLayer(Module):
             tp_rank=self.tp_rank,
             quant_mode=quant_mode,
             dense_bias=bias,
-            dense_context_fmha=dense_context_fmha,
+            dense_context_fmha=self.dense_context_fmha,
         )
         if not mlp_hidden_size:
             mlp_hidden_size = hidden_size * 4

@@ -12,7 +12,7 @@ from tensorrt_llm.parameter import Parameter
 from tensorrt_llm.quantization.mode import QuantMode
 from tensorrt_llm.quantization.layers import (
     SmoothQuantColumnLinear, smooth_quant_gemm, SmoothQuantRowLinear,
-    SmoothQuantRmsNorm,
+    SmoothQuantRmsNorm, WeightOnlyGroupwiseQuantLinear
 )
 from tensorrt_llm.layers.attention import AttentionMaskType, PositionEmbeddingType
 from tensorrt_llm.module import Module
@@ -45,7 +45,9 @@ class SmoothQuantAttention(Module):
         tp_rank=0,
         scale_alibi_bias=False,
         paged_kv_cache=False,
-        quant_mode=QuantMode(0)
+        quant_mode=QuantMode(0),
+        dense_bias=None,
+        dense_context_fmha=False,
     ):
         super().__init__()
         self.attention_mask_type = attention_mask_type
@@ -58,6 +60,8 @@ class SmoothQuantAttention(Module):
         self.max_position_embeddings = max_position_embeddings
         self.tp_size = tp_size
         self.tp_rank = tp_rank
+        if dense_bias is None:
+            dense_bias = bias
 
         self.num_layers = num_layers
         self.apply_query_key_layer_scaling = apply_query_key_layer_scaling
@@ -73,6 +77,7 @@ class SmoothQuantAttention(Module):
         self.scale_alibi_bias = scale_alibi_bias
 
         self.position_embedding_type = position_embedding_type
+        self.dense_context_fmha = dense_context_fmha
         self.paged_kv_cache = paged_kv_cache
 
         self.rotary_embedding_base = rotary_embedding_base
@@ -124,7 +129,7 @@ class SmoothQuantAttention(Module):
 
         self.o_proj = SmoothQuantRowLinear(hidden_size,
                                           hidden_size,
-                                          bias=bias,
+                                          bias=dense_bias,
                                           dtype=dtype,
                                           tp_group=tp_group,
                                           tp_size=tp_size,
@@ -164,6 +169,7 @@ class SmoothQuantAttention(Module):
                 sequence_length=attention_params.sequence_length,
                 host_past_key_value_lengths=kv_cache_params.host_past_key_value_lengths,
                 host_max_attention_window_sizes=kv_cache_params.host_max_attention_window_sizes,
+                host_sink_token_length=kv_cache_params.host_sink_token_length,
                 context_lengths=attention_params.context_lengths,
                 cache_indirection=kv_cache_params.cache_indirection,
                 host_request_types=attention_params.host_request_types,
@@ -183,7 +189,11 @@ class SmoothQuantAttention(Module):
                 host_kv_cache_block_pointers=kv_cache_params.get_first_host_kv_cache_block_pointers(),
                 max_context_length=attention_params.max_context_length,
                 mask_type=self.attention_mask_type.value,
-                host_context_lengths=attention_params.host_context_lengths
+                tp_size=self.tp_size,
+                tp_rank=self.tp_rank,
+                host_context_lengths=attention_params.host_context_lengths,
+                dense_context_fmha=self.dense_context_fmha,
+                use_cache=use_cache,
         )
         else:
             assert self.paged_kv_cache == False
@@ -536,10 +546,13 @@ def smooth_quantize(model, quant_mode, rmsnorm_quantization_plugin_dtype, custom
             position_embedding_type=layer.position_embedding_type,
             rotary_embedding_base=layer.rotary_embedding_base,
             rotary_embedding_scaling=layer.rotary_embedding_scaling,
-            neox_rotary_style=layer.neox_rotary_style,
             tp_group=layer.tp_group,
             tp_size=layer.tp_size,
-            quant_mode=quant_mode
+            tp_rank=layer.tp_rank,
+            quant_mode=quant_mode,
+            dense_bias=layer.bias,
+            dense_context_fmha=layer.dense_context_fmha
+            
         )
         assert hasattr(layer, "mlp"), "The layer has no mlp"
         layer.mlp = SmoothQuantMLP(

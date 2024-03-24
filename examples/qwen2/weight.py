@@ -743,15 +743,15 @@ def load_from_gptq_qwen(
 
         UINT4_TO_INT4_FLAG = 1
         GPTQ_FLAG = 1
-        packer = torch.ops.fastertransformer.pack_int8_tensor_to_packed_int4
-        preprocessor = torch.ops.fastertransformer.preprocess_weights_for_mixed_gemm
+        packer = torch.ops.trtllm.pack_int8_tensor_to_packed_int4
+        preprocessor = torch.ops.trtllm.preprocess_weights_for_mixed_gemm
 
         qweight_unpacked_int8 = (
             unpack_int32_into_int8(qweight_int32.T).T.contiguous() - 8
         ) # qkv weight shape: [4096, 12888], dtype int32 -> uint4x2, save as int8
         qweight_interleaved = preprocessor(
             packer(qweight_unpacked_int8), torch.quint4x2
-        ) # qkv weight shape: [4096, 4096 * 3]
+        ).view(torch.float16) # qkv weight shape: [4096, 4096 * 3]
         # zeros = zeros * scales
         qzeros_unpacked_int32 = unpack_int32_into_int8(qzeros_int32)
 
@@ -803,9 +803,9 @@ def load_from_gptq_qwen(
             split_qkv_suf[1],
             split_qkv_suf[2],
         )
-        tensorrt_llm_qwen.layers[idx].self_attn.qkv.qweight.value = th_qweight.numpy()
+        tensorrt_llm_qwen.layers[idx].self_attn.qkv.weight.value = th_qweight.numpy()
         tensorrt_llm_qwen.layers[idx].self_attn.qkv.zero.value = th_zero.numpy()
-        tensorrt_llm_qwen.layers[idx].self_attn.qkv.scale.value = th_scale.to(
+        tensorrt_llm_qwen.layers[idx].self_attn.qkv.weights_scaling_factor.value = th_scale.to(
             torch_dtype).numpy()
         # process qkv bias
         qkv_bias_list = []
@@ -853,7 +853,7 @@ def load_from_gptq_qwen(
                 tensorrt_llm_qwen.layers[idx].input_layernorm.weight.value = v
             elif "post_attention_layernorm.weight" in k:
                 tensorrt_llm_qwen.layers[idx].post_attention_layernorm.weight.value = v
-            elif "self_attn.o_proj.qweight" in k:
+            elif "self_attn.o_proj.weight" in k:
                 split_v_suf = []
                 for suf in suffixs:
                     v = model_params[k[:-7] + suf].cpu()
@@ -864,10 +864,10 @@ def load_from_gptq_qwen(
                 th_qweight, th_zero, th_scale = preprocess_groupwise_weight_params(
                     None, split_v_suf[0], split_v_suf[1], split_v_suf[2]
                 )
-                tensorrt_llm_qwen.layers[idx].self_attn.o_proj.qweight.value = th_qweight.numpy()
+                tensorrt_llm_qwen.layers[idx].self_attn.o_proj.weight.value = th_qweight.numpy()
                 tensorrt_llm_qwen.layers[idx].self_attn.o_proj.zero.value = th_zero.numpy()
-                tensorrt_llm_qwen.layers[idx].self_attn.o_proj.scale.value = th_scale.to(torch_dtype).numpy()
-            elif "mlp.gate_proj.qweight" in k:
+                tensorrt_llm_qwen.layers[idx].self_attn.o_proj.weights_scaling_factor.value = th_scale.to(torch_dtype).numpy()
+            elif "mlp.gate_proj.weight" in k:
                 split_v_suf = []
                 for suf in suffixs:
                     v = model_params[k[:-7] + suf].cpu()
@@ -878,10 +878,10 @@ def load_from_gptq_qwen(
                 th_qweight, th_zero, th_scale = preprocess_groupwise_weight_params(
                     None, split_v_suf[0], split_v_suf[1], split_v_suf[2]
                 )
-                tensorrt_llm_qwen.layers[idx].mlp.gate_proj.qweight.value = th_qweight.numpy()
+                tensorrt_llm_qwen.layers[idx].mlp.gate_proj.weight.value = th_qweight.numpy()
                 tensorrt_llm_qwen.layers[idx].mlp.gate_proj.zero.value = th_zero.numpy()
-                tensorrt_llm_qwen.layers[idx].mlp.gate_proj.scale.value = th_scale.to(torch_dtype).numpy()
-            elif "mlp.up_proj.qweight" in k:
+                tensorrt_llm_qwen.layers[idx].mlp.gate_proj.weights_scaling_factor.value = th_scale.to(torch_dtype).numpy()
+            elif "mlp.up_proj.weight" in k:
                 split_v_suf = []
                 for suf in suffixs:
                     v = model_params[k[:-7] + suf].cpu()
@@ -892,10 +892,10 @@ def load_from_gptq_qwen(
                 th_qweight, th_zero, th_scale = preprocess_groupwise_weight_params(
                     None, split_v_suf[0], split_v_suf[1], split_v_suf[2]
                 )
-                tensorrt_llm_qwen.layers[idx].mlp.up_proj.qweight.value = th_qweight.numpy()
+                tensorrt_llm_qwen.layers[idx].mlp.up_proj.weight.value = th_qweight.numpy()
                 tensorrt_llm_qwen.layers[idx].mlp.up_proj.zero.value = th_zero.numpy()
-                tensorrt_llm_qwen.layers[idx].mlp.up_proj.scale.value = th_scale.to(torch_dtype).numpy()
-            elif "mlp.down_proj.qweight" in k:
+                tensorrt_llm_qwen.layers[idx].mlp.up_proj.weights_scaling_factor.value = th_scale.to(torch_dtype).numpy()
+            elif "mlp.down_proj.weight" in k:
                 split_v_suf = []
                 for suf in suffixs:
                     v = model_params[k[:-7] + suf].cpu()
@@ -906,9 +906,9 @@ def load_from_gptq_qwen(
                 th_qweight, th_zero, th_scale = preprocess_groupwise_weight_params(
                     None, split_v_suf[0], split_v_suf[1], split_v_suf[2]
                 )
-                tensorrt_llm_qwen.layers[idx].mlp.down_proj.qweight.value = th_qweight.numpy()
+                tensorrt_llm_qwen.layers[idx].mlp.down_proj.weight.value = th_qweight.numpy()
                 tensorrt_llm_qwen.layers[idx].mlp.down_proj.zero.value = th_zero.numpy()
-                tensorrt_llm_qwen.layers[idx].mlp.down_proj.scale.value = th_scale.to(torch_dtype).numpy()
+                tensorrt_llm_qwen.layers[idx].mlp.down_proj.weights_scaling_factor.value = th_scale.to(torch_dtype).numpy()
 
     tok = time.time()
     t = time.strftime("%H:%M:%S", time.gmtime(tok - tik))
@@ -965,8 +965,8 @@ def load_from_awq_qwen(
     # Int8 KV cache
     use_int8_kv_cache = quant_mode.has_int8_kv_cache()
 
-    packer = torch.ops.fastertransformer.pack_int8_tensor_to_packed_int4
-    preprocessor = torch.ops.fastertransformer.preprocess_weights_for_mixed_gemm
+    packer = torch.ops.trtllm.pack_int8_tensor_to_packed_int4
+    preprocessor = torch.ops.trtllm.preprocess_weights_for_mixed_gemm
     torch_dtype = str_dtype_to_torch(dtype)
 
     def fromfile(dir_path, name, shape=None, dtype=None):
