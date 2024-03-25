@@ -35,6 +35,10 @@ sys.path.append(now_dir)
 from default_config import default_config
 
 
+os.environ["HF_ENDPOINT"] = "https://ai.gitee.com/huggingface"
+os.environ["HF_HOME"] = "~/.cache/gitee-ai"
+
+
 def get_calib_dataloader(data="ccdv/cnn_dailymail",
                          tokenizer=None,
                          batch_size=1,
@@ -133,7 +137,10 @@ def get_args():
                         type=int,
                         default=32,
                         help="Number of samples for calibration.")
-    parser.add_argument("--export_path", default=os.path.join(now_dir, "qwen_7b_4bit_gs128_awq.pt"))
+    parser.add_argument(
+        "--export_path",
+        default=os.path.join(now_dir, "qwen2_7b_4bit_gs128_awq.pt")
+    )
     parser.add_argument('--seed', type=int, default=None, help='Random seed')
     args = parser.parse_args()
     return args

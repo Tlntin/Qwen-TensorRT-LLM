@@ -16,7 +16,7 @@
 - 支持cli命令行对话。
 - 支持langchain接入。
 
-### 支持的模型（qwen2/qwen/qwen-vl)
+### 支持的模型：qwen2（推荐）/qwen（当前仅维护到0.7.0）/qwen-vl（当前仅维护到0.7.0）
 
 - base模型（实验性）：[Qwen1.5-0.5B](https://huggingface.co/Qwen/Qwen1.5-0.5B)、[Qwen1.5-1.8B](https://huggingface.co/Qwen/Qwen1.5-1.8B)、[Qwen1.5-4B](https://huggingface.co/Qwen/Qwen1.5-4B)、[Qwen1.5-7B](https://huggingface.co/Qwen/Qwen1.5-7B)、[Qwen1.5-14B](https://huggingface.co/Qwen/Qwen1.5-14B)、[Qwen1.5-72B](https://huggingface.co/Qwen/Qwen1.5-72B)、[QWen-VL](https://huggingface.co/Qwen/Qwen-VL)
 - chat模型（推荐）：[Qwen1.5-0.5B-Chat](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat)、[Qwen1.5-1.8B-Chat](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat)、[Qwen1.5-4B-Chat](https://huggingface.co/Qwen/Qwen1.5-4B-Chat)、[Qwen1.5-7B-Chat](https://huggingface.co/Qwen/Qwen1.5-7B-Chat)、[Qwen1.5-14B-Chat](https://huggingface.co/Qwen/Qwen1.5-14B-Chat)、[Qwen1.5-72B-Chat](https://huggingface.co/Qwen/Qwen1.5-72B-Chat)（实验性）、[QWen-VL-Chat](https://huggingface.co/Qwen/Qwen-VL-Chat)
@@ -435,75 +435,22 @@ python3 run.py --tokenizer_dir=Qwen-1_8B-Chat-Int4
 ```
 
 ### 运行指南（int4-awq篇）
-1. 需要下载并安装nvidia-ammo模块
+1. 需要下载并安装nvidia-ammo模块（仅支持Linux，不支持Windows）
 ```bash
-pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com nvidia-ammo~=0.5.0
+pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com nvidia-ammo~=0.7.0
 ```
-2. 修改ammo代码，加上qwen2支持（不加上会报错），下面是一个简单的参考案例：
-- 先在vscode，任意写一个python文件，导入下面的函数
-```python
-from tensorrt_llm.models.quantized.ammo import quantize_and_export
-```
-- 然后contrl + 鼠标左按键，单击`quantize_and_export`函数，查看它的内部实现。
-- model_lookup中，加上下面这段代码，用来支持Qwen
-```bash
-    ("qwen2", ): "qwen2",
-```
-- 修改后长这样：
-```bash
-model_lookup = {
-    ("llama", "mistral"): "llama",
-    ("gptj", ): "gptj",
-    ("falcon", "rw"): "falcon",
-    ("baichuan", ): "baichuan",
-    ("mpt", ): "mpt",
-    ("gpt2", ): "gpt2",
-    ("chatglm", ): "chatglm",
-    ("qwen2", ): "qwen2",
-}
-```
-- before
-```bash
-if export_path:
-    with torch.inference_mode():
-        export_model_config(
-            model,
-            model_type,
-            torch.float16,
-            export_dir=export_path,
-            inference_tensor_parallel=tensor_parallel_size,
-        )
-    logger.info(f"Quantized model exported to :{export_path}")
-```
-- after
-```bash
-if export_path:
-    with torch.inference_mode():
-        if qformat == "int4_awq" and model_type == "qwen2":
-            torch.save(model.state_dict(), export_path)
-        else:
-            export_model_config(
-                model,
-                model_type,
-                torch.float16,
-                quantization=qformat,
-                export_dir=export_path,
-                inference_tensor_parallel=tensor_parallel_size,
-            )
-    logger.info(f"Quantized model exported to :{export_path}")
-```
-3. 运行int4-awq量化代码，导出校准权重。
+2. 运行int4-awq量化代码，导出校准权重。
 ```bash
 python3 quantize.py --export_path ./qwen2_7b_4bit_gs128_awq.pt
 ```
-4. 运行build.py，用于构建TensorRT-LLM Engine。
+3. 运行build.py，用于构建TensorRT-LLM Engine。
 ```bash
 python build.py --use_weight_only \
                 --weight_only_precision int4_awq \
                 --per_group \
                 --quant_ckpt_path ./qwen2_7b_4bit_gs128_awq.pt
 ```
-5. 如果想要节省显存（注：只能用于单batch），可以试试加上这俩参数来编译Engine
+4. 如果想要节省显存（注：只能用于单batch），可以试试加上这俩参数来编译Engine
 ```bash
 python build.py --use_weight_only \
                 --weight_only_precision int4_awq \

@@ -151,7 +151,7 @@ def parse_arguments():
         # )
         # default=os.path.join(
         #     now_dir,
-        #     "qwen_7b_4bit_gs128_awq.pt"
+        #     "qwen2_7b_4bit_gs128_awq.pt"
         # )
     )
     parser.add_argument(
@@ -309,6 +309,12 @@ def parse_arguments():
         help="Define the precision for the weights when using weight-only quantization."
         "You must also use --use_weight_only for that argument to have an impact.",
     )
+    parser.add_argument(
+        '--quantize_lm_head',
+        default=False,
+        action="store_true",
+        help='Quantize lm_head weights as well when using int4_awq.')
+
     parser.add_argument(
         "--use_inflight_batching",
         action="store_true",
@@ -622,11 +628,12 @@ def build_rank_engine(
             pretrained_config_dict['quantization']['quant_algo'] = 'W4A16'
         quantize_kwargs = {}
         if args.weight_only_precision == 'int4_awq':
+            exclude_modules = ['lm_head'] if not args.quantize_lm_head else []
             quantize_kwargs = {
                 "group_size": args.group_size,
                 "zero": False,
                 "pre_quant_scale": True,
-                "exclude_modules": [],
+                "exclude_modules": exclude_modules
             }
         elif args.weight_only_precision == 'int4_gptq':
             quantize_kwargs = {
@@ -655,11 +662,17 @@ def build_rank_engine(
         ft_dir_path = args.ft_dir_path
 
     if args.per_group:
-        load_func = load_from_awq_qwen if args.weight_only_precision == 'int4_awq' else load_from_gptq_qwen
-        load_func(tensorrt_llm_qwen=tensorrt_llm_qwen,
-                  quant_ckpt_path=args.quant_ckpt_path,
-                  mapping=mapping,
-                  dtype=args.dtype)
+        if args.weight_only_precision == 'int4_awq':
+            load_from_awq_qwen(tensorrt_llm_qwen=tensorrt_llm_qwen,
+                               quant_ckpt_path=args.quant_ckpt_path,
+                               quantize_lm_head=args.quantize_lm_head,
+                               mapping=mapping,
+                               dtype=args.dtype)
+        else:
+            load_from_gptq_qwen(tensorrt_llm_qwen=tensorrt_llm_qwen,
+                                quant_ckpt_path=args.quant_ckpt_path,
+                                mapping=mapping,
+                                dtype=args.dtype)
     elif args.hf_model_dir is not None and (
         ft_dir_path is None or not os.path.exists(ft_dir_path)
     ):

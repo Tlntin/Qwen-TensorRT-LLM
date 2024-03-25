@@ -47,7 +47,6 @@ def split(v, tp_size, idx, dim=0):
         return np.ascontiguousarray(np.split(v, tp_size, axis=dim)[idx])
 
 
-
 def parse_ft_config(ini_file):
     qwen_config = configparser.ConfigParser()
     qwen_config.read(ini_file)
@@ -65,7 +64,8 @@ def parse_ft_config(ini_file):
     )
     kv_channels = qwen_config.getint("qwen", "kv_channels", fallback=128)
     rotary_pct = qwen_config.getfloat("qwen", "rotary_pct", fallback=0.0)
-    rotary_emb_base = qwen_config.getint("qwen", "rotary_emb_base", fallback=10000)
+    rotary_emb_base = qwen_config.getint("qwen", "rotary_emb_base",
+                                         fallback=10000)
     multi_query_mode = qwen_config.getboolean(
         "qwen", "multi_query_mode", fallback=False
     )
@@ -83,10 +83,10 @@ def parse_ft_config(ini_file):
 
 
 def load_from_ft(
-    tensorrt_llm_qwen: Qwen2ForCausalLM,
-    dir_path,
-    mapping=Mapping(),
-    dtype="float16",
+        tensorrt_llm_qwen: Qwen2ForCausalLM,
+        dir_path,
+        mapping=Mapping(),
+        dtype="float16",
 ):
     tensorrt_llm.logger.info("Loading weights from FT...")
     tik = time.time()
@@ -121,15 +121,15 @@ def load_from_ft(
         return None
 
     def set_smoothquant_scale_factors(
-        module,
-        pre_scale_weight,
-        dir_path,
-        basename,
-        shape,
-        per_tok_dyn,
-        per_channel,
-        is_qkv=False,
-        rank=None,
+            module,
+            pre_scale_weight,
+            dir_path,
+            basename,
+            shape,
+            per_tok_dyn,
+            per_channel,
+            is_qkv=False,
+            rank=None,
     ):
         suffix = "bin"
         if per_channel:
@@ -150,7 +150,8 @@ def load_from_ft(
             )
             module.per_channel_scale.value = t
         else:
-            t = fromfile(dir_path, f"{basename}scale_x_orig_quant.bin", [1], np.float32)
+            t = fromfile(dir_path, f"{basename}scale_x_orig_quant.bin", [1],
+                         np.float32)
             pre_scale_weight.value = t
             t = fromfile(
                 dir_path,
@@ -160,13 +161,15 @@ def load_from_ft(
             )
             module.per_channel_scale.value = t
             t = fromfile(
-                dir_path, f"{basename}scale_y_quant_orig.bin", [1, 1], np.float32
+                dir_path, f"{basename}scale_y_quant_orig.bin", [1, 1],
+                np.float32
             )
             module.act_scale.value = t
 
     def set_smoother(module, dir_path, base_name, shape, rank):
         suffix = f"{rank}.bin"
-        t = fromfile(dir_path, f"{base_name}.smoother.{suffix}", shape, np.float32)
+        t = fromfile(dir_path, f"{base_name}.smoother.{suffix}", shape,
+                     np.float32)
         module.smoother.value = t
 
     # Determine the quantization mode.
@@ -211,7 +214,8 @@ def load_from_ft(
         vocab_size_padded = tensorrt_llm_qwen.lm_head.out_features * mapping.tp_size
         pad_width = vocab_size_padded - vocab_size
         lm_head_weight = np.pad(
-            lm_head_weight, ((0, pad_width), (0, 0)), "constant", constant_values=0
+            lm_head_weight, ((0, pad_width), (0, 0)), "constant",
+            constant_values=0
         )
     if mapping.is_last_pp_rank():
         tensorrt_llm_qwen.lm_head.weight.value = np.ascontiguousarray(
@@ -229,7 +233,8 @@ def load_from_ft(
             (3 * hidden_size // mapping.tp_size)
             if not multi_query_mode
             else (
-                hidden_size // mapping.tp_size + (hidden_size // num_hidden_layers) * 2
+                    hidden_size // mapping.tp_size + (
+                        hidden_size // num_hidden_layers) * 2
             )
         )
 
@@ -274,7 +279,8 @@ def load_from_ft(
                 )
                 # workaround for trt not supporting int8 inputs in plugins currently
                 dst.value = processed_torch_weights.numpy()
-                scales = tensorrt_llm_qwen.layers[i].self_attn.qkv.per_channel_scale
+                scales = tensorrt_llm_qwen.layers[
+                    i].self_attn.qkv.per_channel_scale
                 scales.value = torch_weight_scales.numpy()
             else:
                 dst.value = np.ascontiguousarray(np.transpose(t, [1, 0]))
@@ -332,7 +338,8 @@ def load_from_ft(
             )
             # workaround for trt not supporting int8 inputs in plugins currently
             dst.value = processed_torch_weights.numpy()
-            scales = tensorrt_llm_qwen.layers[i].self_attn.o_proj.per_channel_scale
+            scales = tensorrt_llm_qwen.layers[
+                i].self_attn.o_proj.per_channel_scale
             scales.value = torch_weight_scales.numpy()
         else:
             dst.value = np.ascontiguousarray(np.transpose(t, [1, 0]))
@@ -350,7 +357,8 @@ def load_from_ft(
             )
             set_smoothquant_scale_factors(
                 tensorrt_llm_qwen.layers[i].mlp.gate_proj,
-                tensorrt_llm_qwen.layers[i].post_attention_layernorm.scale_to_int,
+                tensorrt_llm_qwen.layers[
+                    i].post_attention_layernorm.scale_to_int,
                 dir_path,
                 "model.layers." + str(i) + ".mlp.gate_proj.",
                 [1, inter_size // mapping.tp_size],
@@ -384,12 +392,14 @@ def load_from_ft(
             w_type,
         )
         if use_smooth_quant:
-            tensorrt_llm_qwen.layers[i].mlp.up_proj.weight.value = np.ascontiguousarray(
+            tensorrt_llm_qwen.layers[
+                i].mlp.up_proj.weight.value = np.ascontiguousarray(
                 np.transpose(t, [1, 0])
             )
             set_smoothquant_scale_factors(
                 tensorrt_llm_qwen.layers[i].mlp.up_proj,
-                tensorrt_llm_qwen.layers[i].post_attention_layernorm.scale_to_int,
+                tensorrt_llm_qwen.layers[
+                    i].post_attention_layernorm.scale_to_int,
                 dir_path,
                 "model.layers." + str(i) + ".mlp.up_proj.",
                 [1, inter_size // mapping.tp_size],
@@ -411,7 +421,8 @@ def load_from_ft(
             scales = tensorrt_llm_qwen.layers[i].mlp.up_proj.per_channel_scale
             scales.value = torch_weight_scales.numpy()
         else:
-            tensorrt_llm_qwen.layers[i].mlp.up_proj.weight.value = np.ascontiguousarray(
+            tensorrt_llm_qwen.layers[
+                i].mlp.up_proj.weight.value = np.ascontiguousarray(
                 np.transpose(t, [1, 0])
             )
         # mlp down_proj
@@ -422,11 +433,13 @@ def load_from_ft(
             w_type,
         )
         if use_smooth_quant:
-            tensorrt_llm_qwen.layers[i].mlp.down_proj.weight.value = np.ascontiguousarray(
+            tensorrt_llm_qwen.layers[
+                i].mlp.down_proj.weight.value = np.ascontiguousarray(
                 np.transpose(t, [1, 0])
             )
             proj_scale = getattr(
-                tensorrt_llm_qwen.layers[i].mlp, "quantization_scaling_factor", None
+                tensorrt_llm_qwen.layers[i].mlp, "quantization_scaling_factor",
+                None
             )
             set_smoothquant_scale_factors(
                 tensorrt_llm_qwen.layers[i].mlp.down_proj,
@@ -458,18 +471,21 @@ def load_from_ft(
             scales = tensorrt_llm_qwen.layers[i].mlp.down_proj.per_channel_scale
             scales.value = torch_weight_scales.numpy()
         else:
-            tensorrt_llm_qwen.layers[i].mlp.down_proj.weight.value = np.ascontiguousarray(
+            tensorrt_llm_qwen.layers[
+                i].mlp.down_proj.weight.value = np.ascontiguousarray(
                 np.transpose(t, [1, 0])
             )
 
         if use_int8_kv_cache:
             t = fromfile(
                 dir_path,
-                "model.layers." + str(i) + ".self_attn.qkv.scale_y_quant_orig.bin",
+                "model.layers." + str(
+                    i) + ".self_attn.qkv.scale_y_quant_orig.bin",
                 [1],
                 np.float32,
             )
-            tensorrt_llm_qwen.layers[i].self_attn.kv_orig_quant_scale.value = 1.0 / t
+            tensorrt_llm_qwen.layers[
+                i].self_attn.kv_orig_quant_scale.value = 1.0 / t
             tensorrt_llm_qwen.layers[i].self_attn.kv_quant_orig_scale.value = t
 
     tok = time.time()
@@ -478,16 +494,16 @@ def load_from_ft(
 
 
 def load_from_hf_qwen(
-    tensorrt_llm_qwen: Qwen2ForCausalLM,
-    hf_qwen,
-    mapping=Mapping(),
-    # rank=0,
-    # tensor_parallel=1,
-    max_position_embeddings=8192,
-    rotary_base=10000,
-    kv_channels=128,
-    dtype="float32",
-    multi_query_mode=False,
+        tensorrt_llm_qwen: Qwen2ForCausalLM,
+        hf_qwen,
+        mapping=Mapping(),
+        # rank=0,
+        # tensor_parallel=1,
+        max_position_embeddings=8192,
+        rotary_base=10000,
+        kv_channels=128,
+        dtype="float32",
+        multi_query_mode=False,
 ):
     tensorrt_llm.logger.info("Loading weights from HF QWen...")
     tik = time.time()
@@ -515,7 +531,8 @@ def load_from_hf_qwen(
     # tensorrt_llm_qwen.rope.position_embedding_cos.weight.value = torch_to_numpy(cos_weight)
     # tensorrt_llm_qwen.rope.position_embedding_sin.weight.value = torch_to_numpy(sin_weight)
     for k, v in tqdm(
-        model_params.items(), total=len(model_params), ncols=80, desc="Converting..."
+            model_params.items(), total=len(model_params), ncols=80,
+            desc="Converting..."
     ):
         if isinstance(v, list):
             v = [torch_to_numpy(vv.to(torch_dtype).detach().cpu()) for vv in v]
@@ -540,7 +557,8 @@ def load_from_hf_qwen(
             if "input_layernorm.weight" in k:
                 tensorrt_llm_qwen.layers[idx].input_layernorm.weight.value = v
             elif "post_attention_layernorm.weight" in k:
-                tensorrt_llm_qwen.layers[idx].post_attention_layernorm.weight.value = v
+                tensorrt_llm_qwen.layers[
+                    idx].post_attention_layernorm.weight.value = v
             elif "self_attn.k_proj.weight" in k or "self_attn.v_proj.weight" in k:
                 pass
             elif "self_attn.q_proj.weight" in k:
@@ -549,8 +567,10 @@ def load_from_hf_qwen(
                 f_str = 'model.layers.{}.self_attn.{}.weight'
                 k_weight = model_params[f_str.format(idx, "k_proj")]
                 v_weight = model_params[f_str.format(idx, "v_proj")]
-                k_weight = torch_to_numpy(k_weight.to(torch_dtype).detach().cpu())
-                v_weight = torch_to_numpy(v_weight.to(torch_dtype).detach().cpu())
+                k_weight = torch_to_numpy(
+                    k_weight.to(torch_dtype).detach().cpu())
+                v_weight = torch_to_numpy(
+                    v_weight.to(torch_dtype).detach().cpu())
                 if multi_query_mode:
                     wq = split(q_weight, mapping.tp_size, mapping.rank)
                     wk = split(k_weight, mapping.tp_size, mapping.rank)
@@ -561,8 +581,10 @@ def load_from_hf_qwen(
                     model_emb = q_weight.shape[1]
                     qkv_weight = np.concatenate([q_weight, k_weight, v_weight])
                     qkv_weight = qkv_weight.reshape(3, q_emb, model_emb)
-                    split_v = split(qkv_weight, mapping.tp_size, mapping.rank, dim=1)
-                    split_v = split_v.reshape(3 * (q_emb // mapping.tp_size), model_emb)
+                    split_v = split(qkv_weight, mapping.tp_size, mapping.rank,
+                                    dim=1)
+                    split_v = split_v.reshape(3 * (q_emb // mapping.tp_size),
+                                              model_emb)
                 if use_weight_only:
                     v = np.ascontiguousarray(split_v.transpose())
                     (
@@ -573,7 +595,8 @@ def load_from_hf_qwen(
                     )
                     # workaround for trt not supporting int8 inputs in plugins currently
                     dst.value = processed_torch_weights.numpy()
-                    scales = tensorrt_llm_qwen.layers[idx].self_attn.qkv.per_channel_scale
+                    scales = tensorrt_llm_qwen.layers[
+                        idx].self_attn.qkv.per_channel_scale
                     scales.value = torch_weight_scales.numpy()
                 else:
                     dst.value = np.ascontiguousarray(split_v)
@@ -597,7 +620,8 @@ def load_from_hf_qwen(
                     q_emb = q_bias.shape[0]
                     qkv_bias = np.concatenate([q_bias, k_bias, v_bias])
                     qkv_bias = qkv_bias.reshape(3, q_emb)
-                    split_v = split(qkv_bias, mapping.tp_size, mapping.rank, dim=1)
+                    split_v = split(qkv_bias, mapping.tp_size, mapping.rank,
+                                    dim=1)
                     split_v = split_v.reshape(3 * (q_emb // mapping.tp_size))
                 dst.value = np.ascontiguousarray(split_v)
             elif "self_attn.o_proj.weight" in k:
@@ -632,7 +656,8 @@ def load_from_hf_qwen(
                     )
                     # workaround for trt not supporting int8 inputs in plugins currently
                     dst.value = processed_torch_weights.numpy()
-                    scales = tensorrt_llm_qwen.layers[idx].mlp.gate_proj.per_channel_scale
+                    scales = tensorrt_llm_qwen.layers[
+                        idx].mlp.gate_proj.per_channel_scale
                     scales.value = torch_weight_scales.numpy()
                 else:
                     dst.value = np.ascontiguousarray(split_v)
@@ -649,7 +674,8 @@ def load_from_hf_qwen(
                     )
                     # workaround for trt not supporting int8 inputs in plugins currently
                     dst.value = processed_torch_weights.numpy()
-                    scales = tensorrt_llm_qwen.layers[idx].mlp.up_proj.per_channel_scale
+                    scales = tensorrt_llm_qwen.layers[
+                        idx].mlp.up_proj.per_channel_scale
                     scales.value = torch_weight_scales.numpy()
                 else:
                     dst.value = np.ascontiguousarray(split_v)
@@ -666,7 +692,8 @@ def load_from_hf_qwen(
                     )
                     # workaround for trt not supporting int8 inputs in plugins currently
                     dst.value = processed_torch_weights.numpy()
-                    scales = tensorrt_llm_qwen.layers[idx].mlp.down_proj.per_channel_scale
+                    scales = tensorrt_llm_qwen.layers[
+                        idx].mlp.down_proj.per_channel_scale
                     scales.value = torch_weight_scales.numpy()
                 else:
                     dst.value = np.ascontiguousarray(split_v)
@@ -710,7 +737,7 @@ def load_from_gptq_qwen(
             del model
         else:
             raise ValueError("quantized checkpoint format not supported!")
-    
+
     def torch_split(v, dim):
         if v.shape[dim] % mapping.tp_size != 0:
             tensorrt_llm.logger.error(
@@ -731,10 +758,10 @@ def load_from_gptq_qwen(
         return w_unpacked.contiguous()
 
     def preprocess_groupwise_weight_params(
-        weight_name,
-        qweight_int32=None,
-        qzeros_int32=None,
-        scales_fp16=None,
+            weight_name,
+            qweight_int32=None,
+            qzeros_int32=None,
+            scales_fp16=None,
     ):
         if weight_name is not None:
             qweight_int32 = model_params[weight_name].cpu()
@@ -747,7 +774,7 @@ def load_from_gptq_qwen(
         preprocessor = torch.ops.trtllm.preprocess_weights_for_mixed_gemm
 
         qweight_unpacked_int8 = (
-            unpack_int32_into_int8(qweight_int32.T).T.contiguous() - 8)
+                unpack_int32_into_int8(qweight_int32.T).T.contiguous() - 8)
         qweight_interleaved = preprocessor(packer(qweight_unpacked_int8),
                                            torch.quint4x2).view(torch.float16)
         # zeros = zeros * scales
@@ -767,7 +794,7 @@ def load_from_gptq_qwen(
     layer_ids = [
         extract_layer_idx(key) for key in model_params.keys()
         if 'visual' not in key
-    ]  #exclude 'visual' for Qwen-VL case
+    ]  # exclude 'visual' for Qwen-VL case
     layer_ids = [
         int(layer_idx) for layer_idx in layer_ids if layer_idx is not None
     ]
@@ -811,8 +838,8 @@ def load_from_gptq_qwen(
             torch_dtype).numpy()
         tensorrt_llm_qwen.layers[
             idx].self_attn.qkv.weights_scaling_factor.value = th_scale.to(
-                torch_dtype).numpy()
-        
+            torch_dtype).numpy()
+
         # process qkv bias
         qkv_bias_list = []
         for x in ["q", "k", "v"]:
@@ -821,14 +848,15 @@ def load_from_gptq_qwen(
             qkv_bias_list.append(x_bias)
         qkv_bias = torch.cat(qkv_bias_list, dim=0)
 
-        tensorrt_llm_qwen.layers[idx].self_attn.qkv.bias.value = np.ascontiguousarray(
+        tensorrt_llm_qwen.layers[
+            idx].self_attn.qkv.bias.value = np.ascontiguousarray(
             qkv_bias.numpy()
         )
 
     for k, v in tqdm(
-        model_params.items(),
-        ncols=80,
-        desc="loading other weight..."):
+            model_params.items(),
+            ncols=80,
+            desc="loading other weight..."):
         if 'visual' in k:
             continue
         if isinstance(v, list):
@@ -858,7 +886,8 @@ def load_from_gptq_qwen(
             if "input_layernorm.weight" in k:
                 tensorrt_llm_qwen.layers[idx].input_layernorm.weight.value = v
             elif "post_attention_layernorm.weight" in k:
-                tensorrt_llm_qwen.layers[idx].post_attention_layernorm.weight.value = v
+                tensorrt_llm_qwen.layers[
+                    idx].post_attention_layernorm.weight.value = v
             elif "self_attn.o_proj.qweight" in k:
                 split_v_suf = []
                 for suf in suffixs:
@@ -872,10 +901,10 @@ def load_from_gptq_qwen(
                     idx].self_attn.o_proj.weight.value = th_qweight.numpy()
                 tensorrt_llm_qwen.layers[
                     idx].self_attn.o_proj.zero.value = th_zero.to(
-                        torch_dtype).numpy()
+                    torch_dtype).numpy()
                 tensorrt_llm_qwen.layers[
                     idx].self_attn.o_proj.weights_scaling_factor.value = th_scale.to(
-                        torch_dtype).numpy()
+                    torch_dtype).numpy()
             elif "mlp.gate_proj.qweight" in k:
                 split_v_suf = []
                 for suf in suffixs:
@@ -887,11 +916,12 @@ def load_from_gptq_qwen(
                     None, split_v_suf[0], split_v_suf[1], split_v_suf[2])
                 tensorrt_llm_qwen.layers[
                     idx].mlp.gate_proj.weight.value = th_qweight.numpy()
-                tensorrt_llm_qwen.layers[idx].mlp.gate_proj.zero.value = th_zero.to(
+                tensorrt_llm_qwen.layers[
+                    idx].mlp.gate_proj.zero.value = th_zero.to(
                     torch_dtype).numpy()
                 tensorrt_llm_qwen.layers[
                     idx].mlp.gate_proj.weights_scaling_factor.value = th_scale.to(
-                        torch_dtype).numpy()
+                    torch_dtype).numpy()
             elif "mlp.up_proj.qweight" in k:
                 split_v_suf = []
                 for suf in suffixs:
@@ -903,11 +933,12 @@ def load_from_gptq_qwen(
                     None, split_v_suf[0], split_v_suf[1], split_v_suf[2])
                 tensorrt_llm_qwen.layers[
                     idx].mlp.up_proj.weight.value = th_qweight.numpy()
-                tensorrt_llm_qwen.layers[idx].mlp.up_proj.zero.value = th_zero.to(
+                tensorrt_llm_qwen.layers[
+                    idx].mlp.up_proj.zero.value = th_zero.to(
                     torch_dtype).numpy()
                 tensorrt_llm_qwen.layers[
                     idx].mlp.up_proj.weights_scaling_factor.value = th_scale.to(
-                        torch_dtype).numpy()
+                    torch_dtype).numpy()
             elif "mlp.down_proj.qweight" in k:
                 split_v_suf = []
                 for suf in suffixs:
@@ -919,12 +950,12 @@ def load_from_gptq_qwen(
                     None, split_v_suf[0], split_v_suf[1], split_v_suf[2])
                 tensorrt_llm_qwen.layers[
                     idx].mlp.down_proj.weight.value = th_qweight.numpy()
-                tensorrt_llm_qwen.layers[idx].mlp.down_proj.zero.value = th_zero.to(
+                tensorrt_llm_qwen.layers[
+                    idx].mlp.down_proj.zero.value = th_zero.to(
                     torch_dtype).numpy()
                 tensorrt_llm_qwen.layers[
                     idx].mlp.down_proj.weights_scaling_factor.value = th_scale.to(
-                        torch_dtype).numpy()
-            
+                    torch_dtype).numpy()
 
     tok = time.time()
     t = time.strftime("%H:%M:%S", time.gmtime(tok - tik))
@@ -934,6 +965,7 @@ def load_from_gptq_qwen(
 def load_from_awq_qwen(
         tensorrt_llm_qwen: Qwen2ForCausalLM,
         quant_ckpt_path,
+        quantize_lm_head=False,
         mapping=Mapping(),
         dtype="float16",
         ft_model_dir=None
@@ -943,7 +975,7 @@ def load_from_awq_qwen(
     tik = time.time()
 
     if quant_ckpt_path.endswith(".pt"):
-        awq_qwen = torch.load(quant_ckpt_path)
+        model_params = torch.load(quant_ckpt_path)
         awq_prefix = "model."
         awq_suffix_list = [
             ".weight",
@@ -967,9 +999,9 @@ def load_from_awq_qwen(
 
         def load(key):
             if "lm_head" in key:
-                v = awq_qwen[key]
+                v = model_params[key]
             else:
-                v = awq_qwen[awq_prefix + key]
+                v = model_params[awq_prefix + key]
             return v
 
         group_size = load("layers.0.self_attn.o_proj.weight").numel() // load(
@@ -1004,10 +1036,11 @@ def load_from_awq_qwen(
                        dim=dim)[mapping.tp_rank]
 
     def AWQ_quantize_pack_preprocess(weight, scale):
-        weight /= scale.repeat_interleave(group_size, dim=0)
+        scale = scale.repeat_interleave(group_size, dim=0)
+        weight = weight / scale  # fp16 -> int8
         qweight_int8 = torch.clamp(torch.round(weight.cuda()).char(), -8, 7)
         int4_weight = preprocessor(packer(qweight_int8.cpu()), torch.quint4x2)
-        return int4_weight.view(torch.int8).cpu().numpy()
+        return int4_weight.view(torch.float16).cpu().numpy()
 
     def process_and_assign_weight(mOp, v, tp_dim=0):
         weight = v[0].T.contiguous()
@@ -1019,9 +1052,9 @@ def load_from_awq_qwen(
         if tp_dim == 0:
             pre_quant_scale = torch_split(pre_quant_scale, 1)
         scale = amax / 8.0
-        mOp.qweight.value = AWQ_quantize_pack_preprocess(weight, scale)
-        mOp.scale.value = scale.to(torch_dtype).cpu().numpy()
-        mOp.pre_quant_scale.value = pre_quant_scale.to(
+        mOp.weight.value = AWQ_quantize_pack_preprocess(weight, scale)
+        mOp.weights_scaling_factor.value = scale.to(torch_dtype).cpu().numpy()
+        mOp.prequant_scaling_factor.value = pre_quant_scale.to(
             torch_dtype).cpu().numpy()
 
     def reSmooth_and_get_scale(weight, pre_quant_scale, avg_pre_quant_scale):
@@ -1071,31 +1104,58 @@ def load_from_awq_qwen(
         qkv_weights = torch.cat((q_weight, k_weight, v_weight), dim=1)
         qkv_scale = torch.cat((q_scale, k_scale, v_scale), dim=1)
 
-        mOp.pre_quant_scale.value = qkv_pre_quant_scale.to(
+        mOp.weight.value = AWQ_quantize_pack_preprocess(qkv_weights, qkv_scale)
+        mOp.weights_scaling_factor.value = qkv_scale.to(torch_dtype).cpu().numpy()
+        mOp.prequant_scaling_factor.value = qkv_pre_quant_scale.to(
             torch_dtype).cpu().numpy()
-        mOp.qweight.value = AWQ_quantize_pack_preprocess(qkv_weights, qkv_scale)
-        mOp.scale.value = qkv_scale.to(torch_dtype).cpu().numpy()
 
     # Load weights from AWQ checkpoint into TRT-LLM module
     # 1. vocab_embedding
-    v = load(awq_key_list[0])
-    # TRT-LLM requires vocab_size to be multiple of 64 for successful GEMM
-    if v.shape[0] % 64 != 0:
-        v = torch.nn.functional.pad(v, [0, 0, 0, 64 - v.shape[0] % 64])
+    # Check if we need to pad vocab
+    v = model_params.get('model.embed_tokens.weight')
+    [vocab_size, k] = v.shape
+    pad_vocab = False
+    pad_vocab_size1 = vocab_size
+    if quantize_lm_head and vocab_size % 64 != 0:
+        pad_vocab = True
+        pad_vocab_size1 = int((vocab_size + 63) / 64) * 64
+    if pad_vocab:
+        new_v = torch.zeros([pad_vocab_size1, k])
+        new_v[:vocab_size, :] = v
+        v = new_v
     if mapping.is_first_pp_rank():
         tensorrt_llm_qwen.embed_tokens.vocab_embedding.weight.value = v.to(
             torch_dtype).cpu().numpy()
 
     # 2. lm_head
-    v = [load(awq_key_list[1] + suf) for suf in awq_suffix_list]
-    if v[0].shape[0] % 64 != 0:
-        v[0] = torch.nn.functional.pad(v[0], [0, 0, 0, 64 - v[0].shape[0] % 64])
-        scale_align = 64 * (v[0].shape[1] // group_size)
-        v[1] = v[1].reshape(-1)
-        v[1] = torch.nn.functional.pad(
-            v[1], [0, scale_align - v[1].shape[0] % scale_align], value=1)
-    if mapping.is_last_pp_rank():
-        process_and_assign_weight(tensorrt_llm_qwen.lm_head, v, 1)
+    if pad_vocab:
+        weight = model_params['lm_head.weight']
+        [vocab_size, k] = weight.shape
+        new_weight = torch.zeros([pad_vocab_size1, k])
+        new_weight[:vocab_size, :] = weight
+        new_weight = new_weight.T.contiguous()
+        amax = model_params['lm_head.weight_quantizer._amax'].reshape(
+            [vocab_size, k // group_size])
+        new_amax = torch.ones([pad_vocab_size1, k // group_size])
+        new_amax[:vocab_size, :] = amax
+        new_amax = new_amax.T.contiguous()
+        new_scale = new_amax / 8
+        tensorrt_llm_qwen.lm_head.weight.value = AWQ_quantize_pack_preprocess(
+            new_weight, new_scale)
+        tensorrt_llm_qwen.lm_head.weights_scaling_factor.value = new_scale.to(
+            torch_dtype).cpu().numpy()
+        tensorrt_llm_qwen.lm_head.prequant_scaling_factor.value = \
+            model_params[
+                'lm_head.input_quantizer._pre_quant_scale'].to(
+                torch_dtype).cpu().numpy()
+    elif quantize_lm_head:
+        mPrefix = "lm_head"
+        mOp = tensorrt_llm_qwen.lm_head
+        if mapping.is_last_pp_rank():
+            process_and_assign_weight(model_params, mPrefix, mOp, 1)
+    else:
+        tensorrt_llm_qwen.lm_head.weight.value = torch_split(
+            model_params['lm_head.weight'], 0).to(torch_dtype).cpu().numpy()
 
     # 3. ln_f
     v = load(awq_key_list[2])
@@ -1121,7 +1181,8 @@ def load_from_awq_qwen(
         # 4.1.2 attention.qkv.bias
         qkv_bias_list = []
         for x in ["q", "k", "v"]:
-            x_bias = awq_qwen["model." + prefix + f"self_attn.{x}_proj.bias"].cpu()
+            x_bias = model_params[
+                "model." + prefix + f"self_attn.{x}_proj.bias"].cpu()
             x_bias = torch_split(x_bias, dim=0)
             qkv_bias_list.append(x_bias)
         qkv_bias = torch.cat(qkv_bias_list, dim=0)
@@ -1149,14 +1210,16 @@ def load_from_awq_qwen(
 
         # 4.7 post_layernorm
         v = load(prefix + awq_key_list[10])
-        layer.post_attention_layernorm.weight.value = v.to(torch_dtype).cpu().numpy()
+        layer.post_attention_layernorm.weight.value = v.to(
+            torch_dtype).cpu().numpy()
 
         # 4.8 attention.kv_quant_orig_scale / kv_quant_orig_scale
         if use_int8_kv_cache:
             assert ft_model_dir, "You must pass --ft_model_dir to tell TRT-LLM where to look for scales of INT8 kv cache."
             t = fromfile(
                 ft_model_dir, 'model.layers.' + str(layer_idx) +
-                '.attention.query_key_value.scale_y_quant_orig.bin', [1],
+                              '.attention.query_key_value.scale_y_quant_orig.bin',
+                [1],
                 np.float32)
             assert t is not None, f"{ft_model_dir} does not contain model.layers.{layer_idx}.attention.query_key_value.scale_y_quant_orig.bin"
             layer.attention.kv_orig_quant_scale.value = 1.0 / t
