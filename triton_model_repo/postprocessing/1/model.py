@@ -1,4 +1,4 @@
-# Copyright 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright 2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -75,20 +75,18 @@ class TritonPythonModel:
         else:
             raise AttributeError(
                 f'Unexpected tokenizer type: {tokenizer_type}')
-        # self.tokenizer.pad_token = self.tokenizer.eos_token
         gen_config_path = os.path.join(tokenizer_dir, 'generation_config.json')
         with open(gen_config_path, 'r') as f:
             gen_config = json.load(f)
-        chat_format = gen_config['chat_format']
-        if chat_format == "raw":
-            self.eos_id = gen_config['eos_token_id']
-            self.pad_id = gen_config['pad_token_id']
-        elif chat_format == "chatml":
-            print("im_end_id", self.tokenizer.im_end_id)
-            self.pad_id = self.eos_id = self.tokenizer.im_end_id
+        if isinstance (gen_config["eos_token_id"], list):
+            pad_id = end_id = gen_config["eos_token_id"][0]
+        ### if model type is base, run this branch
         else:
-            raise Exception("unkown chat format ", chat_format)
-        eos_token = self.tokenizer.decode(self.eos_id)
+            pad_id = gen_config["bos_token_id"]
+            end_id = gen_config["eos_token_id"]
+        self.tokenizer_pad_id = pad_id
+        self.tokenizer_end_id = end_id
+        eos_token = self.tokenizer.decode(end_id)
         self.tokenizer.eos_token = self.tokenizer.pad_token = eos_token
 
         # Parse model output configs
@@ -140,6 +138,14 @@ class TritonPythonModel:
             output_log_probs = pb_utils.get_input_tensor_by_name(
                 request, 'OUTPUT_LOG_PROBS').as_numpy()
 
+            # Get context logits
+            context_logits = pb_utils.get_input_tensor_by_name(
+                request, 'CONTEXT_LOGITS').as_numpy()
+
+            # Get generation logits
+            generation_logits = pb_utils.get_input_tensor_by_name(
+                request, 'GENERATION_LOGITS').as_numpy()
+
             # Reshape Input
             # tokens_batch = tokens_batch.reshape([-1, tokens_batch.shape[0]])
             # tokens_batch = tokens_batch.T
@@ -159,6 +165,12 @@ class TritonPythonModel:
             out_output_log_probs = pb_utils.Tensor('OUT_OUTPUT_LOG_PROBS',
                                                    output_log_probs)
 
+            out_context_logits = pb_utils.Tensor('OUT_CONTEXT_LOGITS',
+                                                 context_logits)
+
+            out_generation_logits = pb_utils.Tensor('OUT_GENERATION_LOGITS',
+                                                    generation_logits)
+
             # Create InferenceResponse. You can set an error here in case
             # there was a problem with handling this inference request.
             # Below is an example of how you can set errors in inference
@@ -167,7 +179,8 @@ class TritonPythonModel:
             # pb_utils.InferenceResponse(
             #    output_tensors=..., TritonError("An error occurred"))
             inference_response = pb_utils.InferenceResponse(output_tensors=[
-                output_tensor, out_cum_log_probs, out_output_log_probs
+                output_tensor, out_cum_log_probs, out_output_log_probs,
+                out_context_logits, out_generation_logits
             ])
             responses.append(inference_response)
 
@@ -190,7 +203,5 @@ class TritonPythonModel:
                 output = self.tokenizer.decode(
                     tokens[:seq_len],
                     skip_special_tokens=self.skip_special_tokens)
-                # print("output_ids", tokens[:seq_len])
-                # print("output", output)
                 outputs.append(output.encode('utf8'))
         return outputs

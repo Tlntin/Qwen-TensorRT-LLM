@@ -1,4 +1,4 @@
-# Copyright 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright 2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -57,8 +57,9 @@ class TritonPythonModel:
             "text_input", "max_tokens", "bad_words", "stop_words", "end_id",
             "pad_id", "top_k", "top_p", "temperature", "length_penalty",
             "repetition_penalty", "min_length", "presence_penalty",
-            "random_seed", "return_log_probs", "beam_width", "stream",
-            "prompt_embedding_table", "prompt_vocab_size",
+            "frequency_penalty", "random_seed", "return_log_probs",
+            "return_context_logits", "return_generation_logits", "beam_width",
+            "stream", "prompt_embedding_table", "prompt_vocab_size",
             "embedding_bias_words", "embedding_bias_weights"
         ]
 
@@ -68,7 +69,9 @@ class TritonPythonModel:
             "BAD_WORDS_DICT": "bad_words",
             "STOP_WORDS_DICT": "stop_words",
             "EMBEDDING_BIAS_WORDS": "embedding_bias_words",
-            "EMBEDDING_BIAS_WEIGHTS": "embedding_bias_weights"
+            "EMBEDDING_BIAS_WEIGHTS": "embedding_bias_weights",
+            "END_ID": "end_id",
+            "PAD_ID": "pad_id"
         }
 
         self.preproc_output_to_trtllm_input_map = {
@@ -78,11 +81,11 @@ class TritonPythonModel:
             "BAD_WORDS_IDS": "bad_words_list",
             "STOP_WORDS_IDS": "stop_words_list",
             "EMBEDDING_BIAS": "embedding_bias",
+            "OUT_END_ID": "end_id",
+            "OUT_PAD_ID": "pad_id",
         }
 
         self.trtllm_input_to_bls_input_map = {
-            "end_id": "end_id",
-            "pad_id": "pad_id",
             "beam_width": "beam_width",
             "runtime_top_k": "top_k",
             "runtime_top_p": "top_p",
@@ -90,8 +93,11 @@ class TritonPythonModel:
             "repetition_penalty": "repetition_penalty",
             "min_length": "min_length",
             "presence_penalty": "presence_penalty",
+            "frequency_penalty": "frequency_penalty",
             "random_seed": "random_seed",
             "return_log_probs": "return_log_probs",
+            "return_context_logits": "return_context_logits",
+            "return_generation_logits": "return_generation_logits",
             "streaming": "stream",
             "prompt_embedding_table": "prompt_embedding_table",
             "prompt_vocab_size": "prompt_vocab_size",
@@ -102,12 +108,16 @@ class TritonPythonModel:
             "sequence_length": "SEQUENCE_LENGTH",
             "cum_log_probs": "CUM_LOG_PROBS",
             "output_log_probs": "OUTPUT_LOG_PROBS",
+            "context_logits": "CONTEXT_LOGITS",
+            "generation_logits": "GENERATION_LOGITS"
         }
 
         self.postproc_output_to_bls_output_map = {
             "OUTPUT": "text_output",
             "OUT_CUM_LOG_PROBS": "cum_log_probs",
             "OUT_OUTPUT_LOG_PROBS": "output_log_probs",
+            "OUT_CONTEXT_LOGITS": "context_logits",
+            "OUT_GENERATION_LOGITS": "generation_logits"
         }
 
     def _get_bls_input_tensors_map(self, request):
@@ -246,7 +256,6 @@ class TritonPythonModel:
             #Get the response sender for the BLS
             if self.decoupled:
                 bls_response_sender = request.get_response_sender()
-            print("self.decopled", self.decoupled)
 
             try:
                 # Get the bls input tensors
@@ -256,7 +265,7 @@ class TritonPythonModel:
                 #Check the batch dimension
                 for name, tensor in bls_input_tensors_map.items():
                     batch_dim = tensor.as_numpy().shape[0]
-                    # print("Debug name {}, shape: {}", name, tensor.as_numpy().shape)
+
                     if batch_dim != 1:
 
                         err_str = "Inflight batching backend expects requests with batch size of 1."
@@ -330,7 +339,6 @@ class TritonPythonModel:
 
                     bls_response = pb_utils.InferenceResponse(
                         output_tensors=bls_output_tensors)
-                    print("bls reponse", bls_response)
 
                     if self.decoupled:
                         bls_response_sender.send(bls_response)
