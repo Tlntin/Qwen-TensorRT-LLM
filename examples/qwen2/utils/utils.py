@@ -115,7 +115,14 @@ def load_tokenizer(tokenizer_dir: Optional[str] = None,
         gen_config_path = os.path.join(tokenizer_dir, 'generation_config.json')
         with open(gen_config_path, 'r') as f:
             gen_config = json.load(f)
-        pad_id = end_id = gen_config["eos_token_id"][0]
+
+        ### if model type is chat pad_id = end_id = gen_config["eos_token_id"][0]
+        if isinstance (gen_config["eos_token_id"], list)
+            pad_id = end_id = gen_config["eos_token_id"][0]
+        ### if model type is base, run this branch
+        else:
+            pad_id = gen_config["bos_token_id"]
+            end_id = gen_config["eos_token_id"]
     elif model_name == 'ChatGLMForCausalLM' and model_version == 'glm':
         pad_id = tokenizer.pad_token_id
         end_id = tokenizer.eop_token_id
