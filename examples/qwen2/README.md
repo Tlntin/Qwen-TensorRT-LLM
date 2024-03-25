@@ -20,9 +20,9 @@ The TensorRT-LLM Qwen1.5 implementation can be found in [model.py](model.py). Th
   * STRONGLY TYPED
 
 ## Support Model
-- Qwen1.5 1.8b/4b/7b/14b/72b(maybe)
-- Qwen1.5 1.8b-chat/4b-chat/7b-chat/14b-chat/72b-chat(maybe)
-- Qwen1.5 1.8b-chat-int4-gptq/4b-chat-int4-gptq/7b-chat-int4-gptq/14b-chat-int4-gptq/72b-chat-int4-gptq(maybe)
+- Qwen1.5 0.5b/1.8b/4b/7b/14b/72b(maybe)
+- Qwen1.5 0.5b-chat/1.8b-chat/4b-chat/7b-chat/14b-chat/72b-chat(maybe)
+- Qwen1.5 0.5b-chat-int4-gptq/1.8b-chat-int4-gptq/4b-chat-int4-gptq/7b-chat-int4-gptq/14b-chat-int4-gptq/72b-chat-int4-gptq(maybe)
 
 ## Usage
 
@@ -55,26 +55,34 @@ Here're some examples:
 
 ```bash
 # Build a single-GPU float16 engine from HF weights.
-# It is recommend to use --remove_input_padding 
+# gpt_attention_plugin is necessary in Qwen1.5.
+# Try gemm_plugin to prevent accuracy issue.
+# It is recommend to use --remove_input_padding along with --gpt_attention_plugin for better performance
 
 # Build the Qwen1.5 7B model using a single GPU and FP16.
 python build.py --hf_model_dir ./tmp/Qwen1.5/7B/ \
                 --dtype float16 \
                 --remove_input_padding \
+                --gpt_attention_plugin float16 \
                 --enable_context_fmha \
+                --gemm_plugin float16 \
                 --output_dir ./tmp/Qwen1.5/7B/trt_engines/fp16/1-gpu/
 
 # Build the Qwen1.5 7B model using a single GPU and BF16.
 python build.py --hf_model_dir ./tmp/Qwen1.5/7B/ \
                 --dtype bfloat16 \
                 --remove_input_padding \
+                --gpt_attention_plugin float16 \
                 --enable_context_fmha \
+                --gemm_plugin float16 \
                 --output_dir ./tmp/Qwen1.5/7B/trt_engines/bf16/1-gpu/
 
 # Build the Qwen1.5 7B model using a single GPU and apply INT8 weight-only quantization.
 python build.py --hf_model_dir ./tmp/Qwen1.5/7B/ \
                 --dtype float16 \
                 --remove_input_padding \
+                --gpt_attention_plugin float16 \
+                --gemm_plugin float16 \
                 --use_weight_only \
                 --weight_only_precision int8 \
                 --output_dir ./tmp/Qwen1.5/7B/trt_engines/int8_weight_only/1-gpu/
@@ -83,6 +91,8 @@ python build.py --hf_model_dir ./tmp/Qwen1.5/7B/ \
 python build.py --hf_model_dir ./tmp/Qwen1.5/7B/ \
                 --dtype float16 \
                 --remove_input_padding \
+                --gpt_attention_plugin float16 \
+                --gemm_plugin float16 \
                 --use_weight_only \
                 --weight_only_precision int4 \
                 --output_dir ./tmp/Qwen1.5/7B/trt_engines/int4_weight_only/1-gpu/
@@ -91,6 +101,8 @@ python build.py --hf_model_dir ./tmp/Qwen1.5/7B/ \
 python build.py --hf_model_dir ./tmp/Qwen1.5/7B/ \
                 --dtype float16 \
                 --remove_input_padding \
+                --gpt_attention_plugin float16 \
+                --gemm_plugin float16 \
                 --enable_context_fmha \
                 --output_dir ./tmp/Qwen1.5/7B/trt_engines/fp16/2-gpu/ \
                 --world_size 2 \
@@ -100,6 +112,8 @@ python build.py --hf_model_dir ./tmp/Qwen1.5/7B/ \
 python build.py --hf_model_dir ./tmp/Qwen1.5/7B/ \
                 --dtype float16 \
                 --remove_input_padding \
+                --gpt_attention_plugin float16 \
+                --gemm_plugin float16 \
                 --enable_context_fmha \
                 --use_weight_only \
                 --weight_only_precision int4 \
@@ -111,6 +125,8 @@ python build.py --hf_model_dir ./tmp/Qwen1.5/7B/ \
 python build.py --hf_model_dir ./tmp/Qwen1.5/7B/ \
                 --dtype float16 \
                 --remove_input_padding \
+                --gpt_attention_plugin float16 \
+                --gemm_plugin float16 \
                 --enable_context_fmha \
                 --output_dir ./tmp/Qwen1.5/7B/trt_engines/fp16/2-gpu/ \
                 --world_size 4 \
@@ -121,6 +137,8 @@ python build.py --hf_model_dir ./tmp/Qwen1.5/7B/ \
 python build.py --hf_model_dir ./tmp/Qwen1.5/14B \
                 --dtype float16 \
                 --remove_input_padding \
+                --gpt_attention_plugin float16 \
+                --gemm_plugin float16 \
                 --enable_context_fmha \
                 --output_dir ./tmp/Qwen1.5/14B/trt_engines/fp16/2-gpu/ \
                 --world_size 2 \
@@ -255,6 +273,8 @@ python build.py --hf_model_dir ./tmp/Qwen1.5/7B \
                 --quant_ckpt_path ./tmp/Qwen1.5/7B/int4-gptq/gptq_model-4bit-128g.safetensors \
                 --dtype float16 \
                 --remove_input_padding \
+                --gpt_attention_plugin float16 \
+                --gemm_plugin float16 \
                 --enable_context_fmha \
                 --use_weight_only \
                 --weight_only_precision int4_gptq \
@@ -286,6 +306,8 @@ python build.py --hf_model_dir Qwen1.5-1_8B-Chat-Int4 \
                 --quant_ckpt_path Qwen1.5-1_8B-Chat-Int4 \
                 --dtype float16 \
                 --remove_input_padding \
+                --gpt_attention_plugin float16 \
+                --gemm_plugin float16 \
                 --enable_context_fmha \
                 --use_weight_only \
                 --weight_only_precision int4_gptq \
@@ -386,6 +408,8 @@ python build.py --hf_model_dir ./tmp/Qwen1.5/7B \
                 --quant_ckpt_path ./Qwen1.5_7b_4bit_gs128_awq.pt \
                 --dtype float16 \
                 --remove_input_padding \
+                --gpt_attention_plugin float16 \
+                --gemm_plugin float16 \
                 --enable_context_fmha \
                 --use_weight_only \
                 --weight_only_precision int4_awq \
