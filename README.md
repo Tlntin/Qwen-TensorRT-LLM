@@ -331,13 +331,13 @@
      - 跑hugggingface版
      
      ```bash
-python3 summarize.py --test_hf
+      python3 summarize.py --test_hf
      ```
      
      - 跑trt-llm版
 
      ```bash
-python3 summarize.py --test_trt_llm
+      python3 summarize.py --test_trt_llm
      ```
      
      - 一般来说，如果trt-llm的rouge分数和huggingface差不多，略低一些（1以内）或者略高一些（2以内），则说明精度基本对齐。
