@@ -91,6 +91,7 @@ def main(args):
                            split=dataset_split)
 
     max_batch_size = args.batch_size
+    model_type = args.model_type
 
     # runtime parameters
     top_k = args.top_k
@@ -185,7 +186,8 @@ def main(args):
 
     def _prepare_inputs(batch_input_texts,
                         eval_task='summarize',
-                        add_special_tokens=True):
+                        add_special_tokens=True,
+                        model_type = 'chatml'):
         batch_size = len(batch_input_texts)
         append_str = ' TL;DR: ' if eval_task == 'summarize' else ''
         batch_input_ids = []
@@ -211,7 +213,7 @@ def main(args):
             #         max_input_length=test_token_num,
             #     )
             #     input_ids = torch.tensor(input_id_list)
-            elif model_name in ["qwen2", "Qwen2ForCausalLM"]:
+            elif model_name in ["qwen2", "Qwen2ForCausalLM"] and model_type == 'chatml':
                 # use make_content to generate prompt
                 system_prompt = "You are a useful assistant, please directly output the corresponding summary according to the article entered by the user."
                 messages = [
@@ -225,6 +227,7 @@ def main(args):
                 )
                 input_ids = tokenizer([text], return_tensors="pt").input_ids
                 input_ids = input_ids.squeeze(0)
+            ###  model_type in ["qwen2", "Qwen2ForCausalLM"] and model_type == 'raw' will run this branch
             else:
                 input_ids = tokenizer.encode(
                     curr_text,
@@ -243,7 +246,8 @@ def main(args):
         batch_size = len(datapoint[dataset_input_key])
         batch_input_ids = _prepare_inputs(datapoint[dataset_input_key],
                                           eval_task=eval_task,
-                                          add_special_tokens=add_special_tokens)
+                                          add_special_tokens=add_special_tokens,
+                                          model_type=model_type)
         input_lengths = [x.size(0) for x in batch_input_ids]
 
         with torch.no_grad():
@@ -326,7 +330,8 @@ def main(args):
             )
         batch_input_ids = _prepare_inputs(datapoint[dataset_input_key],
                                           eval_task=eval_task,
-                                          add_special_tokens=add_special_tokens)
+                                          add_special_tokens=add_special_tokens,
+                                          model_type=model_type)
         input_lengths = [x.size(0) for x in batch_input_ids]
         # Left padding for HF
         max_length = max(input_lengths)
@@ -581,6 +586,13 @@ if __name__ == '__main__':
         '--tokenizer_dir',
         default=default_config.tokenizer_dir,
         help='tokenizer path; defaults to hf_model_dir if left unspecified'
+    )
+    parser.add_argument(
+        '--model_type',
+        type=str,
+        choices=["chatml", "base"],
+        help='Indicates whether the model is chatml or raw.',
+        default='chatml'
     )
     parser.add_argument('--vocab_file')
     parser.add_argument('--test_hf', action='store_true', default=True)
