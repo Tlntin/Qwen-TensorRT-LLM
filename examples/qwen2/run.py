@@ -54,6 +54,12 @@ def parse_arguments(args=None):
                         action='store_true',
                         help="Whether or not to use Python runtime session")
     parser.add_argument(
+        '--model_type',
+        type=str,
+        choices=["chatml", "base"],
+        help='Indicates whether the model is chatml or raw.',
+        default='chatml')
+    parser.add_argument(
         '--input_text',
         type=str,
         nargs='+',
@@ -332,7 +338,7 @@ def main(args):
     bad_words_list = None
 
     prompt_template = None
-    if args.use_prompt_template and model_name in DEFAULT_PROMPT_TEMPLATES:
+    if args.use_prompt_template and args.model_type =='chatml' and model_name in DEFAULT_PROMPT_TEMPLATES:
         prompt_template = DEFAULT_PROMPT_TEMPLATES[model_name]
     batch_input_ids = parse_input(tokenizer=tokenizer,
                                   input_text=args.input_text,
