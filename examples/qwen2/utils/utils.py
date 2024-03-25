@@ -117,7 +117,7 @@ def load_tokenizer(tokenizer_dir: Optional[str] = None,
             gen_config = json.load(f)
 
         ### if model type is chat pad_id = end_id = gen_config["eos_token_id"][0]
-        if isinstance (gen_config["eos_token_id"], list)
+        if isinstance (gen_config["eos_token_id"], list):
             pad_id = end_id = gen_config["eos_token_id"][0]
         ### if model type is base, run this branch
         else:
