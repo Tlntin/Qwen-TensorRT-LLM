@@ -792,7 +792,7 @@ def build_rank_engine(
     build_config = BuildConfig.from_dict(
         {
             'max_input_len': args.max_input_len,
-            'max_output_len': args.max_output_len,
+            'max_output_len': args.max_output_len - args.max_input_len,
             'max_batch_size': args.max_batch_size,
             'max_beam_width': args.max_beam_width,
             'max_num_tokens': args.max_num_tokens,
