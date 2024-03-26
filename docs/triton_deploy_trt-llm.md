@@ -1,13 +1,13 @@
-# Triton24.02 部署TensorRT-LLM文档
+# Triton24.02 部署TensorRT-LLM,实现http查询
 
 ### 选择正确的环境
 1. 选择版本。查询nvidia[官方文档](https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html)，可以看到目前最新的容器是24.02。
 - 在**NVIDIA Driver**这一行，它推荐的英伟达驱动版本是545以上，对于数据卡，可以适当降低。如果你是游戏卡，驱动版本没有545，也不想升级，那么建议至少不要低太多，比如535其实也可以。
-![020016f0975ebec6eae195bf77b61044.png](:/90c3af202846433c9c204d45a8123104)
+![38a9563ae5435516a18043d93494b7eb.png](https://s2.loli.net/2024/03/26/DhfQPWyKzsBndO3.png)
 - 在**Triton Inference Server**这一行，可以看到它内置了triton server版本是2.43，需要的TensorRT-LLM版本是0.8.0。
-![7ea2f2f9645f9019920a6704a91cd7c3.png](:/3a81b92e89404b18aa373d91dfb2dd53)
+![ed50e1a173903ea931e8103aecbe29fb.png](https://s2.loli.net/2024/03/26/NiZnRaT9rOUBGjs.png)
 2. 拉取镜像。进入[Nvidia镜像中心](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tritonserver/tags)找到tritonserver的镜像，选择和TensorRT-LLM（简称trtllm）有关的容器，然后拷贝镜像地址，最后使用`docker pull`来拉取该镜像。
-![8adef9e1313d515b8144b2813f20d582.png](:/e0bed375667340f68b900b7c8930d9ce)
+![9205bd0697f97ed061db52fd39994fa2.png](https://s2.loli.net/2024/03/26/v5JBQ6cSbdEGfiF.png)
 ```bash
 docker pull nvcr.io/nvidia/tritonserver:24.02-trtllm-python-py3
 ```
@@ -127,7 +127,7 @@ export HF_QWEN_MODEL="/tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen1.
 export ENGINE_DIR="/tensorrtllm_backend/triton_model_repo/tensorrt_llm/1"
 export MAX_BATCH_SIZE=2
 export TOKENIZE_TYPE=auto
-# 根据cpu线程数定，一半为batch_size的2倍数或者cpu线程的一半
+# 根据cpu线程数定，一般为batch_size的2倍数或者cpu线程的一半
 export INSTANCE_COUNT=4
 # 我就一张卡，你可以指定用那些卡，用逗号隔开
 export GPU_DEVICE_IDS=0
@@ -198,7 +198,7 @@ pip install tritonclient transformers gevent geventhttpclient tiktoken grpcio
 ```
 2. 运行`qwen/triton_client/inflight_batcher_llm_client.py`文件即可开启
 ```bash
-cd /root/examples/qwen/triton_client
+cd /root/examples/triton_client
 python3 inflight_batcher_llm_client.py --tokenizer_dir=/tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen1.5_7b_chat
 ```
 
