@@ -22,12 +22,19 @@ from tensorrt_llm.network import net_guard
 from tensorrt_llm.plugin.plugin import ContextFMHAType
 from tensorrt_llm.quantization import QuantMode
 from tensorrt_llm.mapping import Mapping
+from tensorrt_llm.builder import BuilderConfig, BuildConfig
+from tensorrt_llm.models import PretrainedModel, PretrainedConfig
+from tensorrt_llm.plugin import PluginConfig
+from tensorrt_llm.runtime.engine import Engine, EngineConfig
+from tensorrt_llm.version import __version__
 from weight import load_from_hf_qwen, load_from_ft, load_from_gptq_qwen, load_from_awq_qwen
 from utils.quantization import smooth_quantize
 from default_config import default_config
 
 
 MODEL_NAME = "qwen2"
+os.environ["HF_ENDPOINT"] = "https://ai.gitee.com/huggingface"
+os.environ["HF_HOME"] = "~/.cache/gitee-ai"
 
 # 2 routines: get_engine_name, serialize_engine
 # are direct copy from gpt example, TODO: put in utils?
@@ -106,14 +113,14 @@ def get_engine_name(model, dtype, tp_size, pp_size, rank):
     return "{}_{}_tp{}_pp{}_rank{}.engine".format(model, dtype, tp_size, pp_size, rank)
 
 
-def serialize_engine(engine, path):
-    logger.info(f"Serializing engine to {path}...")
-    tik = time.time()
-    with open(path, "wb") as f:
-        f.write(engine)
-    tok = time.time()
-    t = time.strftime("%H:%M:%S", time.gmtime(tok - tik))
-    logger.info(f"Engine serialized. Total time: {t}")
+# def serialize_engine(engine, path):
+#     logger.info(f"Serializing engine to {path}...")
+#     tik = time.time()
+#     with open(path, "wb") as f:
+#         f.write(engine)
+#     tok = time.time()
+#     t = time.strftime("%H:%M:%S", time.gmtime(tok - tik))
+#     logger.info(f"Engine serialized. Total time: {t}")
 
 
 def parse_arguments():
@@ -144,7 +151,7 @@ def parse_arguments():
         # )
         # default=os.path.join(
         #     now_dir,
-        #     "qwen_7b_4bit_gs128_awq.pt"
+        #     "qwen2_7b_4bit_gs128_awq.pt"
         # )
     )
     parser.add_argument(
@@ -194,26 +201,32 @@ def parse_arguments():
         "--max_input_len", type=int, default=default_config.max_input_len
     )
     parser.add_argument(
-        "--max_new_tokens", type=int, default=default_config.max_new_tokens
+        "--max_output_len", type=int, default=default_config.max_output_len
     )
     parser.add_argument("--max_beam_width", type=int, default=1)
     parser.add_argument("--rotary_base", type=float, default=10000.0)
     parser.add_argument("--rotary_scaling", nargs=2, type=str, default=None)
     parser.add_argument(
-        "--use_gpt_attention_plugin",
+        "--gpt_attention_plugin",
         nargs="?",
         type=str,
         default="float16",
         choices=["float16", "bfloat16", "float32", None],
     )
     parser.add_argument(
-        "--use_gemm_plugin",
+        "--gemm_plugin",
         nargs="?",
         type=str,
         default="float16",
         choices=["float16", "bfloat16", "float32", None],
     )
     parser.add_argument("--parallel_build", default=False, action="store_true")
+    parser.add_argument(
+        '--dense_context_fmha',
+        default=False,
+        action="store_true",
+        help='Enable dense fmha in context phase, otherwise sliding window attention. If dense_context_fmha=False, the sliding window size is the max attention window size.'
+    )
     parser.add_argument("--enable_context_fmha", default=False, action="store_true")
     parser.add_argument(
         "--enable_context_fmha_fp32_acc", default=False, action="store_true"
@@ -297,6 +310,12 @@ def parse_arguments():
         "You must also use --use_weight_only for that argument to have an impact.",
     )
     parser.add_argument(
+        '--quantize_lm_head',
+        default=False,
+        action="store_true",
+        help='Quantize lm_head weights as well when using int4_awq.')
+
+    parser.add_argument(
         "--use_inflight_batching",
         action="store_true",
         default=False,
@@ -367,22 +386,29 @@ def parse_arguments():
         help="Activates latency-optimized algorithm for all-reduce instead of NCCL.",
     )
 
+    parser.add_argument(
+        '--max_prompt_embedding_table_size',
+        type=int,
+        default=0,
+        help='Setting to a value > 0 enables support for prompt tuning.'
+    )
+
     args = parser.parse_args()
     assert not (
         args.use_smooth_quant and args.use_weight_only
     ), "You cannot enable both SmoothQuant and INT8 weight-only together."
 
     if not args.remove_input_padding:
-        if args.use_gpt_attention_plugin:
+        if args.gpt_attention_plugin:
             logger.warning(
                 f"It is recommended to specify --remove_input_padding when using GPT attention plugin"
             )
 
     if args.use_inflight_batching:
-        if not args.use_gpt_attention_plugin:
-            args.use_gpt_attention_plugin = "float16"
+        if not args.gpt_attention_plugin:
+            args.gpt_attention_plugin = "float16"
             logger.info(
-                f"Using GPT attention plugin for inflight batching mode. Setting to default '{args.use_gpt_attention_plugin}'"
+                f"Using GPT attention plugin for inflight batching mode. Setting to default '{args.gpt_attention_plugin}'"
             )
         if not args.remove_input_padding:
             args.remove_input_padding = True
@@ -415,7 +441,7 @@ def parse_arguments():
         args.quant_mode = args.quant_mode.set_int8_kv_cache()
     # Since gpt_attenttion_plugin is the only way to apply RoPE now,
     # force use the plugin for now with the correct data type.
-    # args.use_gpt_attention_plugin = args.dtype
+    # args.gpt_attention_plugin = args.dtype
     if args.hf_model_dir is not None:
         hf_config = Qwen2Config.from_pretrained(
             args.hf_model_dir,
@@ -426,6 +452,8 @@ def parse_arguments():
         args.n_head = hf_config.num_attention_heads
         if hasattr(hf_config, "num_key_value_heads"):
             args.n_kv_head = hf_config.num_key_value_heads
+        if args.n_kv_head is None:
+            args.n_kv_head = args.n_head
         args.n_layer = hf_config.num_hidden_layers
         args.n_positions = hf_config.max_position_embeddings
         args.vocab_size = hf_config.vocab_size
@@ -440,9 +468,9 @@ def parse_arguments():
         else:
             raise Exception()
     assert (
-        args.use_gpt_attention_plugin is not None
+        args.gpt_attention_plugin is not None
     ), "QWen must use gpt attention plugin"
-    if not args.use_gemm_plugin:
+    if not args.gemm_plugin:
         print("wanring QWen should use gemm plugin")
     if args.n_kv_head is not None and args.n_kv_head != args.n_head:
         assert args.n_kv_head == args.world_size, (
@@ -451,7 +479,7 @@ def parse_arguments():
         )
 
     if args.dtype == "bfloat16":
-        assert args.use_gemm_plugin, "Please use gemm plugin when dtype is bfloat16"
+        assert args.gemm_plugin, "Please use gemm plugin when dtype is bfloat16"
 
     assert args.pp_size * args.tp_size == args.world_size
 
@@ -484,6 +512,51 @@ def build_rank_engine(
     @param args: The cmd line arguments.
     @return: The built engine.
     """
+    hf_config = Qwen2Config.from_pretrained(args.hf_model_dir)
+    pretrained_config_dict = {
+        'architecture': hf_config.architectures[0],
+        'dtype': args.dtype,
+        'logits_dtype': 'float32',
+        'num_hidden_layers': args.n_layer,
+        'num_attention_heads': args.n_head,
+        'hidden_size': args.n_embd,
+        'intermediate_size': args.inter_size,
+        'num_key_value_heads': args.n_kv_head,
+        'vocab_size': args.vocab_size,
+        'position_embedding_type': 'rope_gpt_neox',
+        'max_position_embeddings': args.n_positions,
+        'hidden_act': args.hidden_act,
+        'rotary_base': args.rotary_base,
+        'rotary_scaling': args.rotary_scaling,
+        # 'norm_epsilon': args.rms_norm_eps,
+        'quantization': {
+            'quant_algo': None,
+            'kv_cache_quant_algo': None,
+            "sq_use_plugin": False,
+            'exclude_modules': ['lm_head'],
+        },
+        'mapping': {
+            'world_size': args.tp_size * args.pp_size,
+            'tp_size': args.tp_size,
+            'pp_size': args.pp_size,
+        },
+        'use_parallel_embedding': args.use_parallel_embedding,
+        'embedding_sharding_dim': args.embedding_sharding_dim,
+        # 'share_embedding_table': args.use_embedding_sharing,
+        # 'use_prompt_tuning': args.use_prompt_tuning,
+        # 'moe_num_experts': args.moe_num_experts,
+        # 'moe_top_k': args.moe_top_k,
+        # 'moe_tp_mode': args.moe_tp_mode,
+        # 'moe_normalization_mode': args.moe_renorm_mode,
+        # 'enable_pos_shift': args.enable_pos_shift,
+        # 'dense_context_fmha': args.dense_context_fmha,
+        # 'max_lora_rank': args.max_lora_rank,
+        # 'lora_target_modules': args.lora_target_modules,
+        # 'hf_modules_to_trtllm_modules': args.lora_config.hf_modules_to_trtllm_modules,
+        # 'trtllm_modules_to_hf_modules': args.lora_config.trtllm_modules_to_hf_modules,
+        # 'disable_weight_only_quant_plugin': args.disable_weight_only_quant_plugin
+    }
+    
     kv_dtype = str_dtype_to_trt(args.dtype)
     mapping = Mapping(
         world_size=args.world_size,
@@ -514,7 +587,6 @@ def build_rank_engine(
         max_position_embeddings=args.n_positions,
         dtype=kv_dtype,
         mlp_hidden_size=args.inter_size,
-        neox_rotary_style=True,
         mapping=mapping,
         rotary_base=args.rotary_base,
         rotary_scaling=args.rotary_scaling,
@@ -522,9 +594,22 @@ def build_rank_engine(
         embedding_sharding_dim=args.embedding_sharding_dim,
         quant_mode=args.quant_mode,
         custom_plugin_paths=custom_plugin_paths,
+        use_prompt_tuning=args.max_prompt_embedding_table_size > 0,
+        dense_context_fmha=args.dense_context_fmha,
     )
 
     if args.use_smooth_quant:
+        pretrained_config_dict['quantization']['sq_use_plugin'] = True
+        if args.per_channel:
+            if args.per_token:
+                pretrained_config_dict['quantization']['quant_algo'] = 'W8A8_SQ_PER_CHANNEL_PER_TOKEN_PLUGIN'
+            else:
+                pretrained_config_dict['quantization']['quant_algo'] = 'W8A8_SQ_PER_CHANNEL_PER_TENSOR_PLUGIN'
+        else:
+            if args.per_token:
+                pretrained_config_dict['quantization']['quant_algo'] = 'W8A8_SQ_PER_TENSOR_PER_TOKEN_PLUGIN'
+            else:
+                pretrained_config_dict['quantization']['quant_algo'] = 'W8A8_SQ_PER_TENSOR_PLUGIN'
         if not args.per_token:
             print("warning per_channel should be set when using smooth quantize")
         if not args.per_channel:
@@ -537,13 +622,18 @@ def build_rank_engine(
         )
         print("load smooth quantize ok")
     elif args.use_weight_only:
+        if args.weight_only_precision == 'int8':
+            pretrained_config_dict['quantization']['quant_algo'] = 'W8A16'
+        elif args.weight_only_precision == 'int4':
+            pretrained_config_dict['quantization']['quant_algo'] = 'W4A16'
         quantize_kwargs = {}
         if args.weight_only_precision == 'int4_awq':
+            exclude_modules = ['lm_head'] if not args.quantize_lm_head else []
             quantize_kwargs = {
                 "group_size": args.group_size,
                 "zero": False,
                 "pre_quant_scale": True,
-                "exclude_modules": [],
+                "exclude_modules": exclude_modules
             }
         elif args.weight_only_precision == 'int4_gptq':
             quantize_kwargs = {
@@ -551,11 +641,20 @@ def build_rank_engine(
                 "zero": True,
                 "pre_quant_scale": False,
             }
+            pretrained_config_dict['quantization'].update({
+                "group_size": args.group_size,
+                "has_zero_point": True,
+                "pre_quant_scale": False,
+                'quant_algo': 'W4A16_GPTQ'
+            })
         tensorrt_llm_qwen = quantize_model(
             tensorrt_llm_qwen,
             args.quant_mode,
             **quantize_kwargs
         )
+    
+    if args.int8_kv_cache:
+        pretrained_config_dict['quantization']['kv_cache_quant_algo'] = 'INT8'
 
     if not args.ft_dir_path.rstrip("/").endswith("-gpu"):
         ft_dir_path = os.path.join(args.ft_dir_path, str(args.tp_size) + "-gpu")
@@ -563,11 +662,17 @@ def build_rank_engine(
         ft_dir_path = args.ft_dir_path
 
     if args.per_group:
-        load_func = load_from_awq_qwen if args.weight_only_precision == 'int4_awq' else load_from_gptq_qwen
-        load_func(tensorrt_llm_qwen=tensorrt_llm_qwen,
-                  quant_ckpt_path=args.quant_ckpt_path,
-                  mapping=mapping,
-                  dtype=args.dtype)
+        if args.weight_only_precision == 'int4_awq':
+            load_from_awq_qwen(tensorrt_llm_qwen=tensorrt_llm_qwen,
+                               quant_ckpt_path=args.quant_ckpt_path,
+                               quantize_lm_head=args.quantize_lm_head,
+                               mapping=mapping,
+                               dtype=args.dtype)
+        else:
+            load_from_gptq_qwen(tensorrt_llm_qwen=tensorrt_llm_qwen,
+                                quant_ckpt_path=args.quant_ckpt_path,
+                                mapping=mapping,
+                                dtype=args.dtype)
     elif args.hf_model_dir is not None and (
         ft_dir_path is None or not os.path.exists(ft_dir_path)
     ):
@@ -618,12 +723,13 @@ def build_rank_engine(
     # Module -> Network
     network = builder.create_network()
     network.trt_network.name = engine_name
-    if args.use_gpt_attention_plugin:
+    network.plugin_config.to_legacy_setting()
+    if args.gpt_attention_plugin:
         network.plugin_config.set_gpt_attention_plugin(
-            dtype=args.use_gpt_attention_plugin
+            dtype=args.gpt_attention_plugin
         )
-    if args.use_gemm_plugin:
-        network.plugin_config.set_gemm_plugin(dtype=args.use_gemm_plugin)
+    if args.gemm_plugin:
+        network.plugin_config.set_gemm_plugin(dtype=args.gemm_plugin)
     if args.use_weight_only:
         network.plugin_config.set_weight_only_quant_matmul_plugin(dtype="float16")
     # Quantization plugins.
@@ -662,10 +768,11 @@ def build_rank_engine(
         inputs = tensorrt_llm_qwen.prepare_inputs(
             max_batch_size=args.max_batch_size,
             max_input_len=args.max_input_len,
-            max_new_tokens=args.max_new_tokens,
+            max_output_len=args.max_output_len,
             use_cache=True,
             max_beam_width=args.max_beam_width,
             max_num_tokens=args.max_num_tokens,
+            prompt_embedding_table_size=args.max_prompt_embedding_table_size,
         )
         tensorrt_llm_qwen(*inputs)
         if args.enable_debug_output:
@@ -679,15 +786,29 @@ def build_rank_engine(
             model_path = os.path.join(args.output_dir, "test.onnx")
             to_onnx(network.trt_network, model_path)
 
-    tensorrt_llm.graph_rewriting.optimize(network)
-    engine = None
-
     # Network -> Engine
+    pretrained_config = PretrainedConfig.from_dict(pretrained_config_dict)
+    plugin_config = PluginConfig.from_arguments(args)
+    build_config = BuildConfig.from_dict(
+        {
+            'max_input_len': args.max_input_len,
+            'max_output_len': args.max_output_len - args.max_input_len,
+            'max_batch_size': args.max_batch_size,
+            'max_beam_width': args.max_beam_width,
+            'max_num_tokens': args.max_num_tokens,
+            'max_prompt_embedding_table_size': args.max_prompt_embedding_table_size,
+            # 'gather_context_logits': args.gather_context_logits,
+            # 'gather_generation_logits': args.gather_generation_logits,
+            'strongly_typed': args.strongly_typed,
+            'builder_opt': args.builder_opt,
+            # 'profiling_verbosity': args.profiling_verbosity,
+            'enable_debug_output': args.enable_debug_output,
+        },
+        plugin_config=plugin_config
+    )
     engine = builder.build_engine(network, builder_config)
-    if rank == 0:
-        config_path = os.path.join(args.output_dir, "config.json")
-        builder.save_config(builder_config, config_path)
-    return engine
+    engine_config = EngineConfig(pretrained_config, build_config, __version__)
+    return Engine(engine_config, engine)
 
 
 def build(rank, args):
@@ -726,14 +847,16 @@ def build(rank, args):
             hidden_act=args.hidden_act,
             max_position_embeddings=args.n_positions,
             max_batch_size=args.max_batch_size,
+            max_beam_width=args.max_beam_width,
             max_input_len=args.max_input_len,
-            max_output_len=args.max_new_tokens,
+            max_output_len=args.max_output_len,
             max_num_tokens=args.max_num_tokens,
             int8=int8_trt_flag,
             fp8=args.quant_mode.has_fp8_qdq(),
             quant_mode=args.quant_mode,
             strongly_typed=args.strongly_typed,
             opt_level=args.builder_opt,
+            max_prompt_embedding_table_size=args.max_prompt_embedding_table_size,
         )
         engine_name = get_engine_name(
             MODEL_NAME, args.dtype, args.tp_size, args.pp_size, cur_rank
@@ -742,19 +865,7 @@ def build(rank, args):
             builder, builder_config, engine_name, cur_rank, multi_query_mode, args
         )
         assert engine is not None, f"Failed to build engine for rank {cur_rank}"
-
-        if cur_rank == 0:
-            # Use in-memory timing cache for multiple builder passes.
-            if not args.parallel_build:
-                cache = builder_config.trt_builder_config.get_timing_cache()
-
-        serialize_engine(engine, os.path.join(args.output_dir, engine_name))
-
-    if rank == 0:
-        ok = builder.save_timing_cache(
-            builder_config, os.path.join(args.output_dir, "model.cache")
-        )
-        assert ok, "Failed to save timing cache."
+        engine.save(args.output_dir)
 
 
 if __name__ == "__main__":

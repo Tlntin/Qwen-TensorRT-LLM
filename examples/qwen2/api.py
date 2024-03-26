@@ -4,12 +4,13 @@ import torch
 import json
 import time
 from typing import List, Literal, Optional, Union, Dict
+import tensorrt_llm
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
-from run import get_model, Qwen2ForCausalLMGenerationSession
+from run_old import get_model, Qwen2ForCausalLMGenerationSession
 from cli_chat import parse_arguments
 from default_config import default_config
 import copy
@@ -25,13 +26,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 args = parse_arguments()
+
+runtime_rank = tensorrt_llm.mpi_rank()
 (
-    model_config, sampling_config, runtime_mapping, runtime_rank,
-    serialize_path, remove_input_padding, 
+
+    engine, model_config, sampling_config, runtime_mapping,
     tokenizer, eos_token_id, pad_token_id, stop_token_ids
-) = get_model(args.tokenizer_dir, args.engine_dir, args.log_level)
-with open(serialize_path, 'rb') as f:
-    engine_buffer = f.read()
+) = get_model(args.tokenizer_dir, args.engine_dir, args.log_level, rank=runtime_rank)
+
+engine_buffer = engine.engine
 decoder = Qwen2ForCausalLMGenerationSession(
     model_config,
     engine_buffer,

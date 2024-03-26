@@ -20,10 +20,12 @@ class DefaultConfig:
     chat_format = "chatml"
 
     # Maximum input length.
-    max_input_len = 1024 * 6
+    max_input_len = 1024 * 4
 
     # Maximum number of generate new tokens.
     max_new_tokens = 2048
+
+    max_output_len =  max_input_len + max_new_tokens
 
     # Top p for sampling.
     top_p = 0.8

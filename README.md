@@ -1,9 +1,8 @@
-### [README FOR ENGLISH](qwen/README.md)
+### [README FOR ENGLISH](qwen2/README.md)
 # 总述
 ### 背景介绍
 - 介绍本工作是 <a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023">NVIDIA TensorRT Hackathon 2023</a> 的参赛题目，本项目使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。相关代码已经放在[release/0.1.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.1.0)分支，感兴趣的同学可以去该分支学习完整流程。
-- 本项目[release/0.5.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.5.0)分支和TensorRT-LLM官方仓库[release/0.5.0](https://github.com/NVIDIA/TensorRT-LLM/tree/release/0.5.0)分支对齐，所有功能均在该分支上面进行测试。
-- main分支目前和TensorRT-LLM官方仓库[v0.7.0](https://github.com/NVIDIA/TensorRT-LLM/releases/tag/v0.7.0)对齐，该版本已经支持Qwen，但是可能支持的功能特性还有不足，故我们决定继续更新该仓库。
+- 当前分支目前和TensorRT-LLM官方仓库[v0.8.0](https://github.com/NVIDIA/TensorRT-LLM/releases/tag/v0.8.0)对齐，该版本已经支持Qwen，但是可能支持的功能特性还有不足，故我们决定继续更新该仓库。
 
 ### 功能概述
 
@@ -17,18 +16,18 @@
 - 支持cli命令行对话。
 - 支持langchain接入。
 
-### 支持的模型（qwen/qwen1.5/qwen-vl)
+### 支持的模型：qwen2（推荐）/qwen（当前仅维护到0.7.0）/qwen-vl（当前仅维护到0.7.0）
 
-- base模型（实验性）：[Qwen-1_8B](https://huggingface.co/Qwen/Qwen-1_8B)、[Qwen-7B](https://huggingface.co/Qwen/Qwen-7B)、[Qwen-14B](https://huggingface.co/Qwen/Qwen-14B)、[Qwen-72B](https://huggingface.co/Qwen/Qwen-72B)（实验性）、[QWen-VL](https://huggingface.co/Qwen/Qwen-VL)
-- chat模型（推荐）：[Qwen-1_8B-Chat](https://huggingface.co/Qwen/Qwen-1_8B-Chat)、[Qwen-7B-Chat](https://huggingface.co/Qwen/Qwen-7B-Chat)、[Qwen-14B-Chat](https://huggingface.co/Qwen/Qwen-14B-Chat)、[Qwen-72B-Chat](https://huggingface.co/Qwen/Qwen-72B-Chat)（实验性）、[QWen-VL-Chat](https://huggingface.co/Qwen/Qwen-VL-Chat)
-- chat-int4模型：[Qwen-1_8B-Chat-Int4](https://huggingface.co/Qwen/Qwen-1_8B-Chat-Int4)、[Qwen-7B-Chat-Int4](https://huggingface.co/Qwen/Qwen-7B-Chat-Int4)、[Qwen-14B-Chat-Int4](https://huggingface.co/Qwen/Qwen-14B-Chat-Int4)、、[Qwen-72B-Chat-Int4](https://huggingface.co/Qwen/Qwen-72B-Chat-Int4)（实验性）、[Qwen-VL-Chat-Int4](https://huggingface.co/Qwen/Qwen-VL-Chat-Int4)
+- base模型（实验性）：[Qwen1.5-0.5B](https://huggingface.co/Qwen/Qwen1.5-0.5B)、[Qwen1.5-1.8B](https://huggingface.co/Qwen/Qwen1.5-1.8B)、[Qwen1.5-4B](https://huggingface.co/Qwen/Qwen1.5-4B)、[Qwen1.5-7B](https://huggingface.co/Qwen/Qwen1.5-7B)、[Qwen1.5-14B](https://huggingface.co/Qwen/Qwen1.5-14B)、[Qwen1.5-72B](https://huggingface.co/Qwen/Qwen1.5-72B)、[QWen-VL](https://huggingface.co/Qwen/Qwen-VL)
+- chat模型（推荐）：[Qwen1.5-0.5B-Chat](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat)、[Qwen1.5-1.8B-Chat](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat)、[Qwen1.5-4B-Chat](https://huggingface.co/Qwen/Qwen1.5-4B-Chat)、[Qwen1.5-7B-Chat](https://huggingface.co/Qwen/Qwen1.5-7B-Chat)、[Qwen1.5-14B-Chat](https://huggingface.co/Qwen/Qwen1.5-14B-Chat)、[Qwen1.5-72B-Chat](https://huggingface.co/Qwen/Qwen1.5-72B-Chat)（实验性）、[QWen-VL-Chat](https://huggingface.co/Qwen/Qwen-VL-Chat)
+- chat-gptq-int4模型：[Qwen1.5-0.5B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat-GPTQ-Int4)、[Qwen1.5-1.8B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat-GPTQ-Int4)、[Qwen1.5-4B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-4B-Chat-GPTQ-Int4)、[Qwen1.5-7B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-7B-Chat-GPTQ-Int4)、[Qwen1.5-14B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-14B-Chat-GPTQ-Int4)、、[Qwen1.5-72B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-72B-Chat-GPTQ-Int4)（实验性）、[Qwen-VL-Chat-Int4](https://huggingface.co/Qwen/Qwen-VL-Chat-Int4)
 
 ### 相关教程：
 - 本项目配套B站教程：
 
   <a href="https://www.bilibili.com/video/BV12M411D7uS/"><img src="images/course.png" alt="bilibili"></a>
 
-- 本项目配套博客适配概述：[如何在 NVIDIA TensorRT-LLM 中支持 Qwen 模型](https://developer.nvidia.com/zh-cn/blog/qwen-model-support-nvidia-tensorrt-llm)
+- 本项目配套博客适配概述：[如何在 NVIDIA TensorRT-LLM 中支持 Qwen 模型](https://developer.nvidia.com/zh-cn/blog/qwen2-model-support-nvidia-tensorrt-llm)
 
 - [TensorRT-LLM的模型量化：实现与性能科普视频](https://www.bilibili.com/video/BV1Pw411h7nM/?spm=a2c22.12281976.0.0.6ee62084utHBCm)
 
@@ -234,24 +233,12 @@
 
 ### 准备工作
 1. 下载镜像。
-    - 官方triton镜像23.12，对应TensorRT-LLM版本为0.7.0，不含TensorRT-LLM开发包。
+    - 官方triton镜像24.02，对应TensorRT-LLM版本为0.8.0，不含TensorRT-LLM开发包。
       ```bash
-      docker pull nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3
-      docker tag nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3 tensorrt_llm/release
-      ```
-      
-    - 安装pytorch2.1.0，目前还不支持2.2。
-
-      ```bash
-       pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu121
-      ```
-    - 使用pip直接安装官方编译好的tensorrt_llm
-      ```bash
-      pip install tensorrt_llm==0.7.0 --extra-index-url https://pypi.nvidia.com --extra-index-url https://download.pytorch.org/whl/cu121
+      docker pull nvcr.io/nvidia/tritonserver:24.02-trtllm-python-py3
       ```
     
-    - AutoDL镜像，不含triton，版本为0.6.1，无卡用户可以体验玩玩，[链接](https://www.codewithgpu.com/i/NVIDIA/TensorRT-LLM/tensorrt_llm)
-    
+    - AutoDL镜像，不含triton，版本为0.6.1，无卡用户可以体验玩玩，[链接](https://www.codewithgpu.com/i/NVIDIA/TensorRT-LLM/tensorrt_llm)，需要搭配0.6.1的tensorrt_llm和本项目v0.6.1分支的代码。
       
     
 2. 拉取本项目代码
@@ -261,7 +248,7 @@
     cd Qwen-TensorRT-LLM
     ```
 
-3. 进入项目目录，然后创建并启动容器，同时将本地`qwen`代码路径映射到`/app/tensorrt_llm/examples/qwen`路径，然后打开8000和7860端口的映射，方便调试api和web界面。
+3. 进入项目目录，然后创建并启动容器，同时将本地`examples`代码路径映射到`/app/tensorrt_llm/examples`路径，然后打开8000和7860端口的映射，方便调试api和web界面。
 
     ```bash
     docker run --gpus all \
@@ -273,18 +260,27 @@
       --ulimit stack=67108864 \
       -p 8000:8000 \
       -p 7860:7860 \
-      -v ${PWD}/examples/qwen:/app/tensorrt_llm/examples/qwen \
-      tensorrt_llm/release sleep 8640000
+      -v ${PWD}/examples:/app/tensorrt_llm/examples \
+      nvcr.io/nvidia/tritonserver:24.02-trtllm-python-py3 sleep 8640000
     ```
 
-4. 进入docker容器里面的qwen路径，安装提供的Python依赖
-
+4. 进入docker容器里面的qwen2路径，
+    - 使用pip直接安装官方编译好的tensorrt_llm
+      ```bash
+      pip install tensorrt_llm==0.8.0 --extra-index-url https://pypi.nvidia.com --extra-index-url https://download.pytorch.org/whl/cu121
+      ```
+    - 安装提供的Python依赖
     ```bash
-    cd /app/tensorrt_llm/examples/qwen/
+    cd /app/tensorrt_llm/examples/qwen2/
     pip install -r requirements.txt
     ```
+    
+    - 升级transformers版本，qwen2最低需要4.37以上版本
+    ```bash
+    pip install "transformers>=4.37"
+    ```
 
-5. 下载模型，例如`QWen-7B-Chat`模型，然后将文件夹重命名为`qwen_7b_chat`，最后放到`qwen/`路径下即可。
+5. 从HuggingFace下载模型（暂时不支持其他平台），例如`QWen1.5-7B-Chat`模型，然后将文件夹重命名为`qwen1.5_7b_chat`，最后放到`examples/qwen2/`路径下即可。
 
 6. 修改编译参数（可选）
 
@@ -292,7 +288,6 @@
     - 默认模型路径，包括`hf_model_dir`（模型路径）和`tokenizer_dir`（分词器路径）以及`int4_gptq_model_dir`（手动gptq量化输出路径），可以改成你自定义的路径。
     - 对于24G显存用户，直接编译即可，默认是fp16数据类型，max_batch_size=2
     - 对于低显存用户，可以降低max_batch_size=1，或者继续降低max_input_len, max_new_tokens
-    - 默认的seq_lenght是2048，有的模型是8192有的是2048，一般看`config.json`里面这个参数对应的数值是啥，如果没改对后面会警告或者报错提醒一下（准备加入这个功能）。
 
 ### 运行指南（fp16模型）
 1. 编译。
@@ -331,37 +326,27 @@
     mpirun -n 2 --allow-run-as-root python run.py
     ```
 
-3. 验证模型精度。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。对于`网络不好`的用户，可以从网盘下载数据集，然后按照使用说明操作即可。
+3. 验证模型精度。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。目前已经在summarize.py 36/37行内置了国内huggingface源（gitee源），对于国外用户可以注释掉这两行。
 
-     - 百度网盘：链接: https://pan.baidu.com/s/1UQ01fBBELesQLMF4gP0vcg?pwd=b62q 提取码: b62q 
-     - 谷歌云盘：https://drive.google.com/drive/folders/1YrSv1NNhqihPhCh6JYcz7aAR5DAuO5gU?usp=sharing
      - 跑hugggingface版
-
+     
      ```bash
-     python3 summarize.py --backend=hf
+      python3 summarize.py --test_hf
      ```
-
+     
      - 跑trt-llm版
 
      ```bash
-     python3 summarize.py --backend=trt_llm
+      python3 summarize.py --test_trt_llm
      ```
-
-     - 注：如果用了网盘的数据集，解压后加载就需要多两个环境变量了，运行示范如下：
-
-     ```bash
-     HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python3 summarize.py --backend=hf
-     或者
-     HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python3 summarize.py --backend=trt_llm
-     ```
-
+     
      - 一般来说，如果trt-llm的rouge分数和huggingface差不多，略低一些（1以内）或者略高一些（2以内），则说明精度基本对齐。
 
 4. 测量模型吞吐速度和生成速度。需要下载`ShareGPT_V3_unfiltered_cleaned_split.json`这个文件。
 
      - 可以通过wget/浏览器直接下载，[下载链接](https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json)
      - 也可通过百度网盘下载，链接: https://pan.baidu.com/s/12rot0Lc0hc9oCb7GxBS6Ng?pwd=jps5 提取码: jps5
-     - 下载后同样放到`examples/qwen/`路径下即可
+     - 下载后同样放到`examples/qwen2/`路径下即可
      - 测量前，如果需要改max_input_length/max_new_tokens，可以直接改`default_config.py`即可。一般不推荐修改，如果修改了这个，则需要重新编译一次trt-llm，保证两者输入数据集长度统一。
      - 测量huggingface模型
 
@@ -450,82 +435,29 @@ python3 run.py --tokenizer_dir=Qwen-1_8B-Chat-Int4
 ```
 
 ### 运行指南（int4-awq篇）
-1. 需要下载并安装nvidia-ammo模块
+1. 需要下载并安装nvidia-ammo模块（仅支持Linux，不支持Windows）
 ```bash
-pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com nvidia-ammo~=0.5.0
+pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com nvidia-ammo~=0.7.0
 ```
-2. 修改ammo代码，加上qwen支持（不加上会报错），下面是一个简单的参考案例：
-- 先在vscode，任意写一个python文件，导入下面的函数
-```python
-from tensorrt_llm.models.quantized.ammo import quantize_and_export
-```
-- 然后contrl + 鼠标左按键，单击`quantize_and_export`函数，查看它的内部实现。
-- model_lookup中，加上下面这段代码，用来支持Qwen
+2. 运行int4-awq量化代码，导出校准权重。
 ```bash
-    ("qwen", ): "qwen",
+python3 quantize.py --export_path ./qwen2_7b_4bit_gs128_awq.pt
 ```
-- 修改后长这样：
-```bash
-model_lookup = {
-    ("llama", "mistral"): "llama",
-    ("gptj", ): "gptj",
-    ("falcon", "rw"): "falcon",
-    ("baichuan", ): "baichuan",
-    ("mpt", ): "mpt",
-    ("gpt2", ): "gpt2",
-    ("chatglm", ): "chatglm",
-    ("qwen", ): "qwen",
-}
-```
-- before
-```bash
-if export_path:
-    with torch.inference_mode():
-        export_model_config(
-            model,
-            model_type,
-            torch.float16,
-            export_dir=export_path,
-            inference_tensor_parallel=tensor_parallel_size,
-        )
-    logger.info(f"Quantized model exported to :{export_path}")
-```
-- after
-```bash
-if export_path:
-    with torch.inference_mode():
-        if qformat == "int4_awq" and model_type == "qwen":
-            torch.save(model.state_dict(), export_path)
-        else:
-            export_model_config(
-                model,
-                model_type,
-                torch.float16,
-                quantization=qformat,
-                export_dir=export_path,
-                inference_tensor_parallel=tensor_parallel_size,
-            )
-    logger.info(f"Quantized model exported to :{export_path}")
-```
-3. 运行int4-awq量化代码，导出校准权重。
-```bash
-python3 quantize.py --export_path ./qwen_7b_4bit_gs128_awq.pt
-```
-4. 运行build.py，用于构建TensorRT-LLM Engine。
+3. 运行build.py，用于构建TensorRT-LLM Engine。
 ```bash
 python build.py --use_weight_only \
                 --weight_only_precision int4_awq \
                 --per_group \
-                --quant_ckpt_path ./qwen_7b_4bit_gs128_awq.pt
+                --quant_ckpt_path ./qwen2_7b_4bit_gs128_awq.pt
 ```
-5. 如果想要节省显存（注：只能用于单batch），可以试试加上这俩参数来编译Engine
+4. 如果想要节省显存（注：只能用于单batch），可以试试加上这俩参数来编译Engine
 ```bash
 python build.py --use_weight_only \
                 --weight_only_precision int4_awq \
                 --per_group \
                 --remove_input_padding \
                 --enable_context_fmha \
-                --quant_ckpt_path ./qwen_7b_4bit_gs128_awq.pt
+                --quant_ckpt_path ./qwen2_7b_4bit_gs128_awq.pt
 ```
 
 ### 其他应用
@@ -543,7 +475,7 @@ python build.py --use_weight_only \
       python3 api.py
       ```
 
-      - 另开一个终端，进入`qwen/client`目录，里面有4个文件，分别代表不同的调用方式。
+      - 另开一个终端，进入`qwen2/client`目录，里面有4个文件，分别代表不同的调用方式。
       - `async_client.py`，通过异步的方式调用api，通过SSE协议来支持流式输出。
       - `normal_client.py`，通过同步的方式调用api，为常规的HTTP协议，Post请求，不支持流式输出，请求一次需要等模型生成完所有文字后，才能返回。
       - `openai_normal_client.py`，通过`openai`模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。
@@ -570,7 +502,7 @@ python build.py --use_weight_only \
          - `share=False`：仅局域网/或者公网ip访问，不会生成公网域名。
          - `inbrowser=False`： 部署后不打开浏览器，适合服务器。
 
-4. web_demo运行效果（测试平台：RTX 4080, qwen-7b-chat, int4 weight only)
+4. web_demo运行效果（测试平台：RTX 4080, qwen2-7b-chat, int4 weight only)
 
 https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956
 

@@ -1,544 +1,511 @@
+# SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
+import ast
 import csv
-import json
-import os
 from pathlib import Path
-from typing import List, Union, Optional
+
 import numpy as np
 import torch
-# for debug
-# from qwen_7b_chat.tokenization_qwen import QWenTokenizer as AutoTokenizer
-# for realease
-from transformers import AutoTokenizer
+from utils.utils import (DEFAULT_HF_MODEL_DIRS, DEFAULT_PROMPT_TEMPLATES,
+                   load_tokenizer, read_model_name, throttle_generator)
+
 import tensorrt_llm
-from tensorrt_llm.runtime import (
-    ModelConfig, SamplingConfig, GenerationSession
-)
-from tensorrt_llm.runtime.generation import Mapping
-from build import get_engine_name  # isort:skip
+import tensorrt_llm.profiler
+from tensorrt_llm.logger import logger
+from tensorrt_llm.runtime import PYTHON_BINDINGS, ModelRunner
 from default_config import default_config
-from tensorrt_llm.quantization import QuantMode
 
-now_dir = os.path.dirname(os.path.abspath(__file__))
-
-
-# copy from tensorrt_llm/runtime/generation.py to debug
-class Qwen2ForCausalLMGenerationSession(GenerationSession):
-    def __init__(
-        self,
-        model_config: ModelConfig,
-        engine_buffer,
-        mapping: Mapping,
-        debug_mode=False,
-        debug_tensors_to_save=None,
-        cuda_graph_mode=False,
-        stream: torch.cuda.Stream = None,
-        global_max_input_length=default_config.max_input_len,
-        global_max_output_length=default_config.max_input_len + default_config.max_new_tokens,
-    ):
-        super().__init__(
-            model_config,
-            engine_buffer,
-            mapping,
-            debug_mode,
-            debug_tensors_to_save=debug_tensors_to_save,
-            cuda_graph_mode=cuda_graph_mode,
-            stream=stream
-        )
-        self.global_max_input_length = global_max_input_length
-        self.global_max_output_length = global_max_output_length
-
-    def prepare_for_chat(
-        self,
-        pad_token_id: int,
-        tokenizer,
-        input_text: Union[str, List[str]],
-        system_text: str = "You are a helpful assistant.",
-        history: list = None,
-        max_input_length: Union[int, None] = None,
-    ):
-        if max_input_length is None:
-            max_input_length = self.global_max_input_length
-        else:
-            max_input_length = min(max_input_length, self.global_max_input_length)
-        if history is None:
-            history = []
-        # pad_id = tokenizer.im_end_id
-        # prepare for batch inference
-        if not isinstance(input_text, list):
-            batch_text = [input_text]
-        else:
-            batch_text = input_text
-        if len(history) > 0 and len(history[0]) and len(history[0][0]) > 0 \
-                and not isinstance(history[0][0], list):
-            history_list = [history]
-        elif len(history) == 0:
-            history_list = [[]]
-        else:
-            history_list = history
-        input_ids = []
-        input_lengths = []
-
-        for line, history in zip(batch_text, history_list):
-            # use make_content to generate prompt
-            # print("input_id_list len", len(input_id_list))
-            messages = [
-                {"role": "system", "content": system_text},
-            ]
-            for (query, response) in history:
-                messages.append(
-                    {"role": "user", "content": query}
-                )
-                messages.append(
-                    {"role": "assistant", "content": response}
-                )
-            messages.append({"role": "user", "content": input_text})
-            text = tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True
-            )
-            input_id = tokenizer([text], return_tensors="pt").input_ids
-            input_id = input_id[-max_input_length:].type(torch.int32)
-            input_ids.append(input_id)
-            input_lengths.append(input_id.shape[-1])
-        max_length = max(input_lengths)
-        # do padding, should move outside the profiling to prevent the overhead
-        for i in range(len(input_ids)):
-            pad_size = max_length - input_lengths[i]
-
-            pad = torch.ones([1, pad_size]).type(torch.int32) * pad_token_id
-            input_ids[i] = torch.cat(
-                [torch.IntTensor(input_ids[i]), pad], dim=-1)
-        input_ids = torch.cat(input_ids, dim=0).cuda()
-        input_lengths = torch.IntTensor(input_lengths).type(torch.int32).cuda()
-        return input_ids, input_lengths
-    
-    def generate(
-        self,
-        input_ids: torch.Tensor,
-        input_lengths: torch.Tensor,
-        sampling_config: SamplingConfig,
-        max_new_tokens: int,
-        runtime_rank: int = 0,
-        stop_works_list: Optional[torch.Tensor] = None
-    ):
-        max_input_length = torch.max(input_lengths).item()
-        max_new_tokens = min(
-            max_new_tokens,
-            self.global_max_output_length - max_input_length
-        )
-        # setup batch_size, max_input_length, max_output_len
-        self.setup(
-            batch_size=input_lengths.size(0),
-            max_context_length=max_input_length,
-            max_new_tokens=max_new_tokens
-        )
-        output_dict = self.decode(
-            input_ids,
-            input_lengths,
-            sampling_config,
-            output_sequence_lengths=True,
-            return_dict=True,
-            # stop_words_list=stop_works_list
-        )
-        with torch.no_grad():
-            torch.cuda.synchronize()
-            if runtime_rank == 0:
-                output_dict['output_ids'] = output_dict['output_ids'][:, 0, :]
-                return output_dict
-    
-    def chat(
-        self,
-        pad_token_id: int,
-        tokenizer,
-        sampling_config: SamplingConfig,
-        input_text: Union[str, List[str]],
-        system_text: str = "You are a helpful assistant.",
-        history: list = None,
-        max_input_length: Union[int, None] = None,
-        max_new_tokens: Union[int, None] = None,
-        runtime_rank: int = 0,
-    ):
-        input_ids, input_lengths = self.prepare_for_chat(
-            pad_token_id=pad_token_id,
-            tokenizer=tokenizer,
-            input_text=input_text,
-            system_text=system_text,
-            history=history,
-            max_input_length=max_input_length,
-        )
-        max_input_length = torch.max(input_lengths).item()
-        if max_new_tokens is None:
-            max_new_tokens = self.global_max_output_length - max_input_length
-        else:
-            max_new_tokens = min(
-                max_new_tokens,
-                self.global_max_output_length - max_input_length
-            )
-        # setup batch_size, max_input_length, max_output_len
-        self.setup(
-            batch_size=input_lengths.size(0),
-            max_context_length=max_input_length,
-            max_new_tokens=max_new_tokens
-        )
-        output_dict = self.decode(
-            input_ids,
-            input_lengths,
-            sampling_config,
-            streaming=False,
-            output_sequence_lengths=True,
-            return_dict=True,
-        )
-        with torch.no_grad():
-            torch.cuda.synchronize()
-            output_ids = output_dict['output_ids']
-            sequence_lengths = output_dict['sequence_lengths']
-            if runtime_rank == 0:
-                output_texts = [
-                    tokenizer.decode(
-                        output_ids[i, 0, input_lengths[i]: sequence_lengths[i][0]],
-                        skip_special_tokens=False
-                    )
-                    for i in range(output_ids.size(0))
-                ]
-                return output_texts
-
-    def chat_stream(
-        self,
-        pad_token_id: int,
-        stop_token_ids: List[int],
-        tokenizer,
-        sampling_config: SamplingConfig,
-        input_text: Union[str, List[str]],
-        system_text: str = "You are a helpful assistant.",
-        history: list = None,
-        max_input_length: Union[int, None] = None,
-        max_new_tokens: Union[int, None] = None,
-        runtime_rank: int = 0,
-    ):
-        input_ids, input_lengths = self.prepare_for_chat(
-            pad_token_id=pad_token_id,
-            tokenizer=tokenizer,
-            input_text=input_text,
-            system_text=system_text,
-            history=history,
-            max_input_length=max_input_length,
-        )
-        max_input_length = torch.max(input_lengths).item()
-        # setup batch_size, max_input_length, max_output_len
-        if max_new_tokens is None:
-            max_new_tokens = self.global_max_output_length - max_input_length
-        else:
-            max_new_tokens = min(
-                max_new_tokens,
-                self.global_max_output_length - max_input_length
-            )
-        self.setup(
-            batch_size=input_lengths.size(0),
-            max_context_length=max_input_length,
-            max_new_tokens=max_new_tokens
-        )
-        with torch.no_grad():
-            chunk_lengths = input_lengths.clone()
-            for output_dict in self.decode(
-                input_ids,
-                input_lengths,
-                sampling_config,
-                streaming=True,
-                output_sequence_lengths=True,
-                return_dict=True
-            ):
-                output_ids = output_dict['output_ids']
-                sequence_lengths = output_dict['sequence_lengths']
-                # print("sequence_lengths", sequence_lengths)
-                torch.cuda.synchronize()
-                if runtime_rank == 0:
-                    output_texts = []
-                    for i in range(output_ids.size(0)):
-                        temp_ids = output_ids[i, 0, chunk_lengths[i]: sequence_lengths[i][0]]
-                        pure_ids = []
-                        for j in range(len(temp_ids)):
-                            if temp_ids[j] in stop_token_ids:
-                                pure_ids = temp_ids[:j]
-                                break
-                        if len(pure_ids) == 0:
-                            pure_ids = temp_ids
-                        if pure_ids.size(0) == 0:
-                            continue
-                        temp_text = tokenizer.decode(pure_ids, skip_special_tokens=False)
-                        # check code is error
-                        if b"\xef\xbf\xbd" in temp_text.encode():
-                            continue
-                        chunk_lengths[i] += pure_ids.size(0)
-                        output_texts.append(temp_text)
-                    if len(output_texts) > 0:
-                        yield output_texts
+if PYTHON_BINDINGS:
+    from tensorrt_llm.runtime import ModelRunnerCpp
 
 
-def parse_arguments():
+def parse_arguments(args=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max_new_tokens', type=int, default=200)
+    parser.add_argument('--max_output_len', type=int, required=False, default=512)
+    parser.add_argument(
+        '--max_attention_window_size',
+        type=int,
+        default=None,
+        help=
+        'The attention window size that controls the sliding window attention / cyclic kv cache behaviour'
+    )
+    parser.add_argument('--sink_token_length',
+                        type=int,
+                        default=None,
+                        help='The sink token length.')
     parser.add_argument('--log_level', type=str, default='error')
+    parser.add_argument('--engine_dir', type=str, default=default_config.engine_dir)
+    parser.add_argument('--use_py_session',
+                        default=False,
+                        action='store_true',
+                        help="Whether or not to use Python runtime session")
     parser.add_argument(
-        '--engine_dir',
+        '--model_type',
         type=str,
-        default=default_config.engine_dir,
-    )
-    parser.add_argument(
-        '--tokenizer_dir',
-        type=str,
-        default=default_config.tokenizer_dir,
-        help="Directory containing the tokenizer.model."
-    )
-    default_text = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n你好，请问你叫什么？<|im_end|>\n<|im_start|>assistant\n"
+        choices=["chatml", "base"],
+        help='Indicates whether the model is chatml or raw.',
+        default='chatml')
     parser.add_argument(
         '--input_text',
         type=str,
-        # default='Born in north-east France, Soyer trained as a'
-        default=default_text
-    )
+        nargs='+',
+        default=["你好，请问你叫什么？"])
     parser.add_argument(
-        '--input_tokens',
-        dest='input_file',
+        '--no_prompt_template',
+        dest='use_prompt_template',
+        default=True,
+        action='store_false',
+        help=
+        "Whether or not to use default prompt template to wrap the input text.")
+    parser.add_argument(
+        '--input_file',
         type=str,
         help=
         'CSV or Numpy file containing tokenized input. Alternative to text input.',
         default=None)
+    parser.add_argument('--max_input_length', type=int, default=default_config.max_input_len)
+    parser.add_argument('--output_csv',
+                        type=str,
+                        help='CSV file where the tokenized output is stored.',
+                        default=None)
+    parser.add_argument('--output_npy',
+                        type=str,
+                        help='Numpy file where the tokenized output is stored.',
+                        default=None)
     parser.add_argument(
-        '--output_csv',
+        '--output_logits_npy',
         type=str,
-        help='CSV file where the tokenized output is stored.',
-        default=None
-    )
+        help=
+        'Numpy file where the generation logits are stored. Use only when num_beams==1',
+        default=None)
+    parser.add_argument('--tokenizer_dir',
+                        help="HF tokenizer config path",
+                        default=default_config.tokenizer_dir)
     parser.add_argument(
-        '--output_npy',
+        '--tokenizer_type',
+        help=
+        'Specify that argument when providing a .model file as the tokenizer_dir. '
+        'It allows AutoTokenizer to instantiate the correct tokenizer type.')
+    parser.add_argument('--vocab_file',
+                        help="Used for sentencepiece tokenizers")
+    parser.add_argument('--num_beams',
+                        type=int,
+                        help="Use beam search if num_beams >1",
+                        default=1)
+    parser.add_argument('--temperature', type=float, default=1.0)
+    parser.add_argument('--top_k', type=int, default=1)
+    parser.add_argument('--top_p', type=float, default=0.0)
+    parser.add_argument('--length_penalty', type=float, default=1.0)
+    parser.add_argument('--repetition_penalty', type=float, default=1.0)
+    parser.add_argument('--presence_penalty', type=float, default=0.0)
+    parser.add_argument('--frequency_penalty', type=float, default=0.0)
+    parser.add_argument('--debug_mode',
+                        default=False,
+                        action='store_true',
+                        help="Whether or not to turn on the debug mode")
+    parser.add_argument('--no_add_special_tokens',
+                        dest='add_special_tokens',
+                        default=True,
+                        action='store_false',
+                        help="Whether or not to add special tokens")
+    parser.add_argument('--streaming', default=False, action='store_true')
+    parser.add_argument('--streaming_interval',
+                        type=int,
+                        help="How often to return tokens when streaming.",
+                        default=5)
+    parser.add_argument(
+        '--prompt_table_path',
         type=str,
-        help='Numpy file where the tokenized output is stored.',
-        default=None
-    )
+        help="Path to .npy file, exported by nemo_prompt_convert.py")
     parser.add_argument(
-        '--num_beams',
+        '--prompt_tasks',
+        help="Comma-separated list of tasks for prompt tuning, e.g., 0,3,1,0")
+    parser.add_argument('--lora_dir',
+                        type=str,
+                        default=None,
+                        nargs="+",
+                        help="The directory of LoRA weights")
+    parser.add_argument(
+        '--lora_task_uids',
+        type=str,
+        default=None,
+        nargs="+",
+        help="The list of LoRA task uids; use -1 to disable the LoRA module")
+    parser.add_argument('--lora_ckpt_source',
+                        type=str,
+                        default="hf",
+                        choices=["hf", "nemo"],
+                        help="The source of lora checkpoint.")
+    parser.add_argument(
+        '--num_prepend_vtokens',
+        nargs="+",
         type=int,
-        help="Use beam search if num_beams >1",
-        default=1
-    )
-    return parser.parse_args()
-
-
-def get_model(tokenizer_dir, engine_dir, log_level='error'):
-    # --load the tokenizer and engine #
-    tensorrt_llm.logger.set_level(log_level)
-    tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_dir,
-        legacy=False,
-        trust_remote_code=True,
-    )
-    config_path = os.path.join(engine_dir, 'config.json')
-    with open(config_path, 'r') as f:
-        config = json.load(f)
-    gen_config_path = os.path.join(tokenizer_dir, 'generation_config.json')
-    with open(gen_config_path, 'r') as f:
-        gen_config = json.load(f)
-    top_p = gen_config['top_p']
-    pad_token_id = eos_token_id = gen_config["eos_token_id"][0]
-    stop_token_ids = gen_config["eos_token_id"]
-
-    use_gpt_attention_plugin = config['plugin_config']['gpt_attention_plugin']
-    remove_input_padding = config['plugin_config']['remove_input_padding']
-    dtype = config['builder_config']['precision']
-    tp_size = config['builder_config']['tensor_parallel']
-    pp_size = config['builder_config']['pipeline_parallel']
-    world_size = tp_size * pp_size
-    assert world_size == tensorrt_llm.mpi_world_size(), \
-        f'Engine world size ({world_size}) != Runtime world size ({tensorrt_llm.mpi_world_size()})'
-    num_heads = config['builder_config']['num_heads'] // world_size
-    hidden_size = config['builder_config']['hidden_size'] // world_size
-    vocab_size = config['builder_config']['vocab_size']
-    num_layers = config['builder_config']['num_layers']
-    num_kv_heads = config['builder_config'].get('num_kv_heads', num_heads)
-    paged_kv_cache = config['plugin_config']['paged_kv_cache']
-    tokens_per_block = config['plugin_config']['tokens_per_block']
-    quant_mode = QuantMode(config['builder_config']['quant_mode'])
-    if config['builder_config'].get('multi_query_mode', False):
-        tensorrt_llm.logger.warning(
-            "`multi_query_mode` config is deprecated. Please rebuild the engine."
-        )
-        num_kv_heads = 1
-    #num_kv_heads = (num_kv_heads + tp_size - 1) // tp_size
-    use_custom_all_reduce = config['plugin_config'].get('use_custom_all_reduce',
-                                                        False)
-
-    runtime_rank = tensorrt_llm.mpi_rank()
-    runtime_mapping = tensorrt_llm.Mapping(world_size=world_size, rank=runtime_rank, tp_size=tp_size, pp_size=pp_size)
-    torch.cuda.set_device(runtime_rank % runtime_mapping.gpus_per_node)
-
-    model_config = ModelConfig(
-        num_heads=num_heads,
-        num_kv_heads=num_kv_heads,
-        hidden_size=hidden_size,
-        vocab_size=vocab_size,
-        num_layers=num_layers,
-        gpt_attention_plugin=use_gpt_attention_plugin,
-        paged_kv_cache=paged_kv_cache,
-        tokens_per_block=tokens_per_block,
-        remove_input_padding=remove_input_padding,
-        dtype=dtype,
-        quant_mode=quant_mode,
-        use_custom_all_reduce=use_custom_all_reduce
-    )
-    sampling_config = SamplingConfig(
-        end_id=eos_token_id,
-        pad_id=pad_token_id,
-        num_beams=1,
-        top_p=top_p,
-        length_penalty=1,
-        repetition_penalty=1.1,
-        min_length=0,
+        help="Number of (default) virtual tokens to prepend to each sentence."
+        " For example, '--num_prepend_vtokens=10' will prepend the tokens"
+        " [vocab_size, vocab_size + 1, ..., vocab_size + 9] to the sentence.")
+    parser.add_argument(
+        '--run_profiling',
+        default=False,
+        action='store_true',
+        help="Run several 10 iterations to profile the inference latencies.")
+    parser.add_argument(
+        '--medusa_choices',
+        type=str,
+        default=None,
+        help="Medusa choice to use, if not none, will use Medusa decoding."
+        "   E.g.: [[0, 0, 0, 0], [0, 1, 0], [1, 0], [1, 1]] for 9 medusa tokens."
     )
 
-    engine_name = get_engine_name('qwen2', dtype, tp_size, pp_size, runtime_rank)
-    serialize_path = os.path.join(engine_dir, engine_name)
-    print(f'Loading engine from {serialize_path}')
-    return (
-        model_config, sampling_config, runtime_mapping, runtime_rank,
-        serialize_path, remove_input_padding, 
-        tokenizer, eos_token_id, pad_token_id, stop_token_ids
-    )
+    return parser.parse_args(args=args)
 
 
-def generate(
-    max_new_tokens: int,
-    log_level: str = 'error',
-    engine_dir: str = 'qwen_outputs',
-    input_text: str = 'Born in north-east France, Soyer trained as a',
-    input_file: str = None,
-    output_csv: str = None,
-    output_npy: str = None,
-    tokenizer_dir: str = None,
-    num_beams: int = 1,
-):
-    (
-        model_config, sampling_config, runtime_mapping, runtime_rank,
-        serialize_path, remove_input_padding, 
-        tokenizer, eos_token_id, pad_token_id, stop_token_ids
-    ) = get_model(tokenizer_dir, engine_dir, log_level)
-    with open(serialize_path, 'rb') as f:
-        engine_buffer = f.read()
-    decoder = Qwen2ForCausalLMGenerationSession(
-        model_config,
-        engine_buffer,
-        runtime_mapping,
-    )
+def parse_input(tokenizer,
+                input_text=None,
+                prompt_template=None,
+                input_file=None,
+                add_special_tokens=True,
+                max_input_length=923,
+                pad_id=None,
+                num_prepend_vtokens=[],
+                model_name=None,
+                model_version=None):
+    if pad_id is None:
+        pad_id = tokenizer.pad_token_id
 
-    input_tokens = []
+    batch_input_ids = []
     if input_file is None:
-        input_tokens.append(
-            tokenizer.encode(input_text, add_special_tokens=False))
+        for curr_text in input_text:
+            if prompt_template is not None:
+                curr_text = prompt_template.format(input_text=curr_text)
+            input_ids = tokenizer.encode(curr_text,
+                                         add_special_tokens=add_special_tokens,
+                                         truncation=True,
+                                         max_length=max_input_length)
+            batch_input_ids.append(input_ids)
     else:
         if input_file.endswith('.csv'):
             with open(input_file, 'r') as csv_file:
                 csv_reader = csv.reader(csv_file, delimiter=',')
                 for line in csv_reader:
-                    input_tokens.append(np.array(line, dtype='int32'))
+                    input_ids = np.array(line, dtype='int32')
+                    batch_input_ids.append(input_ids[-max_input_length:])
         elif input_file.endswith('.npy'):
             inputs = np.load(input_file)
             for row in inputs:
-                row = row[row != eos_token_id]
-                input_tokens.append(row)
+                input_ids = row[row != pad_id]
+                batch_input_ids.append(input_ids[-max_input_length:])
+        elif input_file.endswith('.txt'):
+            with open(input_file, 'r', encoding='utf-8',
+                      errors='replace') as txt_file:
+                input_text = txt_file.read()
+                input_ids = tokenizer.encode(
+                    input_text,
+                    add_special_tokens=add_special_tokens,
+                    truncation=True,
+                    max_length=max_input_length)
+                batch_input_ids.append(input_ids)
         else:
             print('Input file format not supported.')
             raise SystemExit
 
-    input_ids = None
-    input_lengths = None
-    if input_file is None:
-        input_ids = torch.tensor(input_tokens, device="cuda", dtype=torch.int32)
-        input_lengths = torch.tensor(
-            [input_ids.size(1)], device="cuda", dtype=torch.int32
+    if num_prepend_vtokens:
+        assert len(num_prepend_vtokens) == len(batch_input_ids)
+        base_vocab_size = tokenizer.vocab_size - len(
+            tokenizer.special_tokens_map.get('additional_special_tokens', []))
+        for i, length in enumerate(num_prepend_vtokens):
+            batch_input_ids[i] = list(
+                range(base_vocab_size,
+                      base_vocab_size + length)) + batch_input_ids[i]
+
+    if model_name == 'ChatGLMForCausalLM' and model_version == 'glm':
+        for ids in batch_input_ids:
+            ids.append(tokenizer.sop_token_id)
+
+    batch_input_ids = [
+        torch.tensor(x, dtype=torch.int32) for x in batch_input_ids
+    ]
+    return batch_input_ids
+
+
+def print_output(tokenizer,
+                 output_ids,
+                 input_lengths,
+                 sequence_lengths,
+                 output_csv=None,
+                 output_npy=None,
+                 context_logits=None,
+                 generation_logits=None,
+                 output_logits_npy=None):
+    batch_size, num_beams, _ = output_ids.size()
+    if output_csv is None and output_npy is None:
+        for batch_idx in range(batch_size):
+            inputs = output_ids[batch_idx][0][:input_lengths[batch_idx]].tolist(
+            )
+            input_text = tokenizer.decode(inputs)
+            print(f'Input [Text {batch_idx}]: \"{input_text}\"')
+            for beam in range(num_beams):
+                output_begin = input_lengths[batch_idx]
+                output_end = sequence_lengths[batch_idx][beam]
+                outputs = output_ids[batch_idx][beam][
+                    output_begin:output_end].tolist()
+                output_text = tokenizer.decode(outputs)
+                print(
+                    f'Output [Text {batch_idx} Beam {beam}]: \"{output_text}\"')
+
+    output_ids = output_ids.reshape((-1, output_ids.size(2)))
+
+    if output_csv is not None:
+        output_file = Path(output_csv)
+        output_file.parent.mkdir(exist_ok=True, parents=True)
+        outputs = output_ids.tolist()
+        with open(output_file, 'w') as csv_file:
+            writer = csv.writer(csv_file, delimiter=',')
+            writer.writerows(outputs)
+
+    if output_npy is not None:
+        output_file = Path(output_npy)
+        output_file.parent.mkdir(exist_ok=True, parents=True)
+        outputs = np.array(output_ids.cpu().contiguous(), dtype='int32')
+        np.save(output_file, outputs)
+
+    # Save context logits
+    if context_logits is not None and output_logits_npy is not None:
+        context_logits = torch.cat(context_logits, axis=0)
+        vocab_size_padded = context_logits.shape[-1]
+        context_logits = context_logits.reshape([1, -1, vocab_size_padded])
+
+        output_context_logits_npy = output_logits_npy.split(
+            '.npy')[0] + "_context"
+        output_context_logits_file = Path(output_context_logits_npy)
+        context_outputs = np.array(
+            context_logits.squeeze(0).cpu().contiguous(),
+            dtype='float32')  # [promptLengthSum, vocabSize]
+        np.save(output_context_logits_file, context_outputs)
+
+    # Save generation logits
+    if generation_logits is not None and output_logits_npy is not None and num_beams == 1:
+        output_generation_logits_npy = output_logits_npy.split(
+            '.npy')[0] + "_generation"
+        output_generation_logits_file = Path(output_generation_logits_npy)
+        generation_outputs = np.array(generation_logits.cpu().contiguous(),
+                                      dtype='float32')
+        np.save(output_generation_logits_file, generation_outputs)
+
+
+def main(args):
+    runtime_rank = tensorrt_llm.mpi_rank()
+    logger.set_level(args.log_level)
+
+    model_name, model_version = read_model_name(args.engine_dir)
+    if args.tokenizer_dir is None:
+        logger.warning(
+            "tokenizer_dir is not specified. Try to infer from model_name, but this may be incorrect."
         )
+        args.tokenizer_dir = DEFAULT_HF_MODEL_DIRS[model_name]
+
+    tokenizer, pad_id, end_id = load_tokenizer(
+        tokenizer_dir=args.tokenizer_dir,
+        vocab_file=args.vocab_file,
+        model_name=model_name,
+        model_version=model_version,
+        tokenizer_type=args.tokenizer_type,
+    )
+
+    # # An example to stop generation when the model generate " London" on first sentence, " eventually became" on second sentence
+    # stop_words_list = [[" London"], ["eventually became"]]
+    # stop_words_list = tensorrt_llm.runtime.to_word_list_format(stop_words_list, tokenizer)
+    # stop_words_list = torch.Tensor(stop_words_list).to(torch.int32).to("cuda").contiguous()
+    stop_words_list = None
+
+    # # An example to prevent generating " chef" on first sentence, " eventually" and " chef before" on second sentence
+    # bad_words_list = [[" chef"], [" eventually, chef before"]]
+    # bad_words_list = tensorrt_llm.runtime.to_word_list_format(bad_words_list, tokenizer)
+    # bad_words_list = torch.Tensor(bad_words_list).to(torch.int32).to("cuda").contiguous()
+    bad_words_list = None
+
+    prompt_template = None
+    if args.use_prompt_template and args.model_type =='chatml' and model_name in DEFAULT_PROMPT_TEMPLATES:
+        prompt_template = DEFAULT_PROMPT_TEMPLATES[model_name]
+    batch_input_ids = parse_input(tokenizer=tokenizer,
+                                  input_text=args.input_text,
+                                  prompt_template=prompt_template,
+                                  input_file=args.input_file,
+                                  add_special_tokens=args.add_special_tokens,
+                                  max_input_length=args.max_input_length,
+                                  pad_id=pad_id,
+                                  num_prepend_vtokens=args.num_prepend_vtokens,
+                                  model_name=model_name,
+                                  model_version=model_version)
+    input_lengths = [x.size(0) for x in batch_input_ids]
+
+    if not PYTHON_BINDINGS and not args.use_py_session:
+        logger.warning(
+            "Python bindings of C++ session is unavailable, fallback to Python session."
+        )
+        args.use_py_session = True
+    if args.debug_mode and not args.use_py_session:
+        logger.warning(
+            "Debug mode is not supported in C++ session for now, fallback to Python session."
+        )
+        args.use_py_session = True
+    runner_cls = ModelRunner if args.use_py_session else ModelRunnerCpp
+    runner_kwargs = dict(engine_dir=args.engine_dir,
+                         lora_dir=args.lora_dir,
+                         rank=runtime_rank,
+                         debug_mode=args.debug_mode,
+                         lora_ckpt_source=args.lora_ckpt_source)
+    if args.medusa_choices is not None:
+        args.medusa_choices = ast.literal_eval(args.medusa_choices)
+        assert args.use_py_session, "Medusa is only supported by py_session"
+        assert args.temperature == 0, "Medusa should use temperature == 0"
+        assert args.num_beams == 1, "Medusa should use num_beams == 1"
+        runner_kwargs.update(medusa_choices=args.medusa_choices)
+    if not args.use_py_session:
+        runner_kwargs.update(
+            max_batch_size=len(batch_input_ids),
+            max_input_len=max(input_lengths),
+            max_output_len=args.max_output_len,
+            max_beam_width=args.num_beams,
+            max_attention_window_size=args.max_attention_window_size,
+            sink_token_length=args.sink_token_length,
+        )
+    runner = runner_cls.from_dir(**runner_kwargs)
+
+    with torch.no_grad():
+        outputs = runner.generate(
+            batch_input_ids,
+            max_new_tokens=args.max_output_len,
+            max_attention_window_size=args.max_attention_window_size,
+            sink_token_length=args.sink_token_length,
+            end_id=end_id,
+            pad_id=pad_id,
+            temperature=args.temperature,
+            top_k=args.top_k,
+            top_p=args.top_p,
+            num_beams=args.num_beams,
+            length_penalty=args.length_penalty,
+            repetition_penalty=args.repetition_penalty,
+            presence_penalty=args.presence_penalty,
+            frequency_penalty=args.frequency_penalty,
+            stop_words_list=stop_words_list,
+            bad_words_list=bad_words_list,
+            lora_uids=args.lora_task_uids,
+            prompt_table_path=args.prompt_table_path,
+            prompt_tasks=args.prompt_tasks,
+            streaming=args.streaming,
+            output_sequence_lengths=True,
+            return_dict=True,
+            medusa_choices=args.medusa_choices)
+        torch.cuda.synchronize()
+
+    if args.streaming:
+        for curr_outputs in throttle_generator(outputs,
+                                               args.streaming_interval):
+            if runtime_rank == 0:
+                output_ids = curr_outputs['output_ids']
+                sequence_lengths = curr_outputs['sequence_lengths']
+                print_output(tokenizer,
+                             output_ids,
+                             input_lengths,
+                             sequence_lengths,
+                             output_csv=args.output_csv,
+                             output_npy=args.output_npy)
     else:
-        input_lengths = torch.tensor(
-            [len(x) for x in input_tokens],
-            device="cuda",
-            dtype=torch.int32
+        if runtime_rank == 0:
+            output_ids = outputs['output_ids']
+            sequence_lengths = outputs['sequence_lengths']
+            context_logits = None
+            generation_logits = None
+            if runner.gather_context_logits:
+                context_logits = outputs['context_logits']
+            if runner.gather_generation_logits:
+                generation_logits = outputs['generation_logits']
+            print_output(tokenizer,
+                         output_ids,
+                         input_lengths,
+                         sequence_lengths,
+                         output_csv=args.output_csv,
+                         output_npy=args.output_npy,
+                         context_logits=context_logits,
+                         generation_logits=generation_logits,
+                         output_logits_npy=args.output_logits_npy)
+
+    if args.run_profiling:
+        ite = 10
+        # warmup
+        for _ in range(ite):
+            with torch.no_grad():
+                outputs = runner.generate(
+                    batch_input_ids,
+                    max_new_tokens=args.max_output_len,
+                    max_attention_window_size=args.max_attention_window_size,
+                    end_id=end_id,
+                    pad_id=pad_id,
+                    temperature=args.temperature,
+                    top_k=args.top_k,
+                    top_p=args.top_p,
+                    num_beams=args.num_beams,
+                    length_penalty=args.length_penalty,
+                    repetition_penalty=args.repetition_penalty,
+                    presence_penalty=args.presence_penalty,
+                    frequency_penalty=args.frequency_penalty,
+                    stop_words_list=stop_words_list,
+                    bad_words_list=bad_words_list,
+                    lora_uids=args.lora_task_uids,
+                    prompt_table_path=args.prompt_table_path,
+                    prompt_tasks=args.prompt_tasks,
+                    streaming=args.streaming,
+                    output_sequence_lengths=True,
+                    return_dict=True)
+                torch.cuda.synchronize()
+
+        tensorrt_llm.profiler.start("tmp")
+        for _ in range(ite):
+            with torch.no_grad():
+                outputs = runner.generate(
+                    batch_input_ids,
+                    max_new_tokens=args.max_output_len,
+                    max_attention_window_size=args.max_attention_window_size,
+                    end_id=end_id,
+                    pad_id=pad_id,
+                    temperature=args.temperature,
+                    top_k=args.top_k,
+                    top_p=args.top_p,
+                    num_beams=args.num_beams,
+                    length_penalty=args.length_penalty,
+                    repetition_penalty=args.repetition_penalty,
+                    presence_penalty=args.presence_penalty,
+                    frequency_penalty=args.frequency_penalty,
+                    stop_words_list=stop_words_list,
+                    bad_words_list=bad_words_list,
+                    lora_uids=args.lora_task_uids,
+                    prompt_table_path=args.prompt_table_path,
+                    prompt_tasks=args.prompt_tasks,
+                    streaming=args.streaming,
+                    output_sequence_lengths=True,
+                    return_dict=True)
+                torch.cuda.synchronize()
+        tensorrt_llm.profiler.stop("tmp")
+
+        print(
+            f"batch_size: {len(batch_input_ids)}, avg latency of {ite} iterations: : {tensorrt_llm.profiler.elapsed_time_in_sec('tmp') / ite} sec"
         )
-        if remove_input_padding:
-            input_ids = np.concatenate(input_tokens)
-            input_ids = torch.tensor(
-                input_ids, device="cuda", dtype=torch.int32
-            ).unsqueeze(0)
-        else:
-            input_ids = torch.nested.to_padded_tensor(
-                torch.nested.nested_tensor(input_tokens, dtype=torch.int32),
-                eos_token_id).cuda()
-
-    max_input_length = torch.max(input_lengths).item()
-    max_new_tokens = min(
-        max_new_tokens,
-        default_config.max_input_len + default_config.max_new_tokens - max_input_length
-    )
-    decoder.setup(
-        batch_size=input_lengths.size(0),
-        max_context_length=max_input_length,
-        max_new_tokens=max_new_tokens
-    )
-
-    output_ids = decoder.decode(input_ids, input_lengths, sampling_config)
-    torch.cuda.synchronize()
-
-    if runtime_rank == 0:
-        if output_csv is None and output_npy is None:
-            for b in range(input_lengths.size(0)):
-                inputs = input_tokens[b]
-                input_text = tokenizer.decode(inputs)
-                print(f'Input: \"{input_text}\"')
-                if num_beams <= 1:
-                    # outputs = output_ids[b][0].tolist()
-                    # output_text = _decode_chatml(
-                    #     outputs,
-                    #     stop_words=[],
-                    #     eod_token_ids=[tokenizer.im_start_id, tokenizer.im_end_id],
-                    #     tokenizer=tokenizer,
-                    #     raw_text_len=len(input_text),
-                    #     context_length=len(inputs)
-                    # )
-                    outputs = output_ids[b][0, len(inputs): ].tolist()
-                    output_text = tokenizer.decode(outputs, skip_special_tokens=True)
-                    print(f'Output: \"{output_text}\"')
-                else:
-                    for beam in range(num_beams):
-                        # outputs = output_ids[b][beam].tolist()
-                        # output_text = _decode_chatml(
-                        #     outputs,
-                        #     stop_words=[],
-                        #     eod_token_ids=[tokenizer.im_start_id, tokenizer.im_end_id],
-                        #     tokenizer=tokenizer,
-                        #     raw_text_len=len(input_text),
-                        #     context_length=len(inputs)
-                        # )
-                        outputs = output_ids[b][beam, len(inputs): ].tolist()
-                        output_text = tokenizer.decode(outputs, skip_special_tokens=True)
-                        print(f'Output(beam: {beam}): \"{output_text}\"')
-
-        output_ids = output_ids.reshape((-1, output_ids.size(2)))
-
-        if output_csv is not None:
-            output_file = Path(output_csv)
-            output_file.parent.mkdir(exist_ok=True, parents=True)
-            outputs = output_ids.tolist()
-            with open(output_file, 'w') as csv_file:
-                writer = csv.writer(csv_file, delimiter=',')
-                writer.writerows(outputs)
-
-        if output_npy is not None:
-            output_file = Path(output_npy)
-            output_file.parent.mkdir(exist_ok=True, parents=True)
-            outputs = np.array(output_ids.cpu().contiguous(), dtype='int32')
-            np.save(output_file, outputs)
-    return
 
 
 if __name__ == '__main__':
     args = parse_arguments()
-    generate(**vars(args))
+    main(args)

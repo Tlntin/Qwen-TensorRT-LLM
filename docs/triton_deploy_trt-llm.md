@@ -1,50 +1,31 @@
-# Triton23.12部署TensorRT-LLM,实现http查询
+# Triton24.02 部署TensorRT-LLM,实现http查询
 
 ### 选择正确的环境
-1. 选择版本。查询nvidia[官方文档](https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html)，可以看到目前最新的容器是23.12。
+1. 选择版本。查询nvidia[官方文档](https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html)，可以看到目前最新的容器是24.02。
 - 在**NVIDIA Driver**这一行，它推荐的英伟达驱动版本是545以上，对于数据卡，可以适当降低。如果你是游戏卡，驱动版本没有545，也不想升级，那么建议至少不要低太多，比如535其实也可以。
-![020016f0975ebec6eae195bf77b61044.png](https://s2.loli.net/2024/03/08/anRjJh4AeIF6icf.png)
-- 在**Triton Inference Server**这一行，可以看到它内置了triton server版本是2.41，需要的TensorRT-LLM版本是0.7.0。
-![7ea2f2f9645f9019920a6704a91cd7c3.png](https://s2.loli.net/2024/03/08/Ou47LTKDyXidmS2.png)
+![38a9563ae5435516a18043d93494b7eb.png](https://s2.loli.net/2024/03/26/DhfQPWyKzsBndO3.png)
+- 在**Triton Inference Server**这一行，可以看到它内置了triton server版本是2.43，需要的TensorRT-LLM版本是0.8.0。
+![ed50e1a173903ea931e8103aecbe29fb.png](https://s2.loli.net/2024/03/26/NiZnRaT9rOUBGjs.png)
 2. 拉取镜像。进入[Nvidia镜像中心](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tritonserver/tags)找到tritonserver的镜像，选择和TensorRT-LLM（简称trtllm）有关的容器，然后拷贝镜像地址，最后使用`docker pull`来拉取该镜像。
-![8adef9e1313d515b8144b2813f20d582.png](https://s2.loli.net/2024/03/08/2x6Swubef9QAdCV.png)
+![9205bd0697f97ed061db52fd39994fa2.png](https://s2.loli.net/2024/03/26/v5JBQ6cSbdEGfiF.png)
 ```bash
-docker pull nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3
-```
-- 测试发现这个容器部署的时候会有问题，自己编译官方容器反而就可以，原因貌似是tritonserver目前只能用2.39而不能用2.41，参考[issues/246](https://github.com/triton-inference-server/tensorrtllm_backend/issues/246)，下面是编译命令。
-```bash
-git clone https://github.com/triton-inference-server/tensorrtllm_backend.git -b v0.7.0
-git lfs install
-git submodule update --init --recursive
-
-# Use the Dockerfile to build the backend in a container
-# For x86_64
-DOCKER_BUILDKIT=1 docker build -t triton_trt_llm -f dockerfile/Dockerfile.trt_llm_backend .
-# For aarch64
-DOCKER_BUILDKIT=1 docker build -t triton_trt_llm --build-arg TORCH_INSTALL_TYPE="src_non_cxx11_abi" -f dockerfile/Dockerfile.trt_llm_backend .
-
-# tag
-docker tag triton_trt_llm triton_trt_llm:v0.7.0
-
-# 回到上一层目录
-cd ..
+docker pull nvcr.io/nvidia/tritonserver:24.02-trtllm-python-py3
 ```
 3. 拉取TensorRT-LLM的项目。
-- 可以选择官方项目，但是注意要是v0.7.0
+- 可以选择官方项目，但是注意要是v0.8.0
 ```bash
-git clone https://github.com/NVIDIA/TensorRT-LLM.git -b v0.7.0
+git clone https://github.com/NVIDIA/TensorRT-LLM.git -b v0.8.0
 ```
-- 也可以选择我的项目，目前main分支就是0.7.0，后续可能会打成tag，建议实际访问项目地址，查看是否有0.7.0的tag。
+- 也可以选择我的项目，目前main分支就是0.8.0，后续可能会打成tag，建议实际访问项目地址，查看是否有0.8.0的tag。
 ```bash
-git clone https://github.com/Tlntin/Qwen-TensorRT-LLM -b v0.7.0
+git clone https://github.com/Tlntin/Qwen-TensorRT-LLM
 ```
 - 下面演示是以我的项目为主，在triton_server上面部署Qwen-1.8B-Chat（毕竟这个模型比较小）
-4. 拉取tensorrtllm_backend。这个是用来编排tensorrt-llm服务的，需要和TensorRT-LLM版本一致，这里同样选择0.7.0（第二步如果是手动编译的容器，就可以省略该步骤）
+4. 拉取tensorrtllm_backend。这个是用来编排tensorrt-llm服务的，需要和TensorRT-LLM版本一致，这里同样选择0.8.0
 ```bash
-git clone https://github.com/triton-inference-server/tensorrtllm_backend.git -b v0.7.0
+git clone https://github.com/triton-inference-server/tensorrtllm_backend.git -b v0.8.0
 ```
 5. 启动tritonserver容器
-- 如果用官方镜像（目前有bug，部署不了）
 ```bash
 docker run -d \
     --name triton \
@@ -54,22 +35,10 @@ docker run -d \
     --ulimit stack=67108864 \
     --gpus all \
     -v ${PWD}/tensorrtllm_backend:/tensorrtllm_backend \
-    -v ${PWD}/Qwen-TensorRT-LLM/examples/qwen:/root/qwen \
-    nvcr.io/nvidia/tritonserver:23.12-trtllm-python-py3 sleep 864000
+    -v ${PWD}/Qwen-TensorRT-LLM/examples:/root/examples \
+    nvcr.io/nvidia/tritonserver:24.02-trtllm-python-py3 sleep 864000
 ```
-- 如果是自己编译的镜像
-```bash
-docker run -d \
-    --name triton \
-    --net host \
-    --shm-size=2g \
-    --ulimit memlock=-1 \
-    --ulimit stack=67108864 \
-    --gpus all \
-    -v ${PWD}/tensorrtllm_backend:/tensorrtllm_backend \
-    -v ${PWD}/Qwen-TensorRT-LLM/examples/qwen:/root/qwen \
-    triton_trt_llm:v0.7.0 sleep 864000
-```
+
 6. 检查服务
 - 进入容器
 ```bash
@@ -79,26 +48,22 @@ docker exec -it triton /bin/bash
 ```bash
 nvidia-smi
 ```
-- 检查tritonserver版本，至少和上面提到的一样，是2.39（自己编译的容器是2.39）
+- 检查tritonserver版本，至少和上面提到的一样，是2.43
 ```bash
 cat /opt/tritonserver/TRITON_VERSION
 ```
-- 检查tensorrtllm_backend版本，该数值必须和官方github仓库的0.7.0版本的tool/version.txt文件内容一致，[官方仓库链接](https://github.com/triton-inference-server/tensorrtllm_backend/blob/v0.7.0/tools/version.txt)
+- 检查tensorrtllm_backend版本，该数值必须和官方github仓库的0.8.0版本的tool/version.txt文件内容一致，[官方仓库链接](https://github.com/triton-inference-server/tensorrtllm_backend/blob/v0.8.0/tools/version.txt)
 ```bash
 cat /tensorrtllm_backend/tools/version.txt
 ```
-7. 安装git-lfs，然后克隆代码（如果是自己编译的容器，这步可以省略）
+<!-- 7. 安装git-lfs，然后克隆代码（如果是自己编译的容器，这步可以省略）
 ```bash
 apt update
 apt install git-lfs
-```
-8. 安装pytorch2.1.0，目前还不支持2.2。
+``` -->
+7. 直接通过pip安装TensorRT-LLM （如果是自己编译的容器，这步可以省略）
 ```bash
-pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu121
-```
-9. 直接通过pip安装TensorRT-LLM （如果是自己编译的容器，这步可以省略）
-```bash
-pip install tensorrt_llm==0.7.0 --extra-index-url https://pypi.nvidia.com --extra-index-url https://download.pytorch.org/whl/cu121
+pip install tensorrt_llm==0.8.0 --extra-index-url https://pypi.nvidia.com --extra-index-url https://download.pytorch.org/whl/cu121
 ```
 
 
@@ -118,21 +83,12 @@ cd /root/qwen
 ```bash
 pip install -r requirements.txt
 ```
-- 转smooth int8 权重
-```bash
-python3 hf_qwen_convert.py --smoothquant=0.5
-```
-- 编译(防止显存不足，暂时将最大输入输出设置为2048)
+- 编译，下面是fp16部署的简单示例，设置batch_size=2，开启paged_kv_cache，方便部署inflight-batching
 ```bash
 python3 build.py \
-	--use_smooth_quant \
-	--per_token \
-	--per_channel \
-	--use_inflight_batching \
 	--paged_kv_cache \
 	--remove_input_padding \
-	--max_input_len 2048 \
-	--max_new_tokens 2048
+	--max_batch_size=2
 ```
 - 运行一下做个测试
 ```bash
@@ -140,8 +96,8 @@ python3 run.py
 ```
 
 ### 部署Triton
-- 参考tensorrtllm_backend 0.7.0的[readme](https://github.com/triton-inference-server/tensorrtllm_backend/tree/v0.7.0)
-- 同时参考llama的[详细部署教程](https://github.com/triton-inference-server/tensorrtllm_backend/blob/v0.7.0/docs/llama.md)
+- 参考tensorrtllm_backend 0.8.0的[readme](https://github.com/triton-inference-server/tensorrtllm_backend/tree/v0.8.0)
+- 同时参考llama的[详细部署教程](https://github.com/triton-inference-server/tensorrtllm_backend/blob/v0.8.0/docs/llama.md)
 1. 进入容器
 ```bash
 docker exec -it triton /bin/bash
@@ -149,60 +105,53 @@ docker exec -it triton /bin/bash
 2. 构建好目录
 ```bash
 cd /tensorrtllm_backend
-mkdir triton_model_repo
+cp all_models/inflight_batcher_llm/ -r triton_model_repo
 ```
-3.  复制上一部分编译好的Engine文件
+3.  复制上一部分编译好的Engine文件，复制完后需要做修改`/tensorrtllm_backend/triton_model_repo/tensorrt_llm/1/config.json`，将里面的`max_output_len`的数值换成`new_token_len`对应的数值，以当前项目为例，需要将6144换成2048，否则报错。
 ```bash
-cd /root/qwen/trt_engines/fp16/1-gpu/
+cd /root/examples/qwen2/trt_engines/fp16/1-gpu/
 cp -r ./* /tensorrtllm_backend/triton_model_repo/tensorrt_llm/1/
 ```
 4. 复制tokenzer文件
 ```bash
-cd /root/qwen/
-cp -r qwen_7b_chat /tensorrtllm_backend/triton_model_repo/tensorrt_llm/
+cd /root/examples/qwen2
+cp -r qwen1.5_7b_chat /tensorrtllm_backend/triton_model_repo/tensorrt_llm/
 
 # 删除tokenizer目录的Huggingface模型文件（可选）
-rm /tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen_7b_chat/*.safetensors
+rm /tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen1.5_7b_chat/*.safetensors
 ```
-5. 编写Triton中的预处理配置和后处理配置， 修改`triton_model_repo/preprocessing/config.pbtxt`文件和`triton_model_repo/postprocessing/config.pbtxt`文件
-- 修改前
-```pbtxt
-parameters {
-  key: "tokenizer_dir"
-  value: {
-	string_value: "${tokenizer_dir}"
-  }
-}
+5. 编写Triton中的预处理配置和后处理配置， 参考[文档](https://github.com/triton-inference-server/tensorrtllm_backend/blob/v0.8.0/docs/llama.md)
+```bash
+cd /tensorrtllm_backend
+export HF_QWEN_MODEL="/tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen1.5_7b_chat"
+export ENGINE_DIR="/tensorrtllm_backend/triton_model_repo/tensorrt_llm/1"
+export MAX_BATCH_SIZE=2
+export TOKENIZE_TYPE=auto
+# 根据cpu线程数定，一般为batch_size的2倍数或者cpu线程的一半
+export INSTANCE_COUNT=4
+# 我就一张卡，你可以指定用那些卡，用逗号隔开
+export GPU_DEVICE_IDS=0
 
-parameters {
-  key: "tokenizer_type"
-  value: {
-	string_value: "${tokenizer_type}"
-  }
-}
-```
-- 修改后
-```pbtxt
-parameters {
-  key: "tokenizer_dir"
-  value: {
-	string_value: "/tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen_7b_chat"
-  }
-}
 
-parameters {
-  key: "tokenizer_type"
-  value: {
-	string_value: "auto"
-  }
-}
+python3 tools/fill_template.py -i triton_model_repo/preprocessing/config.pbtxt tokenizer_dir:${HF_QWEN_MODEL},tokenizer_type:${TOKENIZE_TYPE},triton_max_batch_size:${MAX_BATCH_SIZE},preprocessing_instance_count:${INSTANCE_COUNT}
+
+python3 tools/fill_template.py -i triton_model_repo/postprocessing/config.pbtxt tokenizer_dir:${HF_QWEN_MODEL},tokenizer_type:${TOKENIZE_TYPE},triton_max_batch_size:${MAX_BATCH_SIZE},postprocessing_instance_count:${INSTANCE_COUNT}
+
+python3 tools/fill_template.py -i triton_model_repo/tensorrt_llm_bls/config.pbtxt triton_max_batch_size:${MAX_BATCH_SIZE},decoupled_mode:False,bls_instance_count:${INSTANCE_COUNT},accumulate_tokens:True
+
+python3 tools/fill_template.py -i triton_model_repo/ensemble/config.pbtxt triton_max_batch_size:${MAX_BATCH_SIZE}
+
+python3 tools/fill_template.py -i triton_model_repo/tensorrt_llm/config.pbtxt triton_max_batch_size:${MAX_BATCH_SIZE},decoupled_mode:True,max_beam_width:1,engine_dir:${ENGINE_DIR},exclude_input_in_output:True,enable_kv_cache_reuse:False,batching_strategy:inflight_batching,max_queue_delay_microseconds:600,gpu_device_ids:${GPU_DEVICE_IDS}
 ```
+
 6. 简单修改一下preprocess/postprocess的model.py的initialize函数，示例是llama的，我们要改成qwen的tokenizer配置。
-- 修改前：
+- 修改前（preprocessing有三行，postprocessing只有一行）：
 ```python
 self.tokenizer.pad_token = self.tokenizer.eos_token
-self.pad_id = self.tokenizer.encode(self.tokenizer.pad_token,
-                                            add_special_tokens=False)[0]
+self.tokenizer_end_id = self.tokenizer.encode(
+    self.tokenizer.eos_token, add_special_tokens=False)[0]
+self.tokenizer_pad_id = self.tokenizer.encode(
+    self.tokenizer.pad_token, add_special_tokens=False)[0]
 ```
 - 修改后
 ```bash
@@ -211,20 +160,20 @@ import os
 
 gen_config_path = os.path.join(tokenizer_dir, 'generation_config.json')
 with open(gen_config_path, 'r') as f:
-    gen_config = json.load(f)
-chat_format = gen_config['chat_format']
-if chat_format == "raw":
-    self.eos_id = gen_config['eos_token_id']
-    self.pad_id = gen_config['pad_token_id']
-elif chat_format == "chatml":
-    self.pad_id = self.eos_id = self.tokenizer.im_end_id
+	gen_config = json.load(f)
+if isinstance (gen_config["eos_token_id"], list)
+	pad_id = end_id = gen_config["eos_token_id"][0]
+### if model type is base, run this branch
 else:
-    raise Exception("unkown chat format ", chat_format)
-eos_token = self.tokenizer.decode(self.eos_id)
+	pad_id = gen_config["bos_token_id"]
+	end_id = gen_config["eos_token_id"]
+self.tokenizer_pad_id = pad_id
+self.tokenizer_end_id = end_id
+eos_token = self.tokenizer.decode(end_id)
 self.tokenizer.eos_token = self.tokenizer.pad_token = eos_token
 ```
-7. 然后，参考tensorrtllm_backend 0.7.0的[readme](https://github.com/triton-inference-server/tensorrtllm_backend/tree/v0.7.0)，将表格里面的变量填好，比如batch_size,是否开启流等，每个版本略有不同，可以自行斟酌，此处不再过多论述。（注：`triton_max_batch_size`最低应为4；`decoupled_mode`建议设置为true；`gpt_model_path`设置为Engine的路径，也就是/tensorrtllm_backend/triton_model_repo/tensorrt_llm/1；`gpt_model_type`设置为V1用于开启inflight-batching；`preprocessing_instance_count`和`postprocessing_instance_count`为分词的时候用多少个CPU核心，可以设置为你的CPU核心数；`max_queue_delay_microseconds`队列最大延迟微秒可以设置为1000，这个参数貌似是间隔多久才返回请求给客户端的；`bls_instance_count`同样可以根据cpu核心数设置。`exclude_input_in_output`设置为true,也就是返回时排除输入。）
-8. 启动服务
+
+7. 启动服务
 ```bash
 cd /tensorrtllm_backend
 python3 scripts/launch_triton_server.py --world_size=1 --model_repo=/tensorrtllm_backend/triton_model_repo
@@ -249,8 +198,8 @@ pip install tritonclient transformers gevent geventhttpclient tiktoken grpcio
 ```
 2. 运行`qwen/triton_client/inflight_batcher_llm_client.py`文件即可开启
 ```bash
-cd /root/qwen/triton_client
-python3 inflight_batcher_llm_client.py
+cd /root/examples/triton_client
+python3 inflight_batcher_llm_client.py --tokenizer_dir=/tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen1.5_7b_chat
 ```
 
 3. 测试结果

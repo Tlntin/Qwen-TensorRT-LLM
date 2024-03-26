@@ -1,11 +1,11 @@
 datasets~=2.3.2
 rouge_score~=0.1.2
-# transformers~=4.31.0  # tensorrt-llm has installed
+# transformers~=4.37.0  # tensorrt-llm has installed
 transformers-stream-generator
 sentencepiece~=0.1.99
 tiktoken
 einops
-
+tensorrt_llm==0.8.0
 # optional dependencies
 uvicorn
 gradio==3.40.1
