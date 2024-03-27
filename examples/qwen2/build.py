@@ -788,6 +788,7 @@ def build_rank_engine(
 
     # Network -> Engine
     pretrained_config = PretrainedConfig.from_dict(pretrained_config_dict)
+    pretrained_config.set_rank(rank)
     plugin_config = PluginConfig.from_arguments(args)
     build_config = BuildConfig.from_dict(
         {
