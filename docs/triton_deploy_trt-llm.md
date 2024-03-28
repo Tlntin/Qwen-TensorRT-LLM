@@ -107,7 +107,7 @@ docker exec -it triton /bin/bash
 cd /tensorrtllm_backend
 cp all_models/inflight_batcher_llm/ -r triton_model_repo
 ```
-3.  复制上一部分编译好的Engine文件，复制完后需要做修改`/tensorrtllm_backend/triton_model_repo/tensorrt_llm/1/config.json`，将里面的`max_output_len`的数值换成`new_token_len`对应的数值，以当前项目为例，需要将6144换成2048，否则报错。
+3.  复制上一部分编译好的Engine文件。
 ```bash
 cd /root/examples/qwen2/trt_engines/fp16/1-gpu/
 cp -r ./* /tensorrtllm_backend/triton_model_repo/tensorrt_llm/1/
