@@ -25,7 +25,7 @@ class DefaultConfig:
     # Maximum number of generate new tokens.
     max_new_tokens = 2048
 
-    max_output_len =  max_input_len + max_new_tokens
+    max_output_len = max_new_tokens
 
     # Top p for sampling.
     top_p = 0.8

@@ -193,6 +193,7 @@ def parse_arguments():
     parser.add_argument("--ffn_dim_multiplier", type=int, default=1)
     parser.add_argument("--inter_size", type=int, default=11008)
     parser.add_argument("--hidden_act", type=str, default="silu")
+    parser.add_argument('--rms_norm_eps', type=float, default=1e-06)
     parser.add_argument("--seq_length", type=int, default=8192)
     parser.add_argument(
         "--max_batch_size", type=int, default=default_config.trt_max_batch_size
@@ -528,7 +529,7 @@ def build_rank_engine(
         'hidden_act': args.hidden_act,
         'rotary_base': args.rotary_base,
         'rotary_scaling': args.rotary_scaling,
-        # 'norm_epsilon': args.rms_norm_eps,
+        'norm_epsilon': args.rms_norm_eps,
         'quantization': {
             'quant_algo': None,
             'kv_cache_quant_algo': None,
@@ -592,6 +593,7 @@ def build_rank_engine(
         rotary_scaling=args.rotary_scaling,
         use_parallel_embedding=args.use_parallel_embedding,
         embedding_sharding_dim=args.embedding_sharding_dim,
+        rms_norm_eps=args.rms_norm_eps,
         quant_mode=args.quant_mode,
         custom_plugin_paths=custom_plugin_paths,
         use_prompt_tuning=args.max_prompt_embedding_table_size > 0,
@@ -768,7 +770,7 @@ def build_rank_engine(
         inputs = tensorrt_llm_qwen.prepare_inputs(
             max_batch_size=args.max_batch_size,
             max_input_len=args.max_input_len,
-            max_output_len=args.max_output_len,
+            max_output_len=args.max_input_len + args.max_output_len,
             use_cache=True,
             max_beam_width=args.max_beam_width,
             max_num_tokens=args.max_num_tokens,
@@ -793,7 +795,7 @@ def build_rank_engine(
     build_config = BuildConfig.from_dict(
         {
             'max_input_len': args.max_input_len,
-            'max_output_len': args.max_output_len - args.max_input_len,
+            'max_output_len': args.max_output_len,
             'max_batch_size': args.max_batch_size,
             'max_beam_width': args.max_beam_width,
             'max_num_tokens': args.max_num_tokens,
