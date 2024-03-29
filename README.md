@@ -33,6 +33,9 @@
 
 - [Triton23.12部署TensorRT-LLM,实现http查询](./docs/triton_deploy_trt-llm.md)
 
+## 微信交流群
+![wechat_group](images/wechat-code.jpg)
+
 
 
 ### 软硬件要求
