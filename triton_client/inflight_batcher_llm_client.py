@@ -25,6 +25,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import argparse
+import torch
 import queue
 import sys
 import time
@@ -44,8 +45,6 @@ from tritonclient.utils import InferenceServerException, np_to_triton_dtype
 now_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(now_dir)
 sys.path.append(parent_dir)
-
-from utils.utils import make_context
 #
 # Simple streaming client for TRT-LLM inflight bacthing backend
 #
@@ -252,8 +251,12 @@ if __name__ == "__main__":
     parser.add_argument('--tokenizer_dir',
                         type=str,
                         required=False,
-                        default=os.path.join(parent_dir, "qwen_7b_chat"),
+                        default=os.path.join(parent_dir, "examples",  "qwen2", "qwen1.5_7b_chat"),
                         help='Specify tokenizer directory')
+    parser.add_argument('--max_input_length',
+                        type=str,
+                        required=False,
+                        default=6144)
     parser.add_argument('--tokenizer_type',
                         type=str,
                         default='auto',
@@ -271,10 +274,10 @@ if __name__ == "__main__":
     print("欢迎使用Qwen聊天机器人，输入exit退出，输入clear清空历史记录")
     print('=' * 20)
     while True:
-        query = input("Human: ")
-        if query == 'exit' or query == "exit()":
+        use_query = input("Human: ")
+        if use_query == 'exit' or use_query == "exit()":
             break
-        if query == 'clear':
+        if use_query == 'clear':
             history1 = []
             continue
         if FLAGS.tokenizer_type == 't5':
@@ -296,35 +299,44 @@ if __name__ == "__main__":
         # tokenizer.pad_token = tokenizer.eos_token
         # pad_id = tokenizer.encode(tokenizer.pad_token, add_special_tokens=False)[0]
         # end_id = tokenizer.encode(tokenizer.eos_token, add_special_tokens=False)[0]
+        system_text: str = "You are a helpful assistant."
         gen_config_path = os.path.join(FLAGS.tokenizer_dir, 'generation_config.json')
         with open(gen_config_path, 'r') as f:
             gen_config = json.load(f)
-        chat_format = gen_config['chat_format']
-        if chat_format == "raw":
-            eos_id = gen_config['eos_token_id']
-            pad_id = gen_config['pad_token_id']
-        elif chat_format == "chatml":
-            pad_id = eos_id = tokenizer.im_end_id
+        ### if model type is chat pad_id = end_id = gen_config["eos_token_id"][0]
+        if isinstance (gen_config["eos_token_id"], list):
+            pad_id = end_id = gen_config["eos_token_id"][0]
+        ### if model type is base, run this branch
         else:
-            raise Exception("unkown chat format ", chat_format)
-        eos_token = tokenizer.decode(eos_id)
-        tokenizer.eos_token = eos_token
-        tokenizer.pad_token = eos_token
-        raw_text, input_id_list = make_context(
-            tokenizer=tokenizer,
-            query=query,
-            history=history1,
+            pad_id = gen_config["bos_token_id"]
+            end_id = gen_config["eos_token_id"]
+        messages = [
+            {"role": "system", "content": system_text},
+        ]
+        for (old_query, old_response) in history1:
+            messages.append(
+                {"role": "user", "content": old_query}
+            )
+            messages.append(
+                {"role": "assistant", "content": old_response}
+            )
+        messages.append({"role": "user", "content": use_query})
+        text = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
         )
+        input_ids = tokenizer([text], return_tensors="pt").input_ids
+        input_ids = input_ids[:, -FLAGS.max_input_length:].type(torch.int32)
         # print("raw_text", raw_text)
         # input_ids = [tokenizer.encode(FLAGS.text)]
-        input_ids = [input_id_list]
         # print("input_lenght", len(input_ids[0]))
-        input_ids_data = np.array(input_ids, dtype=np.int32)
+        input_ids_data = input_ids.numpy()
         input_lengths = [[len(ii)] for ii in input_ids]
         input_lengths_data = np.array(input_lengths, dtype=np.int32)
         request_output_len = [[FLAGS.request_output_len]]
         request_output_len_data = np.array(request_output_len, dtype=np.int32)
-        eos_ids = [[eos_id]]
+        eos_ids = [[end_id]]
         end_id_data = np.array(eos_ids, dtype=np.int32)
         pad_ids = [[pad_id]]
         pad_id_data = np.array(pad_ids, dtype=np.int32)
@@ -357,7 +369,7 @@ if __name__ == "__main__":
         request_id = FLAGS.request_id
 
         if FLAGS.streaming:
-            actual_output_ids = [input_ids[0]]
+            actual_output_ids = [input_ids[0].numpy().tolist()]
         else:
             actual_output_ids = []
 
@@ -421,8 +433,7 @@ if __name__ == "__main__":
                                     tokens = list(output_ids[0][0])
                                     # text = tokenizer.decode(tokens, skip_special_tokens=True)
                                     # print(text, flush=True, end="")
-                                    actual_output_ids[
-                                        0] = actual_output_ids[0] + tokens
+                                    actual_output_ids[0] = actual_output_ids[0] + tokens
                                 else:
                                     for beam_output_ids in output_ids[0]:
                                         tokens = list(beam_output_ids)
@@ -486,5 +497,5 @@ if __name__ == "__main__":
                 print(response)
             else:
                 print("")
-            history1.append((query, response["response"]))
+            history1.append((use_query, response["response"]))
             # sys.exit(not passed)

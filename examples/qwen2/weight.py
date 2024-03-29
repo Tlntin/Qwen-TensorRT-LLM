@@ -1186,7 +1186,9 @@ def load_from_awq_qwen(
             x_bias = torch_split(x_bias, dim=0)
             qkv_bias_list.append(x_bias)
         qkv_bias = torch.cat(qkv_bias_list, dim=0)
-        layer.self_attn.qkv.bias.value = np.ascontiguousarray(qkv_bias.numpy())
+        layer.self_attn.qkv.bias.value = np.ascontiguousarray(
+            qkv_bias.to(torch_dtype).cpu().numpy()
+        )
 
         # 4.2 attention.dense
         v = [load(prefix + awq_key_list[5] + suf) for suf in awq_suffix_list]
