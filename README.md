@@ -27,7 +27,7 @@
 
   <a href="https://www.bilibili.com/video/BV12M411D7uS/"><img src="images/course.png" alt="bilibili"></a>
 
-- 本项目配套博客适配概述：[如何在 NVIDIA TensorRT-LLM 中支持 Qwen 模型](https://developer.nvidia.com/zh-cn/blog/qwen2-model-support-nvidia-tensorrt-llm)
+- 本项目配套博客适配概述：[如何在 NVIDIA TensorRT-LLM 中支持 Qwen 模型](https://developer.nvidia.com/zh-cn/blog/qwen-model-support-nvidia-tensorrt-llm)
 
 - [TensorRT-LLM的模型量化：实现与性能科普视频](https://www.bilibili.com/video/BV1Pw411h7nM/?spm=a2c22.12281976.0.0.6ee62084utHBCm)
 
