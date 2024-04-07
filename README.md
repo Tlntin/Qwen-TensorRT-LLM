@@ -31,7 +31,7 @@
 
 - [TensorRT-LLM的模型量化：实现与性能科普视频](https://www.bilibili.com/video/BV1Pw411h7nM/?spm=a2c22.12281976.0.0.6ee62084utHBCm)
 
-- [Triton23.12部署TensorRT-LLM,实现http查询](./docs/triton_deploy_trt-llm.md)
+- [Triton24.02部署TensorRT-LLM,实现http查询](./docs/triton_deploy_trt-llm.md)
 
 ## 微信交流群
 ![wechat_group](images/wechat-code.jpg)
@@ -241,7 +241,7 @@
       docker pull nvcr.io/nvidia/tritonserver:24.02-trtllm-python-py3
       ```
     
-    - AutoDL镜像，不含triton，版本为0.6.1，无卡用户可以体验玩玩，[链接](https://www.codewithgpu.com/i/NVIDIA/TensorRT-LLM/tensorrt_llm)，需要搭配0.6.1的tensorrt_llm和本项目v0.6.1分支的代码。
+    - **对于Windows用户想体验tritonserver部署的，或者无GPU的用户，可以使用AutoDL镜像，含tritonserver，版本为24.02（对应tensorrt_llm 0.8.0)，[链接](https://www.codewithgpu.com/i/triton-inference-server/tensorrtllm_backend/tensorrtllm_backend)，注：该链接包含完整编译教程。**
       
     
 2. 拉取本项目代码
