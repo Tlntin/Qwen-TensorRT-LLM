@@ -127,7 +127,7 @@ class Qwen2ForCausalLMGenerationSession(GenerationSession):
         max_input_length = torch.max(input_lengths).item()
         max_new_tokens = min(
             max_new_tokens,
-            self.global_max_output_length - max_input_length
+            self.global_max_output_length
         )
         # setup batch_size, max_input_length, max_output_len
         self.setup(
