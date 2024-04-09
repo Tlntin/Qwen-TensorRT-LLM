@@ -434,7 +434,7 @@ python build.py --use_weight_only \
 ```
 - 运行模型，这里需要指定一下tokenizer路径
 ```bash
-python3 run.py --tokenizer_dir=Qwen-1_8B-Chat-Int4
+python3 run.py --tokenizer_dir=Qwen1.5-32B-Chat-GPTQ-Int4
 ```
 
 ### 运行指南（int4-awq篇）
