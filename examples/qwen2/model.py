@@ -223,7 +223,7 @@ class QWen2Attention(Module):
             hidden_size,
             num_attention_heads,
             max_position_embeddings,
-            num_kv_heads=None,
+            num_kv_heads,
             num_layers=1,
             apply_query_key_layer_scaling=False,
             attention_mask_type=AttentionMaskType.causal,
@@ -274,8 +274,8 @@ class QWen2Attention(Module):
         self.attention_head_size = hidden_size // num_attention_heads
         self.num_attention_heads = num_attention_heads // tp_size
         self.num_attention_kv_heads = (
-                                              num_kv_heads + tp_size - 1
-                                      ) // tp_size if num_kv_heads is not None else self.num_attention_heads
+            num_kv_heads + tp_size - 1
+        ) // tp_size if num_kv_heads is not None else self.num_attention_heads
         self.hidden_size = hidden_size // tp_size
         self.max_position_embeddings = max_position_embeddings
 
@@ -346,7 +346,7 @@ class QWen2Attention(Module):
                                       tp_size=tp_size)
         else:
             self.qkv = ColumnLinear(hidden_size,
-                                    hidden_size +
+                                    tp_size * self.num_attention_heads * self.attention_head_size +
                                     (2 * tp_size * self.num_attention_kv_heads *
                                      self.attention_head_size),
                                     bias=True,
@@ -488,6 +488,7 @@ class Qwen2DecoderLayer(Module):
             hidden_size,
             num_attention_heads,
             max_position_embeddings,
+            num_kv_heads,
             num_layers,
             dtype=None,
             attention_mask_type=AttentionMaskType.causal,
@@ -540,6 +541,7 @@ class Qwen2DecoderLayer(Module):
             hidden_size=self.hidden_size,
             num_attention_heads=self.num_attention_heads,
             max_position_embeddings=self.max_position_embeddings,
+            num_kv_heads=num_kv_heads,
             num_layers=self.num_layers,
             dtype=self.dtype,
             attention_mask_type=self.attention_mask_type,
@@ -620,8 +622,9 @@ class QWen2Model(Module):
     def __init__(self,
                  num_layers,
                  num_heads,
+                 num_kv_heads,
                  hidden_size,
-                 seq_length,
+                 # seq_length,
                  vocab_size,
                  hidden_act,
                  max_position_embeddings,
@@ -674,6 +677,7 @@ class QWen2Model(Module):
                 layer_id=i,
                 hidden_size=hidden_size,
                 num_attention_heads=num_heads,
+                num_kv_heads=num_kv_heads,
                 num_layers=num_layers,
                 max_position_embeddings=max_position_embeddings,
                 dtype=dtype,
@@ -772,7 +776,7 @@ class Qwen2ForCausalLM(QWen2Model, GenerationMixin):
                  num_heads,
                  num_kv_heads,
                  hidden_size,
-                 seq_length,
+                 # seq_length,
                  vocab_size,
                  hidden_act,
                  max_position_embeddings,
@@ -828,8 +832,9 @@ class Qwen2ForCausalLM(QWen2Model, GenerationMixin):
         super().__init__(
             num_layers=num_layers,
             num_heads=num_heads,
+            num_kv_heads=num_kv_heads,
             hidden_size=hidden_size,
-            seq_length=seq_length,
+            # seq_length=seq_length,
             vocab_size=vocab_size,
             hidden_act=hidden_act,
             max_position_embeddings=max_position_embeddings,

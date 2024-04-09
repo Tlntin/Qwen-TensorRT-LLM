@@ -473,12 +473,6 @@ def parse_arguments():
     ), "QWen must use gpt attention plugin"
     if not args.gemm_plugin:
         print("wanring QWen should use gemm plugin")
-    if args.n_kv_head is not None and args.n_kv_head != args.n_head:
-        assert args.n_kv_head == args.world_size, (
-            "The current implementation of GQA requires the number of K/V heads to match the number of GPUs."
-            "This limitation will be removed in a future version."
-        )
-
     if args.dtype == "bfloat16":
         assert args.gemm_plugin, "Please use gemm plugin when dtype is bfloat16"
 
@@ -582,7 +576,7 @@ def build_rank_engine(
         num_heads=args.n_head,
         num_kv_heads=args.n_kv_head,
         hidden_size=args.n_embd,
-        seq_length=args.seq_length,
+        # seq_length=args.seq_length,
         vocab_size=args.vocab_size,
         hidden_act=args.hidden_act,
         max_position_embeddings=args.n_positions,

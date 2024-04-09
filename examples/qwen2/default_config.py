@@ -7,7 +7,7 @@ class DefaultConfig:
     tokenizer_dir = os.path.join(now_dir, "qwen1.5_7b_chat")
     int4_gptq_model_dir = os.path.join(now_dir, "qwen1.5_7b_chat_int4")
     ft_dir_path = os.path.join(now_dir, "c-model", "qwen1.5_7b_chat")
-    engine_dir=os.path.join(now_dir, "trt_engines", "fp16", "1-gpu")
+    engine_dir = os.path.join(now_dir, "trt_engines", "fp16", "1-gpu")
 
     # Maximum batch size for HF backend.
     hf_max_batch_size = 1
