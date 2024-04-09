@@ -536,6 +536,7 @@ def smooth_quantize(model, quant_mode, rmsnorm_quantization_plugin_dtype, custom
         layer.self_attn = SmoothQuantAttention(
             layer.hidden_size,
             layer.num_attention_heads,
+            num_kv_heads=layer.num_kv_heads,
             max_position_embeddings=layer.max_position_embeddings,
             # seq_length=layer.seq_length,
             num_layers=layer.num_layers,

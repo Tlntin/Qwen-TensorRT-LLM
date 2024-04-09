@@ -524,6 +524,7 @@ class Qwen2DecoderLayer(Module):
         self.tp_size = tp_size
         self.tp_rank = tp_rank
         self.num_attention_heads = num_attention_heads
+        self.num_kv_heads = num_kv_heads
         self.max_position_embeddings = max_position_embeddings
         self.num_layers = num_layers
         self.position_embedding_type = position_embedding_type
