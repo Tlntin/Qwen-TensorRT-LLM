@@ -165,12 +165,17 @@ def chat(query: str):
         for temp_dict in functions:
             if temp_dict["name"] == function_name:
                 require_params = temp_dict["parameters"]["required"]
-                require_params.sort()
+                # require_params.sort()
                 had_params = list(function_params.keys())
-                had_params.sort()
-                if had_params != require_params:
-                    # need to do other fill params
-                    return
+                # had_params.sort()
+                for param in had_params:
+                    if param not in require_params:
+                        del function_params[param]
+                # recompute
+                had_params = list(function_params.keys())
+                if len(had_params) != len(require_params):
+                    raise Exception("ERROR, need to do other fill params")
+                
 
                 response = eval(function_name)(**function_params)
                 message = {

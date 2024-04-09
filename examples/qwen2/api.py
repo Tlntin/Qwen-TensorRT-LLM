@@ -443,7 +443,7 @@ def parse_response(response):
 
 
 # completion mode, not chat mode
-def text_complete_last_message(history, stop_words_ids, sampling_config):
+def text_complete_last_message(history, stop_words_ids, sampling_config, max_new_tokens):
     im_start = "<|im_start|>"
     im_end = "<|im_end|>"
     prompt = f"{im_start}system\nYou are a helpful assistant.{im_end}"
@@ -468,7 +468,7 @@ def text_complete_last_message(history, stop_words_ids, sampling_config):
         sampling_config=sampling_config,
         max_new_tokens=min(
             default_config.max_new_tokens,
-            default_config.max_new_tokens - input_ids.shape[1]
+            max_new_tokens,
         ),
         stop_works_list=stop_words_ids,
     )
@@ -553,6 +553,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
             history,
             stop_words_ids=stop_words_ids,
             sampling_config=sampling_config,
+            max_new_tokens=max_new_tokens
         )
     else:
         query_text = query.lstrip("\n").strip()
