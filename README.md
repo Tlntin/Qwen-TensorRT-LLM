@@ -18,9 +18,9 @@
 
 ### 支持的模型：qwen2（推荐）/qwen（当前仅维护到0.7.0）/qwen-vl（当前仅维护到0.7.0）
 
-- base模型（实验性）：[Qwen1.5-0.5B](https://huggingface.co/Qwen/Qwen1.5-0.5B)、[Qwen1.5-1.8B](https://huggingface.co/Qwen/Qwen1.5-1.8B)、[Qwen1.5-4B](https://huggingface.co/Qwen/Qwen1.5-4B)、[Qwen1.5-7B](https://huggingface.co/Qwen/Qwen1.5-7B)、[Qwen1.5-14B](https://huggingface.co/Qwen/Qwen1.5-14B)、[Qwen1.5-72B](https://huggingface.co/Qwen/Qwen1.5-72B)、[QWen-VL](https://huggingface.co/Qwen/Qwen-VL)
-- chat模型（推荐）：[Qwen1.5-0.5B-Chat](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat)、[Qwen1.5-1.8B-Chat](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat)、[Qwen1.5-4B-Chat](https://huggingface.co/Qwen/Qwen1.5-4B-Chat)、[Qwen1.5-7B-Chat](https://huggingface.co/Qwen/Qwen1.5-7B-Chat)、[Qwen1.5-14B-Chat](https://huggingface.co/Qwen/Qwen1.5-14B-Chat)、[Qwen1.5-72B-Chat](https://huggingface.co/Qwen/Qwen1.5-72B-Chat)（实验性）、[QWen-VL-Chat](https://huggingface.co/Qwen/Qwen-VL-Chat)
-- chat-gptq-int4模型：[Qwen1.5-0.5B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat-GPTQ-Int4)、[Qwen1.5-1.8B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat-GPTQ-Int4)、[Qwen1.5-4B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-4B-Chat-GPTQ-Int4)、[Qwen1.5-7B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-7B-Chat-GPTQ-Int4)、[Qwen1.5-14B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-14B-Chat-GPTQ-Int4)、、[Qwen1.5-72B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-72B-Chat-GPTQ-Int4)（实验性）、[Qwen-VL-Chat-Int4](https://huggingface.co/Qwen/Qwen-VL-Chat-Int4)
+- base模型（实验性）：[Qwen1.5-0.5B](https://huggingface.co/Qwen/Qwen1.5-0.5B)、[Qwen1.5-1.8B](https://huggingface.co/Qwen/Qwen1.5-1.8B)、[Qwen1.5-4B](https://huggingface.co/Qwen/Qwen1.5-4B)、[Qwen1.5-7B](https://huggingface.co/Qwen/Qwen1.5-7B)、[Qwen1.5-14B](https://huggingface.co/Qwen/Qwen1.5-14B)、[Qwen1.5-32B](https://huggingface.co/Qwen/Qwen1.5-32B)、[Qwen1.5-72B](https://huggingface.co/Qwen/Qwen1.5-72B)、[QWen-VL](https://huggingface.co/Qwen/Qwen-VL)
+- chat模型（推荐）：[Qwen1.5-0.5B-Chat](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat)、[Qwen1.5-1.8B-Chat](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat)、[Qwen1.5-4B-Chat](https://huggingface.co/Qwen/Qwen1.5-4B-Chat)、[Qwen1.5-7B-Chat](https://huggingface.co/Qwen/Qwen1.5-7B-Chat)、[Qwen1.5-14B-Chat](https://huggingface.co/Qwen/Qwen1.5-14B-Chat)、[Qwen1.5-32B-Chat](https://huggingface.co/Qwen/Qwen1.5-32B-Chat)、[Qwen1.5-72B-Chat](https://huggingface.co/Qwen/Qwen1.5-72B-Chat)（实验性）、[QWen-VL-Chat](https://huggingface.co/Qwen/Qwen-VL-Chat)
+- chat-gptq-int4模型：[Qwen1.5-0.5B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat-GPTQ-Int4)、[Qwen1.5-1.8B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat-GPTQ-Int4)、[Qwen1.5-4B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-4B-Chat-GPTQ-Int4)、[Qwen1.5-7B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-7B-Chat-GPTQ-Int4)、[Qwen1.5-14B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-14B-Chat-GPTQ-Int4)、[Qwen1.5-32B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-32B-Chat-GPTQ-Int4)、[Qwen1.5-72B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-72B-Chat-GPTQ-Int4)（实验性）、[Qwen-VL-Chat-Int4](https://huggingface.co/Qwen/Qwen-VL-Chat-Int4)
 
 ### 相关教程：
 - 本项目配套B站教程：
@@ -424,13 +424,13 @@ python build.py --use_weight_only \
 ```
 
 3. 使用官方int4权重，例如Qwen-xx-Chat-Int4模型（推荐）
-- 编译模型，注意设置hf模型路径和`--quant_ckpt_path`量化后权重路径均设置为同一个路径，下面是1.8b模型的示例（其他模型也是一样操作）
+- 编译模型，注意设置hf模型路径和`--quant_ckpt_path`量化后权重路径均设置为同一个路径，下面是32b-gptq-int4模型的示例（其他gptq-int4模型也是一样操作）
 ```bash
 python build.py --use_weight_only \
                 --weight_only_precision int4_gptq \
                 --per_group \
-                --hf_model_dir Qwen-1_8B-Chat-Int4 \
-                --quant_ckpt_path Qwen-1_8B-Chat-Int4
+                --hf_model_dir Qwen1.5-32B-Chat-GPTQ-Int4 \
+                --quant_ckpt_path Qwen1.5-32B-Chat-GPTQ-Int4
 ```
 - 运行模型，这里需要指定一下tokenizer路径
 ```bash
