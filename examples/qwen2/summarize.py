@@ -33,9 +33,6 @@ from utils.utils import DEFAULT_HF_MODEL_DIRS, load_tokenizer, read_model_name
 from default_config import default_config
 
 
-os.environ["HF_ENDPOINT"] = "https://ai.gitee.com/huggingface"
-os.environ["HF_HOME"] = "~/.cache/gitee-ai"
-
 if PYTHON_BINDINGS:
     from tensorrt_llm.runtime import ModelRunnerCpp
 

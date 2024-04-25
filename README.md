@@ -2,7 +2,8 @@
 # 总述
 ### 背景介绍
 - 介绍本工作是 <a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023">NVIDIA TensorRT Hackathon 2023</a> 的参赛题目，本项目使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。相关代码已经放在[release/0.1.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.1.0)分支，感兴趣的同学可以去该分支学习完整流程。
-- 当前分支目前和TensorRT-LLM官方仓库[v0.8.0](https://github.com/NVIDIA/TensorRT-LLM/releases/tag/v0.8.0)对齐，该版本已经支持Qwen，但是可能支持的功能特性还有不足，故我们决定继续更新该仓库。
+
+#### 自2024年4月24日起，[TensorRT-LLM官方仓库](https://github.com/NVIDIA/TensorRT-LLM/)最新main分支已经支持qwen/qwen2，故本仓库不再更新。
 
 ### 功能概述
 
@@ -30,11 +31,6 @@
 - 本项目配套博客适配概述：[如何在 NVIDIA TensorRT-LLM 中支持 Qwen 模型](https://developer.nvidia.com/zh-cn/blog/qwen-model-support-nvidia-tensorrt-llm)
 
 - [TensorRT-LLM的模型量化：实现与性能科普视频](https://www.bilibili.com/video/BV1Pw411h7nM/?spm=a2c22.12281976.0.0.6ee62084utHBCm)
-
-- [Triton24.02部署TensorRT-LLM,实现http查询](./docs/triton_deploy_trt-llm.md)
-
-## 微信交流群
-![wechat_group](images/wechat-code.jpg)
 
 
 
@@ -232,7 +228,7 @@
 
 
 
-# 运行指南
+# 快速入门
 
 ### 准备工作
 1. 下载镜像。
@@ -278,7 +274,7 @@
     pip install -r requirements.txt
     ```
     
-    - 升级transformers版本，qwen2最低需要4.37以上版本
+    - 升级transformers版本，qwen2最低需要4.37以上版本，如果有警告依赖不匹配客户忽略。
     ```bash
     pip install "transformers>=4.37"
     ```
@@ -329,7 +325,7 @@
     mpirun -n 2 --allow-run-as-root python run.py
     ```
 
-3. 验证模型精度。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。目前已经在summarize.py 36/37行内置了国内huggingface源（gitee源），对于国外用户可以注释掉这两行。
+3. 验证模型精度。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。这一步需要在线下载数据集，对于网络不好的用户，可以参考该方法：[datasets离线加载huggingface数据集方法](./docs/load_hf_dataset.md)
 
      - 跑hugggingface版
      
@@ -363,10 +359,10 @@
      python3 benchmark.py --backend=trt_llm --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --trt_max_batch_size=1
      ```
 
-### 运行指南（Smooth Quant篇）
+### 运行指南（Smooth Quant）(强烈推荐)
 1. 注意：运行Smooth Quant需要将huggingface模型完全加载到GPU里面，用于构建int8标定数据集，所以需要提前确保你的显存够大，能够完全加载整个模型。
 
-2. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式
+2. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式，这一步需要在线下载数据集，对于网络不好的用户，可以参考该方法：[datasets离线加载huggingface数据集方法](./docs/load_hf_dataset.md)
     ```bash
     python3 hf_qwen_convert.py --smoothquant=0.5
     ```
@@ -463,53 +459,62 @@ python build.py --use_weight_only \
                 --quant_ckpt_path ./qwen2_7b_4bit_gs128_awq.pt
 ```
 
-### 其他应用
-1. 尝试终端对话。运行下面的命令，然后输入你的问题，直接回车即可。
+<details>
+<summary><h1>其他应用</h1></summary>
+<ol>
+<li><p>尝试终端对话。运行下面的命令，然后输入你的问题，直接回车即可。</p>
+<pre><code class="language-bash">python3 cli_chat.py
+</code></pre>
+</li>
+<li><p>部署api，并调用api进行对话。</p>
+<ul>
+<li>部署api</li>
+</ul>
+<pre><code class="language-bash">python3 api.py
+</code></pre>
+<ul>
+<li>另开一个终端，进入<code>qwen2/client</code>目录，里面有4个文件，分别代表不同的调用方式。</li>
+<li><code>async_client.py</code>，通过异步的方式调用api，通过SSE协议来支持流式输出。</li>
+<li><code>normal_client.py</code>，通过同步的方式调用api，为常规的HTTP协议，Post请求，不支持流式输出，请求一次需要等模型生成完所有文字后，才能返回。</li>
+<li><code>openai_normal_client.py</code>，通过<code>openai</code>模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。</li>
+<li><code>openai_stream_client.py</code>，通过<code>openai</code>模块直接调用自己部署的api，该示例为流式调用。</li>
+<li>注意：需要<code>pydantic</code>模块版本&gt;=2.3.2，否则将会出现<code>ChatCompletionResponse&#39; object has no attribute &#39;model_dump_json&#39;</code>报错，参考<a href="https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/issues/27">issue</a></li>
+</ul>
+</li>
+<li><p>尝试网页对话（可选，需要先部署api）。运行下面的命令，然后打开本地浏览器，访问：<a href="http://127.0.0.1:7860">http://127.0.0.1:7860</a> 即可</p>
+<pre><code class="language-bash">python3 web_demo.py
+</code></pre>
+<ul>
+<li>默认配置的web_demo.py如下：</li>
+</ul>
+<pre><code class="language-python">demo.queue().launch(share=False, inbrowser=True)
+</code></pre>
+<ul>
+<li>如果是服务器运行，建议改成这样</li>
+</ul>
+<pre><code class="language-python">demo.queue().launch(server_name=&quot;0.0.0.0&quot;, share=False, inbrowser=False) 
+</code></pre>
+<ul>
+<li>web_demo参数说明<ul>
+<li><code>share=True</code>: 代表将网站穿透到公网，会自动用一个随机的临时公网域名，有效期3天，不过这个选项可能不太安全，有可能造成服务器被攻击，不建议打开。</li>
+<li><code>inbrowser=True</code>: 部署服务后，自动打开浏览器，如果是本机，可以打开。如果是服务器，不建议打开，因为服务器也没有谷歌浏览器给你打开。</li>
+<li><code>server_name=&quot;0.0.0.0&quot;</code>: 允许任意ip访问，适合服务器，然后你只需要输入<code>http://[你的ip]: 7860</code>就能看到网页了，如果不开这个选择，默认只能部署的那台机器才能访问。</li>
+<li><code>share=False</code>：仅局域网/或者公网ip访问，不会生成公网域名。</li>
+<li><code>inbrowser=False</code>： 部署后不打开浏览器，适合服务器。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p>web_demo运行效果（测试平台：RTX 4080, qwen2-7b-chat, int4 weight only)</p>
+</li>
+</ol>
+<p><a href="https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956">https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956</a></p>
+</details>
 
-     ```bash
-     python3 cli_chat.py
-     ```
+# 进阶工作
 
-2. 部署api，并调用api进行对话。
-
-      - 部署api
-
-      ```bash
-      python3 api.py
-      ```
-
-      - 另开一个终端，进入`qwen2/client`目录，里面有4个文件，分别代表不同的调用方式。
-      - `async_client.py`，通过异步的方式调用api，通过SSE协议来支持流式输出。
-      - `normal_client.py`，通过同步的方式调用api，为常规的HTTP协议，Post请求，不支持流式输出，请求一次需要等模型生成完所有文字后，才能返回。
-      - `openai_normal_client.py`，通过`openai`模块直接调用自己部署的api，该示例为非流式调用，请求一次需要等模型生成完所有文字后，才能返回。。
-      - `openai_stream_client.py`，通过`openai`模块直接调用自己部署的api，该示例为流式调用。
-      - 注意：需要`pydantic`模块版本>=2.3.2，否则将会出现`ChatCompletionResponse' object has no attribute 'model_dump_json'`报错，参考[issue](https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/issues/27)
-
-3. 尝试网页对话（可选，需要先部署api）。运行下面的命令，然后打开本地浏览器，访问：[http://127.0.0.1:7860](http://127.0.0.1:7860) 即可
-
-     ```bash
-     python3 web_demo.py
-     ```
-     - 默认配置的web_demo.py如下：
-     ```python
-     demo.queue().launch(share=False, inbrowser=True)
-     ```
-     - 如果是服务器运行，建议改成这样
-     ```python
-     demo.queue().launch(server_name="0.0.0.0", share=False, inbrowser=False) 
-     ```
-     - web_demo参数说明
-         - `share=True`: 代表将网站穿透到公网，会自动用一个随机的临时公网域名，有效期3天，不过这个选项可能不太安全，有可能造成服务器被攻击，不建议打开。
-         - `inbrowser=True`: 部署服务后，自动打开浏览器，如果是本机，可以打开。如果是服务器，不建议打开，因为服务器也没有谷歌浏览器给你打开。
-         - `server_name="0.0.0.0"`: 允许任意ip访问，适合服务器，然后你只需要输入`http://[你的ip]: 7860`就能看到网页了，如果不开这个选择，默认只能部署的那台机器才能访问。
-         - `share=False`：仅局域网/或者公网ip访问，不会生成公网域名。
-         - `inbrowser=False`： 部署后不打开浏览器，适合服务器。
-
-4. web_demo运行效果（测试平台：RTX 4080, qwen2-7b-chat, int4 weight only)
-
-https://github.com/Tlntin/Qwen-7B-Chat-TensorRT-LLM/assets/28218658/940c1ed1-14f7-45f6-bf13-67c8f289c956
-
-
+1. 参考该教程部署tritonserver：[Triton24.02部署TensorRT-LLM,实现http查询](./docs/triton_deploy_trt-llm.md)
+2. 使用该项目封装tritonserver以支持openai API格式，项目链接：https://github.com/zhaohb/fastapi_tritonserver
 
 ## Stargazers over time
 

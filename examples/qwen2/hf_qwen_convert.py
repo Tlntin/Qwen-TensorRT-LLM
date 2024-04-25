@@ -23,8 +23,6 @@ from default_config import default_config
 
 
 now_dir = os.path.dirname(os.path.abspath(__file__))
-os.environ["HF_ENDPOINT"] = "https://ai.gitee.com/huggingface"
-os.environ["HF_HOME"] = "~/.cache/gitee-ai"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -297,8 +295,7 @@ def hf_qwen_converter(args: ProgArgs):
         from datasets import load_dataset
         # copy from summarize.py
         dataset_cnn = load_dataset(
-            # "ccdv/cnn_dailymail",
-            "cnn_dailymail",
+            "ccdv/cnn_dailymail",
             '3.0.0'
         )
         dataset = dataset_cnn["test"]

@@ -101,12 +101,12 @@ pip install tensorrt_llm==0.8.0 --extra-index-url https://pypi.nvidia.com --extr
 docker exec -it triton /bin/bash
 ```
 
-2. 重复之前的操作，安装qwen的依赖，编译Engine,推荐开启inflight-batching+smooth int8，参考命令
+2. 重复之前的操作，安装qwen的依赖。
 
-- 进入qwen目录
+- 进入qwen2目录
 
 ```bash
-cd /root/examples/qwen
+cd /root/examples/qwen2
 ```
 
 - 安装依赖
@@ -115,16 +115,32 @@ cd /root/examples/qwen
 pip install -r requirements.txt
 ```
 
-- 编译，下面是fp16部署的简单示例，设置batch_size=2，开启paged_kv_cache，方便部署inflight-batching
+3. 编译，需要在原来Readme编译的基础上开启paged_kv_cache，方便部署inflight-batching
+
+- 例如fp16之前编译是`python3 build.py`，现在改成下面这个。
 
 ```bash
-python3 build.py \
-	--paged_kv_cache \
-	--remove_input_padding \
-	--max_batch_size=2
+python3 build.py --paged_kv_cache --remove_input_padding
 ```
 
-- 运行一下做个测试
+- 例如int8-smooth-quant
+  - 之前编译命令是
+    ```bash
+    # 转权重
+    python3 hf_qwen_convert.py --smoothquant=0.5
+    # 编译
+    python3 build.py --use_smooth_quant --per_token --per_channel
+    ```
+  
+  - 现在编译命令是
+      ```bash
+      # 转权重
+      python3 hf_qwen_convert.py --smoothquant=0.5
+      # 编译
+      python3 build.py --use_smooth_quant --per_token --per_channel --paged_kv_cache --remove_input_padding
+      ```
+
+4. 运行一下做个测试
 
 ```bash
 python3 run.py
@@ -135,46 +151,53 @@ python3 run.py
 - 参考tensorrtllm_backend 0.8.0的[readme](https://github.com/triton-inference-server/tensorrtllm_backend/tree/v0.8.0)
 - 同时参考llama的[详细部署教程](https://github.com/triton-inference-server/tensorrtllm_backend/blob/v0.8.0/docs/llama.md)
 
-1. 进入容器
+1. （可选）直接复用本项目配置（batch_size=2，input=6144, output=2048），这样就跳过后续的第6，第7步骤，需要在容器外操作，懒人必备，不过还是推荐自己改好一些。
+```bash
+cp -r Qwen-TensorRT-LLM/triton_model_repo tensorrtllm_backend/
+```
+
+2. 进入容器
 
 ```bash
 docker exec -it triton /bin/bash
 ```
 
-2. 构建好目录
+3. 构建好目录
 
 ```bash
 cd /tensorrtllm_backend
 cp all_models/inflight_batcher_llm/ -r triton_model_repo
 ```
 
-3.  复制上一部分编译好的Engine文件，复制完后需要做修改`/tensorrtllm_backend/triton_model_repo/tensorrt_llm/1/config.json`，将里面的`max_output_len`的数值换成`new_token_len`对应的数值，以当前项目为例，需要将6144换成2048，否则报错。
+4.  复制上一部分编译好的Engine文件
 
 ```bash
 cd /root/examples/qwen2/trt_engines/fp16/1-gpu/
 cp -r ./* /tensorrtllm_backend/triton_model_repo/tensorrt_llm/1/
 ```
 
-4. 复制tokenzer文件
+5. 复制tokenzer文件
 
 ```bash
 cd /root/examples/qwen2
-cp -r qwen1.5_7b_chat /tensorrtllm_backend/triton_model_repo/tensorrt_llm/
-
-# 删除tokenizer目录的Huggingface模型文件（可选）
-rm /tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen1.5_7b_chat/*.safetensors
+mkdir /tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen1.5_7b_chat
+cp qwen1.5_7b_chat/*.json /tensorrtllm_backend/triton_model_repo/tensorrt_llm/
+# 可选，仅适用于qwen1,因为它的tokenizer是tiktoken格式
+cp qwen_7b_chat/*.tiktoken /tensorrtllm_backend/triton_model_repo/tensorrt_llm/
+cp qwen_7b_chat/*.py /tensorrtllm_backend/triton_model_repo/tensorrt_llm/
 ```
 
-5. 编写Triton中的预处理配置和后处理配置， 参考[文档](https://github.com/triton-inference-server/tensorrtllm_backend/blob/v0.8.0/docs/llama.md)
+6. （可选）编写Triton中的预处理配置和后处理配置， 参考[文档](https://github.com/triton-inference-server/tensorrtllm_backend/blob/v0.8.0/docs/llama.md)
 
 ```bash
 cd /tensorrtllm_backend
 export HF_QWEN_MODEL="/tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen1.5_7b_chat"
 export ENGINE_DIR="/tensorrtllm_backend/triton_model_repo/tensorrt_llm/1"
-export MAX_BATCH_SIZE=2
+# 设置你的batch_size大小
+export MAX_BATCH_SIZE=1
 export TOKENIZE_TYPE=auto
 # 根据cpu线程数定，一般为batch_size的2倍数或者cpu线程的一半
-export INSTANCE_COUNT=4
+export INSTANCE_COUNT=2
 # 我就一张卡，你可以指定用那些卡，用逗号隔开
 export GPU_DEVICE_IDS=0
 
@@ -190,7 +213,7 @@ python3 tools/fill_template.py -i triton_model_repo/ensemble/config.pbtxt triton
 python3 tools/fill_template.py -i triton_model_repo/tensorrt_llm/config.pbtxt triton_max_batch_size:${MAX_BATCH_SIZE},decoupled_mode:True,max_beam_width:1,engine_dir:${ENGINE_DIR},exclude_input_in_output:True,enable_kv_cache_reuse:False,batching_strategy:inflight_batching,max_queue_delay_microseconds:600,gpu_device_ids:${GPU_DEVICE_IDS}
 ```
 
-6. 简单修改一下preprocess/postprocess的model.py的initialize函数，示例是llama的，我们要改成qwen的tokenizer配置。
+7. （可选）简单修改一下preprocess/postprocess的model.py的initialize函数，示例是llama的，我们要改成qwen的tokenizer配置。
 
 - 修改前（preprocessing有三行，postprocessing只有一行）：
 
@@ -223,7 +246,7 @@ eos_token = self.tokenizer.decode(end_id)
 self.tokenizer.eos_token = self.tokenizer.pad_token = eos_token
 ```
 
-7. 启动服务
+8. 启动服务，单卡启动。
 
 ```bash
 cd /tensorrtllm_backend

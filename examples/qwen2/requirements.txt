@@ -5,7 +5,7 @@ transformers-stream-generator
 sentencepiece~=0.1.99
 tiktoken
 einops
-tensorrt_llm==0.8.0
+#tensorrt_llm==0.8.0
 # optional dependencies
 uvicorn
 gradio==3.40.1
