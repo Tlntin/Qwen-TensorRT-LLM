@@ -611,7 +611,7 @@ def load_from_hf_qwen(
                 k_bias = torch_to_numpy(k_bias.to(torch_dtype).detach().cpu())
                 v_bias = torch_to_numpy(v_bias.to(torch_dtype).detach().cpu())
                 if multi_query_mode:
-                    assert isinstance(v, list) and len(v) == 3
+                    # assert isinstance(v, list) and len(v) == 3
                     wq = split(q_bias, mapping.tp_size, mapping.rank)
                     wk = split(k_bias, mapping.tp_size, mapping.rank)
                     wv = split(v_bias, mapping.tp_size, mapping.rank)
