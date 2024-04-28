@@ -63,8 +63,21 @@ def generate_int8(weights, act_range, is_qkv=False, multi_query_mode=False):
             dim=-1, keepdims=True)[0].cpu().numpy().astype(np.float32)
         scale_w_orig_quant_c = 127. / act_range["w"].reshape(3,-1).cpu().numpy().astype(np.float32)
     elif is_qkv and multi_query_mode:
-        raise ValueError(
-            f"Multi-query w/ int8 quant has not been supported yet")
+        hidden_dim = weights.shape[0]
+        local_dim = act_range["w"].shape[0]
+        kv_dim = (local_dim - hidden_dim) // 2
+        scale_w_q = act_range["w"][0:hidden_dim]
+        scale_w_k = act_range["w"][hidden_dim:hidden_dim + kv_dim]
+        scale_w_v = act_range["w"][-kv_dim:]
+
+        scale_w_qkv_t = torch.concat([
+            scale_w_q.max(dim=0, keepdim=True)[0],
+            scale_w_k.max(dim=0, keepdim=True)[0],
+            scale_w_v.max(dim=0, keepdim=True)[0]
+        ])
+
+        scale_w_orig_quant_t = 127. / scale_w_qkv_t.cpu().numpy()
+        scale_w_orig_quant_c = 127. / act_range["w"].cpu().numpy()
     else:
         scale_w_orig_quant_t = 127. / act_range["w"].max().cpu().numpy().astype(np.float32)
         scale_w_orig_quant_c = 127. / act_range["w"].cpu().numpy().astype(np.float32)
@@ -79,15 +92,33 @@ def generate_int8(weights, act_range, is_qkv=False, multi_query_mode=False):
                                                     scale_w_orig_quant_t)
     scale_y_accum_quant_c = scale_y_orig_quant_t / (scale_x_orig_quant_t *
                                                     scale_w_orig_quant_c)
-    if is_qkv:
+    if is_qkv and not multi_query_mode:
         scale_y_accum_quant_t = np.broadcast_to(scale_y_accum_quant_t,
                                                 scale_w_orig_quant_c.shape)
         scale_w_quant_orig_t = np.broadcast_to(scale_w_quant_orig_t,
                                                scale_w_orig_quant_c.shape)
+    if is_qkv and multi_query_mode:
+        scale_q_y_accum_t = np.broadcast_to(scale_y_accum_quant_t[0],
+                                            scale_w_q.shape)
+        scale_k_y_accum_t = np.broadcast_to(scale_y_accum_quant_t[1],
+                                            scale_w_k.shape)
+        scale_v_y_accum_t = np.broadcast_to(scale_y_accum_quant_t[2],
+                                            scale_w_v.shape)
+        scale_y_accum_quant_t = np.concatenate(
+            [scale_q_y_accum_t, scale_k_y_accum_t, scale_v_y_accum_t])
+        scale_w_quant_orig_t = np.concatenate([
+            np.broadcast_to(scale_w_quant_orig_t[0], scale_w_q.shape),
+            np.broadcast_to(scale_w_quant_orig_t[1], scale_w_k.shape),
+            np.broadcast_to(scale_w_quant_orig_t[2], scale_w_v.shape)
+        ])
 
     to_i8 = lambda x: x.round().clip(-127, 127).astype(np.int8)
+    if is_qkv and multi_query_mode:
+        weight_int8 = to_i8(weights / scale_w_quant_orig_t)
+    else:
+        weight_int8 = to_i8(weights * scale_w_orig_quant_t)
     return {
-        "weight.int8": to_i8(weights * scale_w_orig_quant_t),
+        "weight.int8": weight_int8,
         "weight.int8.col": to_i8(weights * scale_w_orig_quant_c),
         "scale_x_orig_quant": scale_x_orig_quant_t.astype(np.float32),
         "scale_w_quant_orig": scale_w_quant_orig_t.astype(np.float32),
@@ -251,6 +282,7 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
             w_q, w_kv = np.split(val, [local_dim], axis=-1)
             w_q_split = np.split(w_q, split_factor, axis=-1)
             split_vals = [np.concatenate((i, w_kv), axis=-1) for i in w_q_split]
+            cat_dim = -1
         else:
             if use_attention_nemo_shape:
                 head_num = num_attention_heads // tp_size
