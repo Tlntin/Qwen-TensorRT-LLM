@@ -271,7 +271,7 @@ def qwen_to_ft_name(orig_name):
 @torch.no_grad()
 def hf_qwen_converter(args: ProgArgs):
     infer_tp = args.tensor_parallelism
-    multi_query_mode = True if args.model in ["santacoder", "starcoder"] else False
+    # multi_query_mode = True if args.model in ["santacoder", "starcoder"] else False
     saved_dir = Path(args.out_dir) / f"{infer_tp}-gpu"
     saved_dir.mkdir(parents=True, exist_ok=True)
 
@@ -282,6 +282,7 @@ def hf_qwen_converter(args: ProgArgs):
         trust_remote_code=True,
         torch_dtype=str_dtype_to_torch(args.storage_type),
     ).half()  # if you gpu memory is not enough, you can set .half() to .float()
+    multi_query_mode = model.config.num_key_value_heads != model.config.num_attention_heads
     model.generation_config = GenerationConfig.from_pretrained(
         args.in_file,
         trust_remote_code=True
@@ -296,7 +297,8 @@ def hf_qwen_converter(args: ProgArgs):
         # copy from summarize.py
         dataset_cnn = load_dataset(
             "ccdv/cnn_dailymail",
-            '3.0.0'
+            '3.0.0',
+            trust_remote_code=True,
         )
         dataset = dataset_cnn["test"]
         tokenizer = AutoTokenizer.from_pretrained(
@@ -319,6 +321,7 @@ def hf_qwen_converter(args: ProgArgs):
             dataset,
             system_prompt=system_prompt,
             max_input_len=max_input_len,
+            num_samples=512,
         )
         if args.smoothquant is not None:
             qwen_qkv_para = smooth_qwen_model(
