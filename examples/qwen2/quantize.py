@@ -35,10 +35,6 @@ sys.path.append(now_dir)
 from default_config import default_config
 
 
-os.environ["HF_ENDPOINT"] = "https://ai.gitee.com/huggingface"
-os.environ["HF_HOME"] = "~/.cache/gitee-ai"
-
-
 def get_calib_dataloader(data="ccdv/cnn_dailymail",
                          tokenizer=None,
                          batch_size=1,
@@ -52,7 +48,9 @@ def get_calib_dataloader(data="ccdv/cnn_dailymail",
             split="train")
         dataset = dataset["text"][:calib_size]
     elif data == "ccdv/cnn_dailymail":
-        dataset = load_dataset("ccdv/cnn_dailymail", name="3.0.0", split="train")
+        dataset = load_dataset(
+            "ccdv/cnn_dailymail", name="3.0.0", split="train", trust_remote_code=True
+        )
         dataset = dataset["article"][:calib_size]
     else:
         raise NotImplementedError

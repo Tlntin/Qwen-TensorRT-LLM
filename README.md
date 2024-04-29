@@ -3,7 +3,7 @@
 ### 背景介绍
 - 介绍本工作是 <a href="https://github.com/NVIDIA/trt-samples-for-hackathon-cn/tree/master/Hackathon2023">NVIDIA TensorRT Hackathon 2023</a> 的参赛题目，本项目使用TRT-LLM完成对Qwen-7B-Chat实现推理加速。相关代码已经放在[release/0.1.0](https://github.com/Tlntin/Qwen-TensorRT-LLM/tree/release/0.1.0)分支，感兴趣的同学可以去该分支学习完整流程。
 
-#### 自2024年4月24日起，[TensorRT-LLM官方仓库](https://github.com/NVIDIA/TensorRT-LLM/)最新main分支已经支持qwen/qwen2，故本仓库不再更新。
+#### 自2024年4月24日起，[TensorRT-LLM官方仓库](https://github.com/NVIDIA/TensorRT-LLM/)最新main分支已经支持qwen/qwen2，故本仓库不再做重大更新。
 
 ### 功能概述
 
@@ -19,8 +19,8 @@
 
 ### 支持的模型：qwen2（推荐）/qwen（当前仅维护到0.7.0）/qwen-vl（当前仅维护到0.7.0）
 
-- base模型（实验性）：[Qwen1.5-0.5B](https://huggingface.co/Qwen/Qwen1.5-0.5B)、[Qwen1.5-1.8B](https://huggingface.co/Qwen/Qwen1.5-1.8B)、[Qwen1.5-4B](https://huggingface.co/Qwen/Qwen1.5-4B)、[Qwen1.5-7B](https://huggingface.co/Qwen/Qwen1.5-7B)、[Qwen1.5-14B](https://huggingface.co/Qwen/Qwen1.5-14B)、[Qwen1.5-32B](https://huggingface.co/Qwen/Qwen1.5-32B)、[Qwen1.5-72B](https://huggingface.co/Qwen/Qwen1.5-72B)、[QWen-VL](https://huggingface.co/Qwen/Qwen-VL)
-- chat模型（推荐）：[Qwen1.5-0.5B-Chat](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat)、[Qwen1.5-1.8B-Chat](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat)、[Qwen1.5-4B-Chat](https://huggingface.co/Qwen/Qwen1.5-4B-Chat)、[Qwen1.5-7B-Chat](https://huggingface.co/Qwen/Qwen1.5-7B-Chat)、[Qwen1.5-14B-Chat](https://huggingface.co/Qwen/Qwen1.5-14B-Chat)、[Qwen1.5-32B-Chat](https://huggingface.co/Qwen/Qwen1.5-32B-Chat)、[Qwen1.5-72B-Chat](https://huggingface.co/Qwen/Qwen1.5-72B-Chat)（实验性）、[QWen-VL-Chat](https://huggingface.co/Qwen/Qwen-VL-Chat)
+- base模型（实验性）：[Qwen1.5-0.5B](https://huggingface.co/Qwen/Qwen1.5-0.5B)、[Qwen1.5-1.8B](https://huggingface.co/Qwen/Qwen1.5-1.8B)、[Qwen1.5-4B](https://huggingface.co/Qwen/Qwen1.5-4B)、[Qwen1.5-7B](https://huggingface.co/Qwen/Qwen1.5-7B)、[Qwen1.5-14B](https://huggingface.co/Qwen/Qwen1.5-14B)、[Qwen1.5-32B](https://huggingface.co/Qwen/Qwen1.5-32B)、[Qwen1.5-72B](https://huggingface.co/Qwen/Qwen1.5-72B)、[QWen-VL](https://huggingface.co/Qwen/Qwen-VL)、[CodeQwen1.5-7B](https://huggingface.co/Qwen/CodeQwen1.5-7B)
+- chat模型（推荐）：[Qwen1.5-0.5B-Chat](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat)、[Qwen1.5-1.8B-Chat](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat)、[Qwen1.5-4B-Chat](https://huggingface.co/Qwen/Qwen1.5-4B-Chat)、[Qwen1.5-7B-Chat](https://huggingface.co/Qwen/Qwen1.5-7B-Chat)、[Qwen1.5-14B-Chat](https://huggingface.co/Qwen/Qwen1.5-14B-Chat)、[Qwen1.5-32B-Chat](https://huggingface.co/Qwen/Qwen1.5-32B-Chat)、[Qwen1.5-72B-Chat](https://huggingface.co/Qwen/Qwen1.5-72B-Chat)（实验性）、[QWen-VL-Chat](https://huggingface.co/Qwen/Qwen-VL-Chat)、[CodeQwen1.5-7B-Chat](https://huggingface.co/Qwen/CodeQwen1.5-7B-Chat)
 - chat-gptq-int4模型：[Qwen1.5-0.5B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat-GPTQ-Int4)、[Qwen1.5-1.8B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat-GPTQ-Int4)、[Qwen1.5-4B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-4B-Chat-GPTQ-Int4)、[Qwen1.5-7B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-7B-Chat-GPTQ-Int4)、[Qwen1.5-14B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-14B-Chat-GPTQ-Int4)、[Qwen1.5-32B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-32B-Chat-GPTQ-Int4)、[Qwen1.5-72B-Chat-GPTQ-Int4](https://huggingface.co/Qwen/Qwen1.5-72B-Chat-GPTQ-Int4)（实验性）、[Qwen-VL-Chat-Int4](https://huggingface.co/Qwen/Qwen-VL-Chat-Int4)
 
 ### 相关教程：
@@ -269,15 +269,15 @@
       pip install tensorrt_llm==0.8.0 --extra-index-url https://pypi.nvidia.com --extra-index-url https://download.pytorch.org/whl/cu121
       ```
     - 安装提供的Python依赖
-    ```bash
-    cd /app/tensorrt_llm/examples/qwen2/
-    pip install -r requirements.txt
-    ```
+      ```bash
+      cd /app/tensorrt_llm/examples/qwen2/
+      pip install -r requirements.txt
+      ```
     
     - 升级transformers版本，qwen2最低需要4.37以上版本，如果有警告依赖不匹配客户忽略。
-    ```bash
-    pip install "transformers>=4.37"
-    ```
+      ```bash
+      pip install "transformers>=4.37"
+      ```
 
 5. 从HuggingFace下载模型（暂时不支持其他平台），例如`QWen1.5-7B-Chat`模型，然后将文件夹重命名为`qwen1.5_7b_chat`，最后放到`examples/qwen2/`路径下即可。
 
@@ -293,51 +293,58 @@
 
     - 编译fp16（注：`--remove_input_padding`和`--enable_context_fmha`为可选参数，可以一定程度上节省显存）。
 
-    ```bash
-    python3 build.py --remove_input_padding --enable_context_fmha
-    ```
+      ```bash
+      python3 build.py --remove_input_padding --enable_context_fmha
+      ```
     
     - 编译 int8 (weight only)。
 
-    ```bash
-    python3 build.py --use_weight_only --weight_only_precision=int8
-    ```
+      ```bash
+      python3 build.py --use_weight_only --weight_only_precision=int8
+      ```
     
     - 编译int4 (weight only)
-    ```bash
-    python3 build.py --use_weight_only --weight_only_precision=int4
-    ```
+      ```bash
+      python3 build.py --use_weight_only --weight_only_precision=int4
+      ```
     
     - 对于如果单卡装不下，又不想用int4/int8量化，可以选择尝试tp = 2，即启用两张GPU进行编译 （注：tp功能目前只支持从Huggingface格式构建engine）
-    ```bash
-    python3 build.py --world_size 2 --tp_size 2
-    ```
+      ```bash
+      python3 build.py --world_size 2 --tp_size 2
+      ```
     
-2. 运行。编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。<|im_end|>"`这说明成功。
+2. 运行。编译完后，再试跑一下，输出`Output: "您好，我是来自达摩院的大规模语言模型，我叫通义千问。"`这说明成功。
 
     - tp = 1（默认单GPU）时使用python直接运行run.py
-    ```bash
-    python3 run.py
-    ```
+      ```bash
+      python3 run.py
+      ```
 
     - tp = 2（2卡用户，或者更多GPU卡）时，使用`mpirun`命令来运行run.py
-    ```bash
-    mpirun -n 2 --allow-run-as-root python run.py
-    ```
+      ```bash
+      mpirun -n 2 --allow-run-as-root python run.py
+      ```
+    - **使用官方24.02容器多卡可能会报错，提示：`Failed, NCCL error /home/jenkins/agent/workspace/LLM/release-0.8/L0_PostMerge/tensorrt_llm/cpp/tensorrt_llm/plugins/ncclPlugin/allreducePlugin.cpp:183 'unknown result code'`,需要安装nccl2.20.3-1（使用压缩包，解压后导入系统环境变量或者使用apt命名安装均可），安装后即可正常运行。**
+      
+       ```bash
+       export LD_LIBRARY_PATH=nccl_2.20.3-1+cuda12.3_x86_64/lib/:$LD_LIBRARY_PATH
+       # 或者，推荐下面这种
+       apt-get install -y --no-install-recommends libnccl2=2.20.3-1+cuda12.3 libnccl-dev=2.20.3-1+cuda12.3 -y
+       ```
 
 3. 验证模型精度。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。这一步需要在线下载数据集，对于网络不好的用户，可以参考该方法：[datasets离线加载huggingface数据集方法](./docs/load_hf_dataset.md)
 
      - 跑hugggingface版
      
-     ```bash
-      python3 summarize.py --test_hf
-     ```
+       ```bash
+       python3 summarize.py --test_hf
+       ```
      
      - 跑trt-llm版
 
-     ```bash
-      python3 summarize.py --test_trt_llm
-     ```
+       ```bash
+       python3 summarize.py --test_trt_llm
+       ```
      
      - 一般来说，如果trt-llm的rouge分数和huggingface差不多，略低一些（1以内）或者略高一些（2以内），则说明精度基本对齐。
 
@@ -349,115 +356,133 @@
      - 测量前，如果需要改max_input_length/max_new_tokens，可以直接改`default_config.py`即可。一般不推荐修改，如果修改了这个，则需要重新编译一次trt-llm，保证两者输入数据集长度统一。
      - 测量huggingface模型
 
-     ```bash
-     python3 benchmark.py --backend=hf --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --hf_max_batch_size=1
-     ```
+       ```bash
+       python3 benchmark.py --backend=hf --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --hf_max_batch_size=1
+       ```
 
      - 测量trt-llm模型 (注意：`--trt_max_batch_size`不应该超过build时候定义的最大batch_size，否则会出现内存错误。)
 
-     ```bash
-     python3 benchmark.py --backend=trt_llm --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --trt_max_batch_size=1
-     ```
+       ```bash
+       python3 benchmark.py --backend=trt_llm --dataset=ShareGPT_V3_unfiltered_cleaned_split.json --trt_max_batch_size=1
+       ```
 
 ### 运行指南（Smooth Quant）(强烈推荐)
 1. 注意：运行Smooth Quant需要将huggingface模型完全加载到GPU里面，用于构建int8标定数据集，所以需要提前确保你的显存够大，能够完全加载整个模型。
 
 2. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式，这一步需要在线下载数据集，对于网络不好的用户，可以参考该方法：[datasets离线加载huggingface数据集方法](./docs/load_hf_dataset.md)
-    ```bash
-    python3 hf_qwen_convert.py --smoothquant=0.5
-    ```
+
+    - 单卡
+
+      ```bash
+      python3 hf_qwen_convert.py --smoothquant=0.5
+      ```
+    - 多卡（以2卡为例）
+      ```bash
+      python3 hf_qwen_convert.py --smoothquant=0.5 --tensor-parallelism=2
+      ```
 
 3. 开始编译trt_engine
-    - 普通版
-    ```bash
-    python3 build.py --use_smooth_quant
-    ```
 
-    - 升级版（理论上运行速度更快，推理效果更好，强烈推荐）
-    ```bash
-    python3 build.py --use_smooth_quant --per_token --per_channel
-    ```
+    - 单卡
+      ```bash
+      python3 build.py --use_smooth_quant --per_token --per_channel
+      ```
+    - 多卡（以2卡为例）
+      ```bash
+      python3 build.py --use_smooth_quant --per_token --per_channel --world_size 2 --tp_size 2
+      ```
+
 4. 编译完成，run/summarize/benchmark等等都和上面的是一样的了。
 
 ### 运行指南（int8-kv-cache篇）
 1. 注意：运行int8-kv-cache需要将huggingface模型完全加载到GPU里面，用于构建int8标定数据集，所以需要提前确保你的显存够大，能够完全加载整个模型。
 
 2. 将Huggingface格式的数据转成FT(FastTransformer)需要的数据格式。
-```bash
-python3 hf_qwen_convert.py --calibrate-kv-cache
-```
+    - 单卡
+      ```bash
+      python3 hf_qwen_convert.py --calibrate-kv-cache
+      ```
+    - 多卡（以2卡为例）
+      ```bash
+      python3 hf_qwen_convert.py --calibrate-kv-cache --tensor-parallelism=2
+      ```
 
 3. 编译int8 weight only + int8-kv-cache
-```bash
-python3 build.py --use_weight_only --weight_only_precision=int8 --int8_kv_cache
-```
+    - 单卡
+      ```bash
+      python3 build.py --use_weight_only --weight_only_precision=int8 --int8_kv_cache
+      ```
+    - 多卡（以2卡为例）
+      ```bash
+      python3 build.py --use_weight_only --weight_only_precision=int8 --int8_kv_cache --world_size 2 --tp_size 2
+      ```
 
 ### 运行指南（int4-gptq篇）
 1. 需要安装[auto-gptq](https://github.com/PanQiWei/AutoGPTQ)模块，并且升级transformers模块版本到最新版（建议optimum和transformers都用最新版，否则可能有乱码问题），参考[issue/68](https://github.com/Tlntin/Qwen-TensorRT-LLM/issues/68)。（注：安装完模块后可能会提示tensorrt_llm与其他模块版本不兼容，可以忽略该警告）
-```bash
-pip install auto-gptq optimum
-pip install transformers -U
-```
+    ```bash
+    pip install auto-gptq optimum
+    pip install transformers -U
+    ```
 
 2. 手动获取标定权重（可选）
-- 转权重获取scale相关信息，默认使用GPU进行校准，需要能够完整加载模型。（注：对于Qwen-7B-Chat V1.0，可以加上`--device=cpu`来尝试用cpu标定，但是时间会很长）
-```bash
-python3 gptq_convert.py
-```
-- 编译TensorRT-LLM Engine
-```bash
-python build.py --use_weight_only \
+    - 转权重获取scale相关信息，默认使用GPU进行校准，需要能够完整加载模型。（注：对于Qwen-7B-Chat V1.0，可以加上`--device=cpu`来尝试用cpu标定，但是时间会很长）
+      ```bash
+      python3 gptq_convert.py
+      ```
+    - 编译TensorRT-LLM Engine
+      ```bash
+      python build.py --use_weight_only \
                 --weight_only_precision int4_gptq \
                 --per_group
-```
-- 如果想要节省显存（注：只能用于单batch），可以试试加上这俩参数来编译Engine
-```bash
-python build.py --use_weight_only \
+      ```
+    - 如果想要节省显存（注：只能用于单batch），可以试试加上这俩参数来编译Engine
+      ```bash
+      python build.py --use_weight_only \
                 --weight_only_precision int4_gptq \
                 --per_group \
                 --remove_input_padding \
                 --enable_context_fmha
-```
+      ```
 
 3. 使用官方int4权重，例如Qwen-xx-Chat-Int4模型（推荐）
-- 编译模型，注意设置hf模型路径和`--quant_ckpt_path`量化后权重路径均设置为同一个路径，下面是32b-gptq-int4模型的示例（其他gptq-int4模型也是一样操作）
-```bash
-python build.py --use_weight_only \
+    - 编译模型，注意设置hf模型路径和`--quant_ckpt_path`量化后权重路径均设置为同一个路径，下面是32b-gptq-int4模型的示例（其他gptq-int4模型也是一样操作）
+      ```bash
+      python build.py --use_weight_only \
                 --weight_only_precision int4_gptq \
                 --per_group \
                 --hf_model_dir Qwen1.5-32B-Chat-GPTQ-Int4 \
                 --quant_ckpt_path Qwen1.5-32B-Chat-GPTQ-Int4
-```
-- 运行模型，这里需要指定一下tokenizer路径
-```bash
-python3 run.py --tokenizer_dir=Qwen1.5-32B-Chat-GPTQ-Int4
-```
+      ```
+    - 运行模型，这里需要指定一下tokenizer路径
+      ```bash
+      python3 run.py --tokenizer_dir=Qwen1.5-32B-Chat-GPTQ-Int4
+      ```
 
 ### 运行指南（int4-awq篇）
 1. 需要下载并安装nvidia-ammo模块（仅支持Linux，不支持Windows）
-```bash
-pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com nvidia-ammo~=0.7.0
-```
+    ```bash
+    pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com nvidia-ammo~=0.7.0
+    ```
 2. 运行int4-awq量化代码，导出校准权重。
-```bash
-python3 quantize.py --export_path ./qwen2_7b_4bit_gs128_awq.pt
-```
+    ```bash
+    python3 quantize.py --export_path ./qwen2_7b_4bit_gs128_awq.pt
+    ```
 3. 运行build.py，用于构建TensorRT-LLM Engine。
-```bash
-python build.py --use_weight_only \
-                --weight_only_precision int4_awq \
-                --per_group \
-                --quant_ckpt_path ./qwen2_7b_4bit_gs128_awq.pt
-```
+    ```bash
+    python build.py --use_weight_only \
+                    --weight_only_precision int4_awq \
+                    --per_group \
+                    --quant_ckpt_path ./qwen2_7b_4bit_gs128_awq.pt
+    ```
 4. 如果想要节省显存（注：只能用于单batch），可以试试加上这俩参数来编译Engine
-```bash
-python build.py --use_weight_only \
-                --weight_only_precision int4_awq \
-                --per_group \
-                --remove_input_padding \
-                --enable_context_fmha \
-                --quant_ckpt_path ./qwen2_7b_4bit_gs128_awq.pt
-```
+    ```bash
+    python build.py --use_weight_only \
+                    --weight_only_precision int4_awq \
+                    --per_group \
+                    --remove_input_padding \
+                    --enable_context_fmha \
+                    --quant_ckpt_path ./qwen2_7b_4bit_gs128_awq.pt
+    ```
 
 <details>
 <summary><h1>其他应用</h1></summary>

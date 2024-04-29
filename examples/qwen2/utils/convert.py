@@ -129,19 +129,38 @@ def generate_int8(weights, act_range, is_qkv=False, multi_query_mode=False):
     }
 
 
-def write_int8(vals,
-               dir,
-               base_key,
-               split_dim,
-               tp_rank,
-               split_factor,
-               kv_cache_only=False):
+def write_qkv_int8(
+    vals,
+    dir,
+    base_key,
+    split_dim,
+    tp_rank,
+    split_factor,
+    kv_cache_only=False,
+    multi_query_mode=False
+):
+    int8_weight = vals["weight.int8"]
+    local_dim = int8_weight.shape[0]
+    head_size = (int8_weight.shape[-1] - local_dim) // 2
+    def multi_query_split(data, tp_size, axis=-1):
+        q, k, v = np.split(data, [local_dim, local_dim + head_size], axis=axis)
+        q_split = np.split(q, tp_size, axis=axis)
+        k_split = np.split(k, tp_size, axis=axis)
+        v_split = np.split(v, tp_size, axis=axis)
+        return [
+            np.concatenate((q_split[ii], k_split[ii], v_split[ii]), axis=axis)
+            for ii in range(tp_size)
+        ]
+    
     if not kv_cache_only:
-        save_split(np.split(vals["weight.int8"], split_factor, axis=split_dim),
-                   dir, f"{base_key}.weight.int8", tp_rank, split_factor)
-        save_split(
-            np.split(vals["weight.int8.col"], split_factor, axis=split_dim),
-            dir, f"{base_key}.weight.int8.col", tp_rank, split_factor)
+        if not multi_query_mode:
+            split_vals_int8 = np.split(vals["weight.int8"], split_factor, axis=split_dim)
+            split_vals_int8_col = np.split(vals["weight.int8.col"], split_factor, axis=split_dim)
+        else:
+            split_vals_int8 = multi_query_split(vals["weight.int8"], split_factor, axis=split_dim)
+            split_vals_int8_col = multi_query_split(vals["weight.int8.col"], split_factor, axis=split_dim)
+        save_split(split_vals_int8, dir, f"{base_key}.weight.int8", tp_rank, split_factor)
+        save_split(split_vals_int8_col, dir, f"{base_key}.weight.int8.col", tp_rank, split_factor)
 
     saved_keys_once = ["scale_y_quant_orig"]
     if not kv_cache_only:
@@ -151,15 +170,71 @@ def write_int8(vals,
     # per-column scaling factors are loaded per-gpu for ColumnParallel GEMMs (QKV, FC1)
     if not kv_cache_only:
         if split_dim == -1:
+            if not multi_query_mode:
+                split_vals_orig = np.split(
+                    vals["scale_w_quant_orig.col"], split_factor, axis=split_dim
+                )
+                split_vals_accum = np.split(
+                    vals["scale_y_accum_quant.col"], split_factor, axis=split_dim
+                )
+            else:
+                split_vals_orig = multi_query_split(
+                    vals["scale_w_quant_orig.col"], split_factor, axis=split_dim
+                )
+                split_vals_accum = multi_query_split(
+                    vals["scale_y_accum_quant.col"], split_factor, axis=split_dim
+                )
+                
             save_split(
-                np.split(vals["scale_w_quant_orig.col"],
-                         split_factor,
-                         axis=split_dim), dir,
+                split_vals_orig,
+                dir,
                 f"{base_key}.scale_w_quant_orig.col", tp_rank, split_factor)
+            
             save_split(
-                np.split(vals["scale_y_accum_quant.col"],
-                         split_factor,
-                         axis=split_dim), dir,
+                split_vals_accum,
+                dir,
+                f"{base_key}.scale_y_accum_quant.col", tp_rank, split_factor)
+        else:
+            saved_keys_once += [
+                "scale_w_quant_orig.col", "scale_y_accum_quant.col"
+            ]
+
+    if tp_rank == 0:
+        for save_key in saved_keys_once:
+            save_val(vals[save_key], dir, f"{base_key}.{save_key}")
+
+
+def write_int8(vals,
+               dir,
+               base_key,
+               split_dim,
+               tp_rank,
+               split_factor,
+               kv_cache_only=False):
+    if not kv_cache_only:
+        split_vals = np.split(vals["weight.int8"], split_factor, axis=split_dim)
+        save_split(split_vals, dir, f"{base_key}.weight.int8", tp_rank, split_factor)
+        split_vals = np.split(vals["weight.int8.col"], split_factor, axis=split_dim)
+        save_split(split_vals, dir, f"{base_key}.weight.int8.col", tp_rank, split_factor)
+
+    saved_keys_once = ["scale_y_quant_orig"]
+    if not kv_cache_only:
+        saved_keys_once += [
+            "scale_x_orig_quant", "scale_w_quant_orig", "scale_y_accum_quant"
+        ]
+    # per-column scaling factors are loaded per-gpu for ColumnParallel GEMMs (QKV, FC1)
+    if not kv_cache_only:
+        if split_dim == -1:
+            split_vals = np.split(vals["scale_w_quant_orig.col"], split_factor, axis=split_dim)
+            save_split(
+                split_vals,
+                dir,
+                f"{base_key}.scale_w_quant_orig.col", tp_rank, split_factor)
+            
+            split_vals = np.split(vals["scale_y_accum_quant.col"], split_factor, axis=split_dim)
+            save_split(
+                split_vals,
+                dir,
                 f"{base_key}.scale_y_accum_quant.col", tp_rank, split_factor)
         else:
             saved_keys_once += [
@@ -254,9 +329,16 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
         if multi_query_mode:
             val = vals[0]
             # out_feature = local_dim + 2 * head_size; assumes local_dim equals to hidden_dim
+            head_size = (val.shape[-1] - local_dim) // 2
             b_q, b_kv = np.split(val, [local_dim], axis=-1)
+            b_k, b_v = np.split(b_kv, [head_size], axis=-1)
             b_q_split = np.split(b_q, split_factor, axis=-1)
-            split_vals = [np.concatenate((i, b_kv), axis=-1) for i in b_q_split]
+            b_k_split = np.split(b_k, split_factor, axis=-1)
+            b_v_split = np.split(b_v, split_factor, axis=-1)
+            split_vals = [
+                np.concatenate((b_q_split[i], b_k_split[i], b_v_split[i]), axis=-1)
+                for i in range(split_factor)
+            ]
         else:
             if use_attention_nemo_shape:
                 head_num = num_attention_heads // tp_size
@@ -280,8 +362,14 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
             head_size = (val.shape[-1] - local_dim) // 2
             val = val.reshape(hidden_dim, local_dim + 2 * head_size)
             w_q, w_kv = np.split(val, [local_dim], axis=-1)
+            w_k, w_v = np.split(w_kv, [head_size], axis=-1)
             w_q_split = np.split(w_q, split_factor, axis=-1)
-            split_vals = [np.concatenate((i, w_kv), axis=-1) for i in w_q_split]
+            w_k_split = np.split(w_k, split_factor, axis=-1)
+            w_v_split = np.split(w_v, split_factor, axis=-1)
+            split_vals = [
+                np.concatenate((w_q_split[i], w_k_split[i], w_v_split[i]), axis=-1)
+                for i in range(split_factor)
+            ]
             cat_dim = -1
         else:
             if use_attention_nemo_shape:
@@ -304,13 +392,16 @@ def split_and_save_weight(tp_rank, saved_dir, split_factor, key, vals,
                                     act_range,
                                     is_qkv=True,
                                     multi_query_mode=multi_query_mode)
-            write_int8(vals_i8,
-                       saved_dir,
-                       base_key,
-                       cat_dim,
-                       tp_rank,
-                       split_factor,
-                       kv_cache_only=int8_outputs == "kv_cache_only")
+            write_qkv_int8(
+                vals_i8,
+                saved_dir,
+                base_key,
+                cat_dim,
+                tp_rank,
+                split_factor,
+                kv_cache_only=int8_outputs == "kv_cache_only",
+                multi_query_mode=multi_query_mode,
+            )
     # elif ("attention.query.weight" in key or "attention.query.bias" in key
     #       or "attention.key_value.weight" in key
     #       or "attention.key_value.bias" in key):

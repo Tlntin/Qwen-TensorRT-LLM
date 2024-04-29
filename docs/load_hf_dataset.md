@@ -62,6 +62,7 @@ dataset = load_from_disk(target_dir_path)
 - 思路：下载数据集到本地然后直接读取，不同类型的数据集有不同的读取方式，一般来说可以通过直接读取本地数据集绝对路径的方式读取，和离线读取模型文件差不多。
 - 限制：可能需要修改文件，有一定门槛，不过个人更喜欢这种，因为可以了解其内部原理。
 - 推荐指数：4星
+- [可参考huggingface官方教程](https://huggingface.co/docs/datasets/main/en/dataset_script)
 1. 先通过git下载好数据集，下面是演示[ccdv/cnn_dailymail](https://huggingface.co/datasets/ccdv/cnn_dailymail)这个数据集，如果没有外网，也可以在国内的这个[地址](https://www.atyun.com/datasets/files/ccdv/cnn_dailymail.html)下载
 2. 下载后数据集长下面这样
 ```bash
@@ -73,7 +74,7 @@ cnn_dailymail
 ├── dailymail_stories.tgz
 └── README.md
 ```
-3. 我们先按通用的方式加载一下数据集，注意一定要用绝对路径，否则它可能会以为是一个在线路径，因为是本地加载，加上里面有py文件，需要加上`trust_remote_code=True`来信任脚本。
+3. 我们先按通用的方式加载一下数据集，也可用相对路径，因为代码默认是先查询本地路径再查询在线路径（不过推荐使用本地绝对路径），因为是本地加载，加上里面有py文件，需要加上`trust_remote_code=True`来信任脚本。
 ```python
 import os.path
 

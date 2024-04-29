@@ -59,6 +59,8 @@ def parse_ft_config(ini_file):
         "num_hidden_layers",
         fallback=32,
     )
+    num_attention_heads = qwen_config.getint("qwen", "num_attention_heads")
+    num_key_value_heads = qwen_config.getint("qwen", "num_key_value_heads")
     max_position_embeddings = qwen_config.getint(
         "qwen", "max_position_embeddings", fallback=8192
     )
@@ -74,6 +76,8 @@ def parse_ft_config(ini_file):
         hidden_size,
         inter_size,
         num_hidden_layers,
+        num_attention_heads,
+        num_key_value_heads,
         kv_channels,
         rotary_pct,
         rotary_emb_base,
@@ -100,6 +104,8 @@ def load_from_ft(
         hidden_size,
         inter_size,
         num_hidden_layers,
+        num_attention_heads,
+        num_key_value_heads,
         kv_channels,
         rotary_pct,
         rotary_emb_base,
@@ -107,6 +113,11 @@ def load_from_ft(
         max_position_embeddings,
     ) = parse_ft_config(Path(dir_path) / "config.ini")
     np_dtype = str_dtype_to_np(dtype)
+    attention_head_size = hidden_size // num_attention_heads
+    num_attention_heads = num_attention_heads // mapping.tp_size
+    num_attention_kv_heads = (
+            num_key_value_heads + mapping.tp_size - 1
+    ) // mapping.tp_size if num_key_value_heads is not None else num_attention_heads
 
     def fromfile(dir_path, name, shape=None, dtype=np.float16):
         dtype = np_dtype if dtype is None else dtype
@@ -194,7 +205,6 @@ def load_from_ft(
     suffix = gen_suffix(mapping.rank, use_smooth_quant, quant_per_channel)
     # The type of weights.
     w_type = np_dtype if not use_smooth_quant else np.int8
-
     if mapping.is_first_pp_rank():
         tensorrt_llm_qwen.embed_tokens.vocab_embedding.weight.value = fromfile(
             dir_path, "embed_tokens.weight.bin", [vocab_size, hidden_size]
@@ -230,11 +240,8 @@ def load_from_ft(
 
     for i in layers_range:
         c_attn_out_dim = (
-            (3 * hidden_size // mapping.tp_size)
-            if not multi_query_mode
-            else (
-                    hidden_size // mapping.tp_size + (
-                        hidden_size // num_hidden_layers) * 2
+            num_attention_heads * attention_head_size + (
+                2 * num_attention_kv_heads * attention_head_size
             )
         )
 

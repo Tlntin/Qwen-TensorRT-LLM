@@ -196,3 +196,5 @@ kineto/
 tmp/
 .idea/
 *.jpeg
+examples/qwen2/CodeQwen1.5*/
+examples/qwen2/Qwen1.5*/

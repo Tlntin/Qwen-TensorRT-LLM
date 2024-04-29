@@ -53,7 +53,7 @@ class SmoothQuantAttention(Module):
         self.attention_mask_type = attention_mask_type
         self.attention_head_size = hidden_size // num_attention_heads
         self.num_attention_heads = num_attention_heads // tp_size
-        self.num_kv_heads = (
+        self.num_attention_kv_heads = (
             num_kv_heads + tp_size - 1
         ) // tp_size if num_kv_heads is not None else self.num_attention_heads
         self.hidden_size = hidden_size // tp_size
@@ -118,8 +118,9 @@ class SmoothQuantAttention(Module):
 
         self.qkv = SmoothQuantColumnLinear(
             hidden_size,
-            hidden_size +
-            2 * self.num_kv_heads * tp_size * self.attention_head_size,
+            tp_size * self.num_attention_heads * self.attention_head_size + (
+                2 * tp_size * self.num_attention_kv_heads * self.attention_head_size
+            ),
             bias=True,
             dtype=dtype,
             tp_group=tp_group,
@@ -174,7 +175,7 @@ class SmoothQuantAttention(Module):
                 cache_indirection=kv_cache_params.cache_indirection,
                 host_request_types=attention_params.host_request_types,
                 num_heads=self.num_attention_heads,
-                num_kv_heads=self.num_kv_heads,
+                num_kv_heads=self.num_attention_kv_heads,
                 hidden_size_per_head=self.attention_head_size,
                 q_scaling=self.q_scaling,
                 rotary_embedding_dim=self.rotary_embedding_dim, # when we use it 0, we will not use rotary embedding in plugin
