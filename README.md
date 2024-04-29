@@ -274,7 +274,7 @@
       pip install -r requirements.txt
       ```
     
-    - 升级transformers版本，qwen2最低需要4.37以上版本，如果有警告依赖不匹配客户忽略。
+    - 升级transformers版本，qwen2最低需要4.37以上版本，如果有警告依赖不匹配可以忽略。
       ```bash
       pip install "transformers>=4.37"
       ```
