@@ -329,7 +329,7 @@
        ```bash
        export LD_LIBRARY_PATH=nccl_2.20.3-1+cuda12.3_x86_64/lib/:$LD_LIBRARY_PATH
        # 或者，推荐下面这种
-       apt-get install -y --no-install-recommends libnccl2=2.20.3-1+cuda12.3 libnccl-dev=2.20.3-1+cuda12.3 -y
+       apt update && apt-get install -y --no-install-recommends libnccl2=2.20.3-1+cuda12.3 libnccl-dev=2.20.3-1+cuda12.3 -y
        ```
 
 3. 验证模型精度。可以试试跑一下`summarize.py`，对比一下huggingface和trt-llm的rouge得分。这一步需要在线下载数据集，对于网络不好的用户，可以参考该方法：[datasets离线加载huggingface数据集方法](./docs/load_hf_dataset.md)
