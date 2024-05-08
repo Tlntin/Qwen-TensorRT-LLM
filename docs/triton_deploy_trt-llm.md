@@ -181,10 +181,10 @@ cp -r ./* /tensorrtllm_backend/triton_model_repo/tensorrt_llm/1/
 ```bash
 cd /root/examples/qwen2
 mkdir /tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen1.5_7b_chat
-cp qwen1.5_7b_chat/*.json /tensorrtllm_backend/triton_model_repo/tensorrt_llm/
+cp qwen1.5_7b_chat/*.json /tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen1.5_7b_chat/
 # 可选，仅适用于qwen1,因为它的tokenizer是tiktoken格式
-cp qwen_7b_chat/*.tiktoken /tensorrtllm_backend/triton_model_repo/tensorrt_llm/
-cp qwen_7b_chat/*.py /tensorrtllm_backend/triton_model_repo/tensorrt_llm/
+cp qwen_7b_chat/*.tiktoken /tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen1.5_7b_chat/
+cp qwen_7b_chat/*.py /tensorrtllm_backend/triton_model_repo/tensorrt_llm/qwen1.5_7b_chat/
 ```
 
 6. （可选）编写Triton中的预处理配置和后处理配置， 参考[文档](https://github.com/triton-inference-server/tensorrtllm_backend/blob/v0.8.0/docs/llama.md)
