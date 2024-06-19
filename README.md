@@ -264,8 +264,9 @@
     ```
 
 4. 进入docker容器里面的qwen2路径，
-    - 使用pip直接安装官方编译好的tensorrt_llm
+    - 使用pip直接安装官方编译好的tensorrt_llm，需要先安装numpy1.x,不兼容numpy2.x。
       ```bash
+      ip install "numpy<2"
       pip install tensorrt_llm==0.8.0 --extra-index-url https://pypi.nvidia.com --extra-index-url https://download.pytorch.org/whl/cu121
       ```
     - 安装提供的Python依赖
