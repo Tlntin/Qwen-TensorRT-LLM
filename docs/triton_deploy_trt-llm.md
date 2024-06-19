@@ -85,8 +85,9 @@ cat /tensorrtllm_backend/tools/version.txt
 apt update
 apt install git-lfs
 ``` -->
-7. 直接通过pip安装TensorRT-LLM （如果是自己编译的容器，这步可以省略）
+7. 直接通过pip安装TensorRT-LLM （如果是自己编译的容器，这步可以省略），需要先安装numpy1.x,不兼容numpy2.x。
 ```bash
+pip install "numpy<2"
 pip install tensorrt_llm==0.8.0 --extra-index-url https://pypi.nvidia.com --extra-index-url https://download.pytorch.org/whl/cu121
 ```
 
