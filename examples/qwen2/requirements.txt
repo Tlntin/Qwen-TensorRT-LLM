@@ -10,6 +10,6 @@ einops
 uvicorn
 gradio==3.40.1
 mdtex2html
-sse_starlette
+sse_starlette==1.6.5
 aiohttp_sse_client
 openai==1.1.1
